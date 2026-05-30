@@ -16,7 +16,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Foundational source seed: `CACHE_ERROR_CODES` and `CacheException`, connection
   event types (`CacheEventName`, `CacheConnectionStatus`), and the
   `Symbol`-based DI tokens (`BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`,
-  `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`).
+  `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`, `BYMAX_CACHE_SERIALIZER`,
+  `BYMAX_CACHE_KEY_BUILDER`).
 
 > The cache engine itself — connection manager, `CacheService`, Pub/Sub, the Lua
 > script manager, and `BymaxCacheModule.forRoot` / `forRootAsync` — is delivered

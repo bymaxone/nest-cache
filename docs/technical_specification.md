@@ -1335,14 +1335,12 @@ Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
 > `peerDependenciesMeta.optional` block was removed. Marking the NestJS peers optional
 > broke server-subpath resolution in consumers (proven by the dogfood smoke test).
 
-````
-
-| Peer | Version | Why |
-|---|---|---|
-| `@nestjs/common` | `^11` | Decorators (`@Injectable`, `@Inject`, `@Optional`, `@Global`), lifecycle |
-| `@nestjs/core` | `^11` | `DynamicModule` type |
-| `ioredis` | `^5` | Redis client with TLS, sentinel, cluster support |
-| `reflect-metadata` | `^0.2` | NestJS decorators |
+| Peer               | Version | Why                                                                      |
+| ------------------ | ------- | ------------------------------------------------------------------------ |
+| `@nestjs/common`   | `^11`   | Decorators (`@Injectable`, `@Inject`, `@Optional`, `@Global`), lifecycle |
+| `@nestjs/core`     | `^11`   | `DynamicModule` type                                                     |
+| `ioredis`          | `^5`    | Redis client with TLS, sentinel, cluster support                         |
+| `reflect-metadata` | `^0.2`  | NestJS decorators                                                        |
 
 `ioredis` is the only functional dep; the rest is standard for any NestJS project.
 
@@ -1361,7 +1359,7 @@ Mirrors the `@bymax-one/nest-auth` template with specific additions:
   "packageManager": "pnpm@10.8.1",
   "engines": { "node": ">=24.0.0" }
 }
-````
+```
 
 ---
 
@@ -1671,6 +1669,3 @@ export class HealthController {
 | 008 | Events callback instead of embedded logger                 | Keeps zero deps; consumer plugs the logger                                 |
 | 009 | Lazy subscriber                                            | Apps that only use cache do not pay the cost of a 2nd TCP connection       |
 | 010 | Graceful shutdown with configurable timeout                | `quit` can hang; timeout guarantees deterministic shutdown                 |
-
-</content>
-</invoke>

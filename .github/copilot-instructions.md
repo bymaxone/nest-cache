@@ -39,4 +39,4 @@ src/
 - One singleton `ioredis` client, owned by the connection manager; lifecycle via `OnModuleInit` / `OnModuleDestroy`. Standalone / Sentinel / Cluster modes.
 - **Every key is namespaced** through the key builder — raw `getClient()` keys bypass tenant isolation and are an anti-pattern.
 - Pluggable `ISerializer` (fail-closed deserialization) and `ICacheEvents` callback — core never imports concrete implementations beyond the `ioredis` peer.
-- Dynamic module via `ConfigurableModuleBuilder` — `forRoot` / `forRootAsync`, `@Global` by default. Singletons only.
+- Dynamic module via `ConfigurableModuleBuilder` — `forRoot` / `forRootAsync`, global by default via `setExtras` → `DynamicModule.global` (not a manual `@Global()` — see spec §0). Singletons only.

@@ -33,9 +33,11 @@ public, MIT, zero-runtime-dependency package.
 - **Subpaths (2):** `.` (server — NestJS module + services) and `./shared`
   (zero-dependency types + constants).
 - **Dynamic module:** `BymaxCacheModule.forRoot()` / `forRootAsync()` built on
-  `ConfigurableModuleBuilder`, `@Global()` by default (NestJS 11 convention).
+  `ConfigurableModuleBuilder`, global by default via `setExtras` →
+  `DynamicModule.global` (not a manual `@Global()` — see spec §0).
 - **DI tokens (Symbol):** `BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`,
-  `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`.
+  `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`, `BYMAX_CACHE_SERIALIZER`,
+  `BYMAX_CACHE_KEY_BUILDER`.
 - **Core units:** `ConnectionManager` (singleton + lifecycle, standalone /
   sentinel / cluster), `CacheService` (typed API + namespacing), `PubSubService`,
   `ScriptManagerService`, plus `KeyBuilder` / `parseRedisUrl` / serializer utils.

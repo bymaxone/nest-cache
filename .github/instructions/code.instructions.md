@@ -32,7 +32,7 @@ applyTo: 'src/**/*.ts'
 
 - DI only — no `new ServiceClass()` outside tests.
 - **Injection tokens must use `Symbol()`**, never string literals (string tokens cause silent collisions in multi-module apps). Example: `export const BYMAX_CACHE_OPTIONS = Symbol('BYMAX_CACHE_OPTIONS')`.
-- Dynamic module requires both `forRoot(options)` and `forRootAsync({ useFactory, useClass, useExisting })`, built on `ConfigurableModuleBuilder`, `@Global` by default.
+- Dynamic module requires both `forRoot(options)` and `forRootAsync({ useFactory, useClass, useExisting })`, built on `ConfigurableModuleBuilder`, global by default via `setExtras` → `DynamicModule.global` (not a manual `@Global()` — see spec §0).
 - Singletons only — no `Scope.REQUEST`.
 - Core logic depends only on interfaces (`ISerializer`, `ICacheEvents`) — never imports concrete implementations beyond the `ioredis` peer.
 - `OnModuleInit` connects (unless `lazyConnect`); `OnModuleDestroy` tears the connection down gracefully (`quit()` with a shutdown timeout, then `disconnect()`).
