@@ -1,5 +1,5 @@
 ---
-applyTo: '**/*.spec.ts,**/*.e2e.spec.ts'
+applyTo: '**/*.spec.ts,**/*.e2e-spec.ts'
 ---
 
 # Testing standards

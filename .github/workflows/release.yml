@@ -83,6 +83,16 @@ jobs:
       - name: Verify (typecheck · lint · test · build)
         run: pnpm prepublishOnly
 
+      - name: Release-shape gates (bundle size + dogfood smoke test)
+        # prepublishOnly runs typecheck/lint/tests/build but NOT these two
+        # release-shape gates, and this tag-driven job is the only place the
+        # publish happens (it does not run on the branch CI matrix). Enforce
+        # them here so a tag cannot publish artifacts that exceed the size
+        # budget or have a broken exports/tarball shape.
+        run: |
+          pnpm size
+          node scripts/dogfood-smoke-test.mjs
+
       - name: Publish to npm with provenance
         # OIDC trusted publishing — pnpm delegates to npm CLI, which exchanges
         # the GitHub OIDC token (`id-token: write` above) for a short-lived

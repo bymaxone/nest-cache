@@ -154,7 +154,13 @@ try {
     .filter((l) => Boolean(l) && !l.startsWith('npm notice') && !/^sha\d+:/i.test(l))
 
   const unexpectedFiles = contentLines.filter(
-    (f) => !ALLOWED_TARBALL_PATHS.some((prefix) => f === prefix || f.startsWith(prefix))
+    // Exact match for meta files; prefix match only for directory entries
+    // (those ending in `/`), so `LICENSE.backup` or `README.md.old` are not
+    // silently accepted by a bare `startsWith`.
+    (f) =>
+      !ALLOWED_TARBALL_PATHS.some(
+        (entry) => f === entry || (entry.endsWith('/') && f.startsWith(entry))
+      )
   )
   if (unexpectedFiles.length === 0) {
     pass(`Tarball contains only dist/ + meta files (${contentLines.length} entries)`)
