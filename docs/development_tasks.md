@@ -49,15 +49,15 @@
 
 > **Status legend:** 🔴 Not Started · 🟡 In Progress · 🟢 Done · ⚪ Blocked · 🔵 In Review
 
-> **Overall progress:** 🔴 0 / 58 tasks done (0%)
+> **Overall progress:** 🟡 15 / 58 tasks done (26%)
 
-| #   | Phase                                  | Done / Total | %   | Status |
-| --- | -------------------------------------- | ------------ | --- | ------ |
-| 1   | Foundation + Connection Manager        | 0 / 15       | 0%  | 🔴     |
-| 2   | CacheService + Typed Helpers           | 0 / 12       | 0%  | 🔴     |
-| 3   | Pub/Sub + ScriptManager + Health       | 0 / 12       | 0%  | 🔴     |
-| 4   | forRootAsync + E2E + Mutation Baseline | 0 / 9        | 0%  | 🔴     |
-| 5   | Release v0.1.0                         | 0 / 10       | 0%  | 🔴     |
+| #   | Phase                                  | Done / Total | %    | Status |
+| --- | -------------------------------------- | ------------ | ---- | ------ |
+| 1   | Foundation + Connection Manager        | 15 / 15      | 100% | 🟢     |
+| 2   | CacheService + Typed Helpers           | 0 / 12       | 0%   | 🔴     |
+| 3   | Pub/Sub + ScriptManager + Health       | 0 / 12       | 0%   | 🔴     |
+| 4   | forRootAsync + E2E + Mutation Baseline | 0 / 9        | 0%   | 🔴     |
+| 5   | Release v0.1.0                         | 0 / 10       | 0%   | 🔴     |
 
 ---
 
@@ -159,7 +159,7 @@ To reset a task (revert to TODO):
 ### CACHE-001: Project scaffold — package.json and pnpm init
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** None
 - **Agent:** architect
@@ -190,10 +190,10 @@ To reset a task (revert to TODO):
 
 **Acceptance criteria:**
 
-- [ ] `package.json` created with all the fields above
-- [ ] `pnpm install` completes without errors or warnings
-- [ ] `pnpm-lock.yaml` generated
-- [ ] `node_modules/` created with ioredis + ioredis-mock + @nestjs/\* + testcontainers installed as devDeps
+- [x] `package.json` created with all the fields above
+- [x] `pnpm install` completes without errors or warnings
+- [x] `pnpm-lock.yaml` generated
+- [x] `node_modules/` created with ioredis + ioredis-mock + @nestjs/\* + testcontainers installed as devDeps
 
 **Validation commands:**
 
@@ -215,7 +215,7 @@ node -e "console.log(require('./package.json').name)"  # → @bymax-one/nest-cac
 ### CACHE-002: Project scaffold — tsconfig + tsup config
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-001
 - **Agent:** architect
@@ -249,9 +249,9 @@ node -e "console.log(require('./package.json').name)"  # → @bymax-one/nest-cac
 
 **Acceptance criteria:**
 
-- [ ] 5 `tsconfig.*.json` present and path aliases correct (2 subpaths)
-- [ ] `tsup.config.ts` with 2 entries
-- [ ] `pnpm typecheck` passes on `src/server/index.ts` and `src/shared/index.ts` placeholders (create empty files with `export {}`)
+- [x] 5 `tsconfig.*.json` present and path aliases correct (2 subpaths)
+- [x] `tsup.config.ts` with 2 entries
+- [x] `pnpm typecheck` passes on `src/server/index.ts` and `src/shared/index.ts` placeholders (create empty files with `export {}`)
 
 **Validation commands:**
 
@@ -273,7 +273,7 @@ pnpm typecheck
 ### CACHE-003: ESLint + Prettier + .gitignore + .npmignore
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-001
 - **Agent:** general-purpose
@@ -299,10 +299,10 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `eslint.config.mjs` adapted (no oauth/crypto/nextjs/react rules)
-- [ ] `.prettierrc` identical to the nest-auth one
-- [ ] `.gitignore` covering node_modules, dist, coverage, reports, .stryker-tmp
-- [ ] `pnpm lint` passes
+- [x] `eslint.config.mjs` adapted (no oauth/crypto/nextjs/react rules)
+- [x] `.prettierrc` identical to the nest-auth one
+- [x] `.gitignore` covering node_modules, dist, coverage, reports, .stryker-tmp
+- [x] `pnpm lint` passes
 
 **Validation commands:**
 
@@ -322,7 +322,7 @@ pnpm lint
 ### CACHE-004: Jest configs (4 variants) + Stryker config
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-002
 - **Agent:** general-purpose
@@ -364,10 +364,10 @@ pnpm lint
 
 **Acceptance criteria:**
 
-- [ ] 5 files created with adaptations
-- [ ] `pnpm test` runs (with `passWithNoTests: process.env['CI'] !== 'true'`)
-- [ ] `pnpm test:cov` runs without errors
-- [ ] `pnpm mutation:dry-run` validates config without running mutants
+- [x] 5 files created with adaptations
+- [x] `pnpm test` runs (with `passWithNoTests: process.env['CI'] !== 'true'`)
+- [x] `pnpm test:cov` runs without errors
+- [x] `pnpm mutation:dry-run` validates config without running mutants
 
 **Validation commands:**
 
@@ -389,7 +389,7 @@ pnpm mutation:dry-run
 ### CACHE-005: scripts/check-size.mjs (zero-deps bundle size gate)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-002
 - **Agent:** general-purpose
@@ -419,9 +419,9 @@ pnpm mutation:dry-run
 
 **Acceptance criteria:**
 
-- [ ] `scripts/check-size.mjs` created
-- [ ] Runs via `pnpm size` (after build) and reports the 2 subpaths
-- [ ] Fails with exit code 1 if subpath exceeds brotli budget
+- [x] `scripts/check-size.mjs` created
+- [x] Runs via `pnpm size` (after build) and reports the 2 subpaths
+- [x] Fails with exit code 1 if subpath exceeds brotli budget
 
 **Validation commands:**
 
@@ -442,7 +442,7 @@ pnpm build && pnpm size
 ### CACHE-006: Initial folder structure (src/server and src/shared)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-002
 - **Agent:** general-purpose
@@ -482,10 +482,10 @@ pnpm build && pnpm size
 
 **Acceptance criteria:**
 
-- [ ] The 7 `src/server/` folders and 2 `src/shared/` folders exist (materialized by their real files in later tasks — **no `.gitkeep`**, per spec §0)
-- [ ] `src/server/index.ts` and `src/shared/index.ts` with `export {}`
-- [ ] **No `.gitkeep` files created anywhere** (project rule — spec §0)
-- [ ] `pnpm build` produces `dist/server/index.{mjs,cjs,d.ts}` and `dist/shared/index.{mjs,cjs,d.ts}`
+- [x] The 7 `src/server/` folders and 2 `src/shared/` folders exist (materialized by their real files in later tasks — **no `.gitkeep`**, per spec §0)
+- [x] `src/server/index.ts` and `src/shared/index.ts` with `export {}`
+- [x] **No `.gitkeep` files created anywhere** (project rule — spec §0)
+- [x] `pnpm build` produces `dist/server/index.{mjs,cjs,d.ts}` and `dist/shared/index.{mjs,cjs,d.ts}`
 
 **Validation commands:**
 
@@ -507,7 +507,7 @@ ls dist/server/ dist/shared/
 ### CACHE-007: Shared types (CacheEventName, CacheConnectionStatus, CacheNamespace, SerializableValue)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-006
 - **Agent:** typescript-reviewer
@@ -535,10 +535,10 @@ ls dist/server/ dist/shared/
 
 **Acceptance criteria:**
 
-- [ ] 3 files created with complete JSDoc
-- [ ] Zero `any` (verifiable with `grep -n ': any\\b' src/shared/`)
-- [ ] `import type` used where applicable
-- [ ] `pnpm typecheck` passes
+- [x] 3 files created with complete JSDoc
+- [x] Zero `any` (verifiable with `grep -n ': any\\b' src/shared/`)
+- [x] `import type` used where applicable
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -559,7 +559,7 @@ grep -rn ': any\b\|any\[\]' src/shared/ && echo "FAIL: any found" || echo "OK"
 ### CACHE-008: Shared constants (CACHE_ERROR_CODES, CACHE_EVENT_NAMES)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-006
 - **Agent:** typescript-reviewer
@@ -602,11 +602,11 @@ grep -rn ': any\b\|any\[\]' src/shared/ && echo "FAIL: any found" || echo "OK"
 
 **Acceptance criteria:**
 
-- [ ] 2 constant files created
-- [ ] `CACHE_ERROR_CODES` exported `as const` with 14 entries
-- [ ] `CacheErrorCode` type derived
-- [ ] `src/shared/index.ts` updated
-- [ ] `pnpm build` produces `dist/shared/index.{mjs,cjs,d.ts}` listing all exports
+- [x] 2 constant files created
+- [x] `CACHE_ERROR_CODES` exported `as const` with 14 entries
+- [x] `CacheErrorCode` type derived
+- [x] `src/shared/index.ts` updated
+- [x] `pnpm build` produces `dist/shared/index.{mjs,cjs,d.ts}` listing all exports
 
 **Validation commands:**
 
@@ -628,7 +628,7 @@ node -e "import('./dist/shared/index.mjs').then(m => console.log(Object.keys(m).
 ### CACHE-009: Server interfaces (BymaxCacheModuleOptions + sub-interfaces + ICacheEvents + ISerializer + IScriptDefinition + IPubSubHandler)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-007
 
@@ -663,12 +663,12 @@ node -e "import('./dist/shared/index.mjs').then(m => console.log(Object.keys(m).
 
 **Acceptance criteria:**
 
-- [ ] 5 interface files + barrel `index.ts`
-- [ ] All fields documented via JSDoc
-- [ ] `import type` used for all external types (ioredis, @nestjs/common)
-- [ ] Zero `any`
-- [ ] ioredis re-exports (`ClusterNode`, `RedisOptions`, etc.) accessible
-- [ ] `pnpm typecheck` passes
+- [x] 5 interface files + barrel `index.ts`
+- [x] All fields documented via JSDoc
+- [x] `import type` used for all external types (ioredis, @nestjs/common)
+- [x] Zero `any`
+- [x] ioredis re-exports (`ClusterNode`, `RedisOptions`, etc.) accessible
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -689,7 +689,7 @@ grep -n ': any\b\|any\[\]' src/server/interfaces/ && echo "FAIL" || echo "OK"
 ### CACHE-010: DI tokens (Symbol-based) + default constants
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-006
 - **Agent:** architect
@@ -720,11 +720,11 @@ grep -n ': any\b\|any\[\]' src/server/interfaces/ && echo "FAIL" || echo "OK"
 
 **Acceptance criteria:**
 
-- [ ] 6 Symbols exported in `bymax-cache.constants.ts`
-- [ ] Explanatory JSDoc on each Symbol
-- [ ] Each Symbol is unique (`SYMBOL_A !== SYMBOL_B`)
-- [ ] `default-namespace.ts` and `default-timeouts.ts` created
-- [ ] `pnpm typecheck` passes
+- [x] 6 Symbols exported in `bymax-cache.constants.ts`
+- [x] Explanatory JSDoc on each Symbol
+- [x] Each Symbol is unique (`SYMBOL_A !== SYMBOL_B`)
+- [x] `default-namespace.ts` and `default-timeouts.ts` created
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -744,7 +744,7 @@ pnpm typecheck
 ### CACHE-011: CacheException + cache-error-codes (server-side messages + HTTP status mapping)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-008
 - **Agent:** code-reviewer
@@ -779,13 +779,13 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] 2 files created
-- [ ] `CACHE_ERROR_MESSAGES[code]` covers 100% of the 14 codes
-- [ ] `CacheException.code` and `.details` accessible without cast
-- [ ] Correct HttpStatus per code
-- [ ] `instanceof CacheException` returns true in catch blocks
-- [ ] Payload format `{ error: { code, message, details } }`
-- [ ] `pnpm typecheck` passes
+- [x] 2 files created
+- [x] `CACHE_ERROR_MESSAGES[code]` covers 100% of the 14 codes
+- [x] `CacheException.code` and `.details` accessible without cast
+- [x] Correct HttpStatus per code
+- [x] `instanceof CacheException` returns true in catch blocks
+- [x] Payload format `{ error: { code, message, details } }`
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -805,7 +805,7 @@ pnpm typecheck
 ### CACHE-012: parseRedisUrl + KeyBuilder (critical path)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-009, CACHE-010, CACHE-011
 - **Agent:** database-reviewer
@@ -838,15 +838,15 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `parseRedisUrl('redis://localhost:6379')` returns `{ host, port }`
-- [ ] `parseRedisUrl('rediss://...')` includes `tls: {}`
-- [ ] User + password decoded when URL-encoded
-- [ ] Database extracted from pathname
-- [ ] Unsupported protocol throws Error
-- [ ] `KeyBuilder.build('users', 'u_1')` returns `'app:users:u_1'` with defaults
-- [ ] `KeyBuilder.build('', 'u_1')` throws `CacheException(INVALID_KEY)`
-- [ ] `KeyBuilder.applyNamespace('rl:u_1')` returns `'app:rl:u_1'`
-- [ ] `pnpm typecheck` passes
+- [x] `parseRedisUrl('redis://localhost:6379')` returns `{ host, port }`
+- [x] `parseRedisUrl('rediss://...')` includes `tls: {}`
+- [x] User + password decoded when URL-encoded
+- [x] Database extracted from pathname
+- [x] Unsupported protocol throws Error
+- [x] `KeyBuilder.build('users', 'u_1')` returns `'app:users:u_1'` with defaults
+- [x] `KeyBuilder.build('', 'u_1')` throws `CacheException(INVALID_KEY)`
+- [x] `KeyBuilder.applyNamespace('rl:u_1')` returns `'app:rl:u_1'`
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -866,7 +866,7 @@ pnpm typecheck
 ### CACHE-013: ResolvedOptions + applyDefaults + validateOptions
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-009, CACHE-010, CACHE-011
 - **Agent:** typescript-reviewer
@@ -907,15 +907,15 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] 2 files created
-- [ ] `validateOptions({connection: {host: 'h'}})` does not throw
-- [ ] `validateOptions({mode: 'sentinel'})` throws `SENTINEL_MISCONFIGURED`
-- [ ] `validateOptions({mode: 'cluster'})` throws `CLUSTER_MISCONFIGURED`
-- [ ] `validateOptions({connection: {host: 'h'}, namespace: ''})` throws `INVALID_NAMESPACE`
-- [ ] `validateOptions({connection: {host: 'h'}, namespace: 'a:b'})` throws (contains separator)
-- [ ] `applyDefaults({connection: {host: 'h'}}).namespace === 'app'`
-- [ ] `Object.isFrozen(applyDefaults(...))` returns true
-- [ ] `pnpm typecheck` passes
+- [x] 2 files created
+- [x] `validateOptions({connection: {host: 'h'}})` does not throw
+- [x] `validateOptions({mode: 'sentinel'})` throws `SENTINEL_MISCONFIGURED`
+- [x] `validateOptions({mode: 'cluster'})` throws `CLUSTER_MISCONFIGURED`
+- [x] `validateOptions({connection: {host: 'h'}, namespace: ''})` throws `INVALID_NAMESPACE`
+- [x] `validateOptions({connection: {host: 'h'}, namespace: 'a:b'})` throws (contains separator)
+- [x] `applyDefaults({connection: {host: 'h'}}).namespace === 'app'`
+- [x] `Object.isFrozen(applyDefaults(...))` returns true
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -935,7 +935,7 @@ pnpm typecheck
 ### CACHE-014: ConnectionManager (lifecycle + retry + event listeners + multi-mode)
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-012, CACHE-013
 - **Agent:** database-reviewer
@@ -970,17 +970,17 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `onModuleInit` creates standalone client with URL
-- [ ] Sentinel mode creates client with `sentinels`/`name`
-- [ ] Cluster mode creates `Cluster(nodes, options)`
-- [ ] `getClient()` returns same instance (singleton)
-- [ ] `createSubscriberClient()` returns new instance
-- [ ] Events propagated with `role: 'main' | 'subscriber'`
-- [ ] Exception in `onEvent` is **swallowed** (does not propagate)
-- [ ] `onModuleDestroy` calls `quit()` with timeout
-- [ ] Exceeded timeout forces `disconnect()`
-- [ ] URL priority: discrete fields serve as fallback
-- [ ] `pnpm typecheck` passes
+- [x] `onModuleInit` creates standalone client with URL
+- [x] Sentinel mode creates client with `sentinels`/`name`
+- [x] Cluster mode creates `Cluster(nodes, options)`
+- [x] `getClient()` returns same instance (singleton)
+- [x] `createSubscriberClient()` returns new instance
+- [x] Events propagated with `role: 'main' | 'subscriber'`
+- [x] Exception in `onEvent` is **swallowed** (does not propagate)
+- [x] `onModuleDestroy` calls `quit()` with timeout
+- [x] Exceeded timeout forces `disconnect()`
+- [x] URL priority: discrete fields serve as fallback
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -1000,7 +1000,7 @@ pnpm typecheck
 ### CACHE-015: Synchronous BymaxCacheModule.forRoot() + barrel + Phase 1 validation
 
 - **Phase:** 1
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-001 to CACHE-014
 - **Agent:** architect
@@ -1081,14 +1081,14 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `BymaxCacheModule.forRoot(options)` returns `DynamicModule`
-- [ ] Module is global by default (`isGlobal: true`)
-- [ ] `isGlobal: false` respected
-- [ ] Invalid options throw `CacheException` in `forRoot` (not at runtime)
-- [ ] `ConnectionManager` and `KeyBuilder` injectable into consumer modules
-- [ ] Barrel `src/server/index.ts` exports only the Phase 1 surface (does not leak internals)
-- [ ] `pnpm typecheck && pnpm lint && pnpm build && pnpm size` pass
-- [ ] `node -e "import('./dist/server/index.mjs').then(m => console.log(Object.keys(m).sort()))"` lists BymaxCacheModule, ConnectionManager, KeyBuilder, CacheException, etc.
+- [x] `BymaxCacheModule.forRoot(options)` returns `DynamicModule`
+- [x] Module is global by default (`isGlobal: true`)
+- [x] `isGlobal: false` respected
+- [x] Invalid options throw `CacheException` in `forRoot` (not at runtime)
+- [x] `ConnectionManager` and `KeyBuilder` injectable into consumer modules
+- [x] Barrel `src/server/index.ts` exports only the Phase 1 surface (does not leak internals)
+- [x] `pnpm typecheck && pnpm lint && pnpm build && pnpm size` pass
+- [x] `node -e "import('./dist/server/index.mjs').then(m => console.log(Object.keys(m).sort()))"` lists BymaxCacheModule, ConnectionManager, KeyBuilder, CacheException, etc.
 
 **Validation commands:**
 
@@ -1103,6 +1103,28 @@ node -e "import('./dist/server/index.mjs').then(m => console.log(Object.keys(m).
 2. `Status` → DONE
 3. Dashboard: Phase 1 1→0, DONE 14→15, Progress 100% ✅; TOTAL 44→43, 14→15, 26%
 4. Commit: `feat(cache): wire BymaxCacheModule.forRoot and Phase 1 surface (CACHE-015)`
+
+---
+
+### Phase 1 — Completion Log
+
+- CACHE-001 ✅ 2026-05-30 — package.json (zero deps, peer deps, exports, scripts) verified
+- CACHE-002 ✅ 2026-05-30 — tsconfig variants + tsup 2-entry build verified
+- CACHE-003 ✅ 2026-05-30 — eslint flat config + prettier + ignores verified
+- CACHE-004 ✅ 2026-05-30 — jest (4 variants) + stryker configs verified
+- CACHE-005 ✅ 2026-05-30 — check-size.mjs bundle gate (server 4.21/14 KB, shared 0.31/1.5 KB brotli)
+- CACHE-006 ✅ 2026-05-30 — src/server + src/shared structure + barrels build to dist
+- CACHE-007 ✅ 2026-05-30 — shared types (cache-event, cache-config, serializable-value)
+- CACHE-008 ✅ 2026-05-30 — shared constants (CACHE_ERROR_CODES 14 codes, CACHE_EVENT_NAMES)
+- CACHE-009 ✅ 2026-05-30 — server interfaces (options/events/serializer/script/pubsub) + barrel
+- CACHE-010 ✅ 2026-05-30 — Symbol DI tokens + default-namespace/default-timeouts constants
+- CACHE-011 ✅ 2026-05-30 — CacheException (readonly code/details) + cache-error-codes (Map-based messages + HTTP status §12.2)
+- CACHE-012 ✅ 2026-05-30 — parseRedisUrl (fail-closed) + KeyBuilder (namespace strategy)
+- CACHE-013 ✅ 2026-05-30 — ResolvedOptions + validateOptions + applyDefaults (frozen)
+- CACHE-014 ✅ 2026-05-30 — ConnectionManager (standalone/sentinel/cluster, retry, events, graceful shutdown)
+- CACHE-015 ✅ 2026-05-30 — BymaxCacheModule.forRoot (ConfigurableModuleBuilder) + Phase 1 barrel; 181 tests, 100% coverage
+
+> **Note:** CACHE-017 (the originally-deferred "Phase 1 unit specs" task in Phase 2) was satisfied early — co-located `*.spec.ts` files were written alongside Phase 1 to honor the CLAUDE.md TDD / 100%-coverage gate.
 
 ---
 
