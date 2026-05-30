@@ -1,14 +1,35 @@
 /**
  * Public API of the `@bymax-one/nest-cache` (server) subpath.
  *
- * The NestJS-facing surface: DI tokens, errors, and (as the library grows) the
- * dynamic module and cache / pub-sub / script services.
- *
- * NOTE: this library is under active scaffolding. The connection manager, the
- * cache / pub-sub / script services, and `BymaxCacheModule.forRoot` /
- * `forRootAsync` land in Phases 1-3 per `docs/development_plan.md`. This barrel
- * currently exposes the foundational injection tokens and error types.
+ * The NestJS-facing surface for Phase 1: the dynamic module, the connection
+ * manager, the key builder, the public contracts, DI tokens, and errors. The
+ * cache / pub-sub / script services land in Phases 2-3 per
+ * `docs/development_plan.md`.
  */
+
+// Module
+export { BymaxCacheModule } from './bymax-cache.module'
+
+// Services / managers (Phase 1)
+export { ConnectionManager } from './connection/connection.manager'
+export { KeyBuilder } from './utils/key-builder'
+
+// Interfaces / contracts
+export type {
+  BymaxCacheClusterConnection,
+  BymaxCacheModuleAsyncOptions,
+  BymaxCacheModuleOptions,
+  BymaxCacheSentinelConnection,
+  BymaxCacheStandaloneConnection,
+  ClusterNode,
+  ClusterOptions,
+  RedisOptions,
+  SentinelAddress
+} from './interfaces/cache-module-options.interface'
+export type { ICacheEvents } from './interfaces/cache-events.interface'
+export type { ISerializer } from './interfaces/serializer.interface'
+export type { IScriptDefinition } from './interfaces/script-definition.interface'
+export type { IPubSubHandler, IPubSubPatternHandler } from './interfaces/pubsub-handler.interface'
 
 // Injection tokens (Symbol)
 export {
@@ -22,8 +43,18 @@ export {
 
 // Errors
 export { CacheException } from './errors/cache.exception'
+export { CACHE_ERROR_CODES, CACHE_ERROR_MESSAGES } from './errors/cache-error-codes'
+export type { CacheErrorCode } from './errors/cache-error-codes'
+
+// Re-export ioredis core types for consumer convenience
+export type { Redis, RedisKey } from 'ioredis'
 
 // Shared re-exports (convenience — also available from `@bymax-one/nest-cache/shared`)
-export { CACHE_ERROR_CODES } from '../shared/constants/error-codes'
-export type { CacheErrorCode } from '../shared/constants/error-codes'
-export type { CacheConnectionStatus, CacheEventName } from '../shared/types/cache-event.types'
+export { CACHE_EVENT_NAMES } from '../shared'
+export type {
+  CacheConnectionStatus,
+  CacheEventName,
+  CacheKeyPrefix,
+  CacheNamespace,
+  SerializableValue
+} from '../shared'

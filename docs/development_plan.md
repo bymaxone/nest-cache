@@ -1996,8 +1996,11 @@ Status:   ready
 
 **Done criteria to close Phase 1:**
 
-- [ ] All commands above pass
-- [ ] Coverage thresholds met
+> **Status (2026-05-30): ✅ PASSED.** typecheck + lint clean; `pnpm test:cov:all` = 181 tests at
+> 100% statements/branches/functions/lines; `pnpm build` + `pnpm size` green.
+
+- [x] All commands above pass
+- [x] Coverage thresholds met
 - [ ] `git status` clean after commits with Conventional Commits (`feat(cache): scaffold project structure`, `feat(cache): add shared types and constants`, `feat(cache): implement ConnectionManager`, etc.)
 - [ ] `/bymax-quality:code-review` executed and findings applied
 - [ ] Pull request opened with the `phase-1` label

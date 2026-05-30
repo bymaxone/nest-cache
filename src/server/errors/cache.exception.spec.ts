@@ -1,6 +1,6 @@
 import { HttpStatus } from '@nestjs/common'
 
-import { CACHE_ERROR_CODES } from '../../shared/constants/error-codes'
+import { CACHE_ERROR_CODES, type CacheErrorCode } from '../../shared/constants/error-codes'
 import { CacheException } from './cache.exception'
 
 describe('CacheException', () => {
@@ -21,7 +21,7 @@ describe('CacheException', () => {
 
   // An unknown code must fall back to the generic message, never `undefined`.
   it('falls back to a generic message for an unknown code', () => {
-    const ex = new CacheException('cache.not_a_real_code')
+    const ex = new CacheException('cache.not_a_real_code' as CacheErrorCode)
 
     const body = ex.getResponse() as { error: { message: string } }
     expect(body.error.message).toBe('Cache error')
@@ -58,5 +58,30 @@ describe('CacheException', () => {
     const ex = new CacheException(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
 
     expect(ex.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
+  })
+
+  // CACHE-011: the public readonly `.code` field must equal the code passed, so
+  // a `catch` block can branch on it without parsing the response body.
+  it('exposes the passed code on the readonly .code field', () => {
+    const ex = new CacheException(CACHE_ERROR_CODES.INVALID_KEY, { reason: 'empty_prefix' })
+
+    expect(ex.code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
+  })
+
+  // CACHE-011: the public readonly `.details` field must equal the object passed,
+  // so structured context is reachable without a cast on the response.
+  it('exposes the passed details on the readonly .details field', () => {
+    const details = { reason: 'empty_prefix' }
+    const ex = new CacheException(CACHE_ERROR_CODES.INVALID_KEY, details)
+
+    expect(ex.details).toEqual(details)
+  })
+
+  // CACHE-011: when no details are supplied, `.details` must be `null` (never
+  // `undefined`) so consumers can rely on a stable empty sentinel.
+  it('exposes null on the .details field when details are omitted', () => {
+    const ex = new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED)
+
+    expect(ex.details).toBeNull()
   })
 })
