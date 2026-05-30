@@ -8,7 +8,7 @@
 // compromised devDep cannot tamper with the bundle before `pnpm publish`.
 // `node:zlib`'s brotli matches what npm/CDN compression produces on the wire.
 
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants } from 'node:zlib'
@@ -54,13 +54,15 @@ const rows = []
 
 for (const { name, path, brotli: limit } of BUDGETS) {
   const abs = resolve(ROOT, path)
+  // Read directly and handle the error from the read itself — no stat-then-read
+  // check, which would be a TOCTOU file-system race (CodeQL js/file-system-race).
+  let raw
   try {
-    statSync(abs)
+    raw = readFileSync(abs)
   } catch {
     console.error(`Missing build artifact: ${path} — run \`pnpm build\` first.`)
     process.exit(2)
   }
-  const raw = readFileSync(abs)
   const compressed = brotliCompressSync(raw, BROTLI_OPTS).length
   const ok = compressed <= limit
   if (!ok) failed += 1
