@@ -3941,7 +3941,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && p
 - [x] Bundle within budgets (verifiable in §6.5)
 - [x] Mutation score ≥ 85% — achieved 100% (`pnpm mutation` exits 0 ≥ break 95)
 - [x] E2E suite passa (ioredis-mock + Testcontainers)
-- [ ] PR `phase-4` aprovado — pending (implementation complete; not yet committed)
+- [ ] PR `phase-4` aprovado — pending review and merge
 
 ---
 

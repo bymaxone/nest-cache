@@ -23,8 +23,8 @@ interface Profile {
 }
 
 describe('CacheService full surface E2E (real Redis)', () => {
-  let redis: StartedRedis
-  let app: TestingModule
+  let redis: StartedRedis | undefined
+  let app: TestingModule | undefined
   let cache: CacheService
   let keyBuilder: KeyBuilder
 
@@ -36,8 +36,8 @@ describe('CacheService full surface E2E (real Redis)', () => {
   }, 60_000)
 
   afterAll(async () => {
-    await app.close()
-    await redis.container.stop()
+    await app?.close()
+    await redis?.container.stop()
   })
 
   // A structured value must survive set→get through the serializer, and `getRaw`

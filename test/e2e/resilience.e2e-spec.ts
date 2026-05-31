@@ -28,8 +28,8 @@ async function waitUntilHealthy(cache: CacheService, timeoutMs: number): Promise
 }
 
 describe('Resilience E2E (real Redis)', () => {
-  let redis: StartedRedis
-  let app: TestingModule
+  let redis: StartedRedis | undefined
+  let app: TestingModule | undefined
   let cache: CacheService
 
   beforeAll(async () => {
@@ -42,8 +42,8 @@ describe('Resilience E2E (real Redis)', () => {
   }, 60_000)
 
   afterAll(async () => {
-    await app.close()
-    await redis.container.stop()
+    await app?.close()
+    await redis?.container.stop()
   })
 
   // After the server restarts (connection dropped), ioredis must auto-reconnect

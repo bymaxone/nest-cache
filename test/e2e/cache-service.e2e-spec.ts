@@ -24,7 +24,7 @@ interface User {
 }
 
 describe('CacheService E2E (ioredis-mock)', () => {
-  let app: TestingModule
+  let app: TestingModule | undefined
   let cache: CacheService
 
   beforeAll(async () => {
@@ -33,7 +33,7 @@ describe('CacheService E2E (ioredis-mock)', () => {
   })
 
   afterAll(async () => {
-    await app.close()
+    await app?.close()
   })
 
   // A structured value must survive a set→get roundtrip through the configured

@@ -24,7 +24,7 @@ jest.mock('ioredis', () => {
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
 describe('PubSubService E2E (ioredis-mock)', () => {
-  let app: TestingModule
+  let app: TestingModule | undefined
   let pubsub: PubSubService
 
   beforeAll(async () => {
@@ -33,7 +33,7 @@ describe('PubSubService E2E (ioredis-mock)', () => {
   })
 
   afterAll(async () => {
-    await app.close()
+    await app?.close()
   })
 
   // A published message must reach a channel subscriber deserialized — the full

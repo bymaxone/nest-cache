@@ -15,8 +15,8 @@ import { startRedisSentinel, type StartedRedisSentinel } from './helpers/start-r
 import type { TestingModule } from '@nestjs/testing'
 
 describe('Redis Sentinel topology E2E (real sentinel)', () => {
-  let redis: StartedRedisSentinel
-  let app: TestingModule
+  let redis: StartedRedisSentinel | undefined
+  let app: TestingModule | undefined
   let cache: CacheService
 
   beforeAll(async () => {
@@ -30,10 +30,10 @@ describe('Redis Sentinel topology E2E (real sentinel)', () => {
   }, 120_000)
 
   afterAll(async () => {
-    await app.close()
-    await redis.sentinel.stop()
-    await redis.master.stop()
-    await redis.network.stop()
+    await app?.close()
+    await redis?.sentinel.stop()
+    await redis?.master.stop()
+    await redis?.network.stop()
   })
 
   // The cache must resolve the master via the sentinel and round-trip a value —

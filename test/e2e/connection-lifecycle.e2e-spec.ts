@@ -14,8 +14,8 @@ import { startRedisContainer, type StartedRedis } from './helpers/start-redis-co
 import type { TestingModule } from '@nestjs/testing'
 
 describe('Connection lifecycle E2E (real Redis)', () => {
-  let redis: StartedRedis
-  let app: TestingModule
+  let redis: StartedRedis | undefined
+  let app: TestingModule | undefined
   let cache: CacheService
 
   beforeAll(async () => {
@@ -25,8 +25,8 @@ describe('Connection lifecycle E2E (real Redis)', () => {
   }, 60_000)
 
   afterAll(async () => {
-    await app.close()
-    await redis.container.stop()
+    await app?.close()
+    await redis?.container.stop()
   })
 
   // A structured value must roundtrip through a real server, proving the URL

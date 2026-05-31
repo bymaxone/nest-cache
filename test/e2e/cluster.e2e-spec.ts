@@ -25,8 +25,8 @@ const COMPARE_AND_SET_LUA = `
 `
 
 describe('Redis Cluster topology E2E (real cluster)', () => {
-  let cluster: StartedRedisCluster
-  let app: TestingModule
+  let cluster: StartedRedisCluster | undefined
+  let app: TestingModule | undefined
   let cache: CacheService
 
   beforeAll(async () => {
@@ -44,8 +44,8 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
   }, 120_000)
 
   afterAll(async () => {
-    await app.close()
-    await cluster.container.stop()
+    await app?.close()
+    await cluster?.container.stop()
   })
 
   // Single-key reads/writes must route to the owning slot's node and round-trip —

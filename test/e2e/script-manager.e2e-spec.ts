@@ -23,8 +23,8 @@ const COMPARE_AND_SET_LUA = `
 `
 
 describe('ScriptManagerService E2E (real Redis)', () => {
-  let redis: StartedRedis
-  let app: TestingModule
+  let redis: StartedRedis | undefined
+  let app: TestingModule | undefined
   let cache: CacheService
 
   beforeAll(async () => {
@@ -38,8 +38,8 @@ describe('ScriptManagerService E2E (real Redis)', () => {
   }, 60_000)
 
   afterAll(async () => {
-    await app.close()
-    await redis.container.stop()
+    await app?.close()
+    await redis?.container.stop()
   })
 
   // EVALSHA must run the registered script atomically: a matching compare swaps

@@ -74,7 +74,7 @@ jobs:
       - name: Type-level API tests
         run: pnpm test:types
 
-      - name: Unit tests with coverage (100% enforced)
+      - name: Unit + E2E tests with coverage (100% enforced)
         run: pnpm test:cov:all
 
       - name: Upload coverage artifact

@@ -23,8 +23,8 @@ const REDIS_URL = Symbol('REDIS_URL')
 const INCREMENT_LUA = `return redis.call('INCRBY', KEYS[1], ARGV[1])`
 
 describe('BymaxCacheModule.forRootAsync E2E (real Redis)', () => {
-  let redis: StartedRedis
-  let app: INestApplicationContext
+  let redis: StartedRedis | undefined
+  let app: INestApplicationContext | undefined
   let cache: CacheService
 
   beforeAll(async () => {
@@ -58,8 +58,8 @@ describe('BymaxCacheModule.forRootAsync E2E (real Redis)', () => {
   }, 60_000)
 
   afterAll(async () => {
-    await app.close()
-    await redis.container.stop()
+    await app?.close()
+    await redis?.container.stop()
   })
 
   // The factory-resolved connection must produce a working cache: a roundtrip
