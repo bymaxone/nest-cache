@@ -1,10 +1,9 @@
 /**
  * Public API of the `@bymax-one/nest-cache` (server) subpath.
  *
- * The NestJS-facing surface through Phase 2: the dynamic module, the connection
+ * The NestJS-facing surface through Phase 3: the dynamic module, the connection
  * manager, the key builder, the typed cache service, the default serializer, the
- * public contracts, DI tokens, and errors. The pub-sub / script services land in
- * Phase 3 per `docs/development_plan.md`.
+ * Pub/Sub and Lua script services, the public contracts, DI tokens, and errors.
  */
 
 // Module
@@ -17,6 +16,11 @@ export { KeyBuilder } from './utils/key-builder'
 // Cache service + default serializer (Phase 2)
 export { CacheService } from './services/cache.service'
 export { JsonSerializer } from './utils/json-serializer'
+
+// Pub/Sub + Lua script manager (Phase 3)
+export { PubSubService } from './services/pubsub.service'
+export type { Unsubscribe } from './services/pubsub.service'
+export { ScriptManagerService } from './services/script-manager.service'
 
 // Interfaces / contracts
 export type {

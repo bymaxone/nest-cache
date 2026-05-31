@@ -18,6 +18,7 @@ import { CacheService } from './cache.service'
 
 import type { ResolvedOptions } from '../config/resolved-options'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import type { ScriptManagerService } from './script-manager.service'
 import type { Redis } from 'ioredis'
 
 // Swap the real ioredis for the in-memory mock so the ConnectionManager builds a
@@ -606,6 +607,83 @@ describe('CacheService', () => {
       await injectedCache.set('p', 'k2', { v: 2 })
 
       expect(serializeSpy).toHaveBeenCalledWith({ v: 2 })
+    })
+  })
+
+  describe('eval', () => {
+    // Without a wired ScriptManagerService, eval must fail closed rather than
+    // silently no-op — guards a manual instantiation that omitted the registry.
+    it('throws SCRIPT_REGISTRY_MISSING when no script manager is wired', async () => {
+      await expect(cache.eval('cas', ['k'], [])).rejects.toBeInstanceOf(CacheException)
+      await cache.eval('cas', ['k'], []).catch((error: unknown) => {
+        expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_REGISTRY_MISSING)
+      })
+    })
+
+    // With a script manager, keys are namespaced before delegation while args
+    // and the return value pass through untouched.
+    it('namespaces keys and delegates to the script manager', async () => {
+      const evalMock = jest.fn().mockResolvedValue('lua-result')
+      const cacheWithScripts = new CacheService(
+        applyDefaults({ connection: { host: 'h' }, namespace: 'test' }),
+        connection,
+        keyBuilder,
+        undefined,
+        { eval: evalMock } as unknown as ScriptManagerService
+      )
+
+      const result = await cacheWithScripts.eval('cas', ['k1', 'k2'], [1, 'a'])
+
+      expect(evalMock).toHaveBeenCalledWith('cas', ['test:k1', 'test:k2'], [1, 'a'])
+      expect(result).toBe('lua-result')
+    })
+  })
+
+  describe('health', () => {
+    // isHealthy resolves true when the server answers PONG.
+    it('reports healthy when Redis answers PONG', async () => {
+      expect(await cache.isHealthy()).toBe(true)
+    })
+
+    // A non-PONG reply must read as unhealthy — the `pong === 'PONG'` false side.
+    it('reports unhealthy on a non-PONG reply', async () => {
+      jest.spyOn(connection.getClient(), 'ping').mockResolvedValue('LATER')
+
+      expect(await cache.isHealthy()).toBe(false)
+    })
+
+    // A ping failure must be swallowed and read as unhealthy, never propagated.
+    it('reports unhealthy (never throws) when ping fails', async () => {
+      jest.spyOn(connection.getClient(), 'ping').mockRejectedValue(new Error('connection down'))
+
+      expect(await cache.isHealthy()).toBe(false)
+    })
+
+    // ping surfaces the raw PONG on a healthy connection.
+    it('ping returns PONG', async () => {
+      expect(await cache.ping()).toBe('PONG')
+    })
+
+    // info() with no section must call INFO with NO arguments (not `info(undefined)`)
+    // and return the full report — the zero-arg assertion kills the force-false
+    // ternary mutant that would always take the `client.info(section)` branch.
+    it('info returns the full report when no section is given', async () => {
+      const infoSpy = jest.spyOn(connection.getClient(), 'info')
+
+      const result = await cache.info()
+
+      expect(infoSpy).toHaveBeenCalledWith()
+      expect(result).toContain('redis_version')
+    })
+
+    // info(section) forwards the section to the INFO command (the section branch).
+    it('info forwards a requested section', async () => {
+      const infoSpy = jest.spyOn(connection.getClient(), 'info')
+
+      const result = await cache.info('memory')
+
+      expect(infoSpy).toHaveBeenCalledWith('memory')
+      expect(typeof result).toBe('string')
     })
   })
 })

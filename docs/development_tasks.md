@@ -1,7 +1,7 @@
 # Development Tasks — @bymax-one/nest-cache
 
 > **Version:** 2.0.0
-> **Last updated:** 2026-05-31 (Phase 2 complete — CacheService + JsonSerializer)
+> **Last updated:** 2026-05-31 (Phase 3 complete — PubSub + ScriptManager + Health)
 > **Status:** Draft for execution
 > **Based on:** [`development_plan.md`](./development_plan.md) + [`technical_specification.md`](./technical_specification.md)
 > **Total tasks:** 58
@@ -49,13 +49,13 @@
 
 > **Status legend:** 🔴 Not Started · 🟡 In Progress · 🟢 Done · ⚪ Blocked · 🔵 In Review
 
-> **Overall progress:** 🟡 27 / 58 tasks done (47%)
+> **Overall progress:** 🟡 39 / 58 tasks done (67%)
 
 | #   | Phase                                  | Done / Total | %    | Status |
 | --- | -------------------------------------- | ------------ | ---- | ------ |
 | 1   | Foundation + Connection Manager        | 15 / 15      | 100% | 🟢     |
 | 2   | CacheService + Typed Helpers           | 12 / 12      | 100% | 🟢     |
-| 3   | Pub/Sub + ScriptManager + Health       | 0 / 12       | 0%   | 🔴     |
+| 3   | Pub/Sub + ScriptManager + Health       | 12 / 12      | 100% | 🟢     |
 | 4   | forRootAsync + E2E + Mutation Baseline | 0 / 9        | 0%   | 🔴     |
 | 5   | Release v0.1.0                         | 0 / 10       | 0%   | 🔴     |
 
@@ -1888,7 +1888,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size
 ### CACHE-028: PubSubService — publish/subscribe/psubscribe with lazy subscriber
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-014, CACHE-016
 - **Agent:** database-reviewer
@@ -1926,15 +1926,15 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size
 
 **Acceptance criteria:**
 
-- [ ] `publish()` returns number of subscribers
-- [ ] `subscribe()` creates subscriber ONCE (lazy)
-- [ ] Multiple `subscribe()` on distinct channels reuse the same subscriber
-- [ ] Published message arrives at handler with deserialized payload
-- [ ] Error in handler does not crash subscriber
-- [ ] Unsubscribe returned by `subscribe()` disconnects listener
-- [ ] `psubscribe('users:*')` receives matching messages
-- [ ] `onModuleDestroy` closes subscriber gracefully
-- [ ] `pnpm typecheck` passes
+- [x] `publish()` returns number of subscribers
+- [x] `subscribe()` creates subscriber ONCE (lazy)
+- [x] Multiple `subscribe()` on distinct channels reuse the same subscriber
+- [x] Published message arrives at handler with deserialized payload
+- [x] Error in handler does not crash subscriber
+- [x] Unsubscribe returned by `subscribe()` disconnects listener
+- [x] `psubscribe('users:*')` receives matching messages
+- [x] `onModuleDestroy` closes subscriber gracefully
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -1954,7 +1954,7 @@ pnpm typecheck
 ### CACHE-029: ScriptManagerService — register/load/eval + NOSCRIPT fallback
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-014
 - **Agent:** database-reviewer
@@ -1994,15 +1994,15 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `register(name, lua)` adds to the registry
-- [ ] `onModuleInit` pre-loads scripts (unless lazyConnect)
-- [ ] `load(name)` calls SCRIPT LOAD and caches SHA1
-- [ ] `load` is idempotent
-- [ ] `load(unknown)` throws `SCRIPT_NOT_REGISTERED`
-- [ ] `eval` calls EVALSHA with `keys.length` + spread
-- [ ] `eval` on NOSCRIPT reloads and retries once
-- [ ] Real error (not NOSCRIPT) wrapped as `SCRIPT_EXECUTION_FAILED`
-- [ ] `pnpm typecheck` passes
+- [x] `register(name, lua)` adds to the registry
+- [x] `onModuleInit` pre-loads scripts (unless lazyConnect)
+- [x] `load(name)` calls SCRIPT LOAD and caches SHA1
+- [x] `load` is idempotent
+- [x] `load(unknown)` throws `SCRIPT_NOT_REGISTERED`
+- [x] `eval` calls EVALSHA with `keys.length` + spread
+- [x] `eval` on NOSCRIPT reloads and retries once
+- [x] Real error (not NOSCRIPT) wrapped as `SCRIPT_EXECUTION_FAILED`
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -2022,7 +2022,7 @@ pnpm typecheck
 ### CACHE-030: CacheService.eval — delegates to ScriptManagerService
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-022, CACHE-029
 - **Agent:** code-reviewer
@@ -2053,11 +2053,11 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `eval` without registered `ScriptManagerService` throws `SCRIPT_REGISTRY_MISSING`
-- [ ] Keys are namespaced BEFORE arriving at ScriptManager
-- [ ] Args passed without transformation
-- [ ] Return propagates unchanged (`unknown`)
-- [ ] `pnpm typecheck` passes
+- [x] `eval` without registered `ScriptManagerService` throws `SCRIPT_REGISTRY_MISSING`
+- [x] Keys are namespaced BEFORE arriving at ScriptManager
+- [x] Args passed without transformation
+- [x] Return propagates unchanged (`unknown`)
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -2077,7 +2077,7 @@ pnpm typecheck
 ### CACHE-031: CacheService — health check methods (isHealthy/ping/info)
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-019
 - **Agent:** database-reviewer
@@ -2120,13 +2120,13 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `isHealthy()` returns `true` when Redis responds `PONG`
-- [ ] `isHealthy()` returns `false` (does not throw) when ping fails
-- [ ] `ping()` returns `'PONG'` on healthy connection
-- [ ] `ping()` throws on closed connection
-- [ ] `info()` returns string with Redis INFO
-- [ ] `info('memory')` returns only memory section
-- [ ] `pnpm typecheck` passes
+- [x] `isHealthy()` returns `true` when Redis responds `PONG`
+- [x] `isHealthy()` returns `false` (does not throw) when ping fails
+- [x] `ping()` returns `'PONG'` on healthy connection
+- [x] `ping()` throws on closed connection
+- [x] `info()` returns string with Redis INFO
+- [x] `info('memory')` returns only memory section
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -2146,7 +2146,7 @@ pnpm typecheck
 ### CACHE-032: Wire PubSubService + ScriptManagerService in module + update barrel
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-028, CACHE-029, CACHE-030
 - **Agent:** architect
@@ -2180,11 +2180,11 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `module.get(PubSubService)` functional
-- [ ] `module.get(ScriptManagerService)` with pre-registered scripts (when provided)
-- [ ] `CacheService.eval` resolves `ScriptManagerService` via DI
-- [ ] Barrel updated
-- [ ] `pnpm typecheck && pnpm build` pass
+- [x] `module.get(PubSubService)` functional
+- [x] `module.get(ScriptManagerService)` with pre-registered scripts (when provided)
+- [x] `CacheService.eval` resolves `ScriptManagerService` via DI
+- [x] Barrel updated
+- [x] `pnpm typecheck && pnpm build` pass
 
 **Validation commands:**
 
@@ -2204,7 +2204,7 @@ pnpm typecheck && pnpm build
 ### CACHE-033: Tests — PubSubService (publish/subscribe roundtrip + error swallowing)
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-028
 - **Agent:** tester
@@ -2231,8 +2231,8 @@ pnpm typecheck && pnpm build
 
 **Acceptance criteria:**
 
-- [ ] 5+ cases
-- [ ] 95% coverage
+- [x] 5+ cases
+- [x] 95% coverage
 
 **Validation commands:**
 
@@ -2252,7 +2252,7 @@ pnpm test src/server/services/pubsub.service.spec.ts
 ### CACHE-034: Tests — ScriptManagerService (eval happy path + NOSCRIPT recovery + errors)
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-029
 - **Agent:** tester
@@ -2292,9 +2292,9 @@ pnpm test src/server/services/pubsub.service.spec.ts
 
 **Acceptance criteria:**
 
-- [ ] 7+ cases
-- [ ] NOSCRIPT recovery path tested
-- [ ] 95% coverage
+- [x] 7+ cases
+- [x] NOSCRIPT recovery path tested
+- [x] 95% coverage
 
 **Validation commands:**
 
@@ -2314,7 +2314,7 @@ pnpm test src/server/services/script-manager.service.spec.ts
 ### CACHE-035: Tests — CacheService.eval + health methods
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-030, CACHE-031
 - **Agent:** tester
@@ -2342,8 +2342,8 @@ pnpm test src/server/services/script-manager.service.spec.ts
 
 **Acceptance criteria:**
 
-- [ ] 9 additional cases
-- [ ] 95% coverage
+- [x] 9 additional cases
+- [x] 95% coverage
 
 **Validation commands:**
 
@@ -2363,7 +2363,7 @@ pnpm test src/server/services/cache.service.spec.ts -- -t 'eval\|health'
 ### CACHE-036: Phase 3 smoke test + bundle size validation
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-032, CACHE-033, CACHE-034, CACHE-035
 - **Agent:** general-purpose
@@ -2435,8 +2435,8 @@ pnpm test src/server/services/cache.service.spec.ts -- -t 'eval\|health'
 
 **Acceptance criteria:**
 
-- [ ] Smoke test passes OR step marked REVIEW
-- [ ] Bundle size within budget
+- [x] Smoke test passes OR step marked REVIEW
+- [x] Bundle size within budget
 
 **Validation commands:**
 
@@ -2457,7 +2457,7 @@ node /tmp/cache-smoke-phase3.mjs  # optional
 ### CACHE-037: Phase 3 validation
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-028 to CACHE-036
 - **Agent:** code-reviewer
@@ -2490,9 +2490,9 @@ node /tmp/cache-smoke-phase3.mjs  # optional
 
 **Acceptance criteria:**
 
-- [ ] All 5 commands pass
-- [ ] `/bymax-quality:code-review` executed and findings applied
-- [ ] In the Phase 3 task pending
+- [x] All 5 commands pass
+- [x] `/bymax-quality:code-review` executed and findings applied
+- [x] In the Phase 3 task pending
 
 **Validation commands:**
 
@@ -2512,7 +2512,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size
 ### CACHE-038: Stub forRootAsync skeleton (Phase 4 preparation)
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Low
 - **Dependencies:** CACHE-032
 - **Agent:** architect
@@ -2537,9 +2537,9 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size
 
 **Acceptance criteria:**
 
-- [ ] Stub method created with public signature
-- [ ] Throws documenting that real implementation is in Phase 4
-- [ ] `pnpm typecheck` passes
+- [x] Stub method created with public signature
+- [x] Throws documenting that real implementation is in Phase 4
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -2559,7 +2559,7 @@ pnpm typecheck
 ### CACHE-039: Refactor — extract buildCommonProviders helper (Phase 4 preparation)
 
 - **Phase:** 3
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Low
 - **Dependencies:** CACHE-032
 - **Agent:** architect
@@ -2609,11 +2609,11 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `buildCommonProviders` and `buildCommonExports` private/static
-- [ ] `forRoot` reuses both
-- [ ] List of providers/exports before and after refactoring is equivalent
-- [ ] Module tests continue to pass
-- [ ] `pnpm typecheck && pnpm test src/server/bymax-cache.module.spec.ts` pass
+- [x] `buildCommonProviders` and `buildCommonExports` private/static
+- [x] `forRoot` reuses both
+- [x] List of providers/exports before and after refactoring is equivalent
+- [x] Module tests continue to pass
+- [x] `pnpm typecheck && pnpm test src/server/bymax-cache.module.spec.ts` pass
 
 **Validation commands:**
 
@@ -2627,6 +2627,25 @@ pnpm typecheck && pnpm test src/server/bymax-cache.module.spec.ts
 2. `Status` → DONE
 3. Dashboard: Phase 3 1→0, DONE 38→39, Progress 100% ✅; TOTAL 20→19, 38→39, 67%
 4. Commit: `refactor(cache): extract common providers/exports for module reuse (CACHE-039)`
+
+---
+
+### Phase 3 — Completion Log
+
+- CACHE-028 ✅ 2026-05-31 — PubSubService (publish via main client; lazy dedicated subscriber for subscribe/psubscribe; namespaced channels/patterns; handler errors swallowed AND forwarded to the `ICacheEvents` observability callback as an `error`/`handler_error` event; graceful/forced shutdown)
+- CACHE-029 ✅ 2026-05-31 — ScriptManagerService (register/load via SCRIPT LOAD + cached SHA; EVALSHA with NOSCRIPT reload-and-retry-once; eager preload moved to `onApplicationBootstrap`)
+- CACHE-030 ✅ 2026-05-31 — CacheService.eval (namespaces keys, delegates to ScriptManagerService via `@Optional() @Inject`; SCRIPT_REGISTRY_MISSING when unwired)
+- CACHE-031 ✅ 2026-05-31 — CacheService health (isHealthy never-throws / ping / info[section])
+- CACHE-032 ✅ 2026-05-31 — wired PubSubService + ScriptManagerService + BYMAX_CACHE_SCRIPT_REGISTRY into forRoot; Phase 3 barrel surface
+- CACHE-033 ✅ 2026-05-31 — PubSubService specs (delivery + namespacing, error swallowing, detach, pattern match, destroy paths)
+- CACHE-034 ✅ 2026-05-31 — ScriptManagerService specs (load/idempotent/unknown, EVALSHA, NOSCRIPT recovery + failed retry, error wrapping, register, bootstrap)
+- CACHE-035 ✅ 2026-05-31 — CacheService eval + health specs
+- CACHE-036 ✅ 2026-05-31 — Phase 3 runtime smoke PASSED against Redis (health, subscribe, psubscribe, CAS eval, NOSCRIPT recovery after SCRIPT FLUSH); bundle server 11.54 KB / shared 0.40 KB brotli
+- CACHE-037 ✅ 2026-05-31 — Phase 3 validation: typecheck + lint (0/0) + test:cov (100% stmts/branches/funcs/lines, 192 tests) + build + size all green; 4-lens adversarial review (7 confirmed → 4 mutation-hardening fixes applied, 1 reject [cluster Pub/Sub guard — contradicts experimental-passthrough spec], 11 false positives rejected)
+- CACHE-038 ✅ 2026-05-31 — forRootAsync stub satisfied early (the Phase-1 override already throws a Phase-4 NotImplemented error; `BymaxCacheModuleAsyncOptions` already exported)
+- CACHE-039 ✅ 2026-05-31 — extracted `buildCommonProviders(resolved)` / `buildCommonExports()` (Phase-4 reuse; preserves the conditional serializer provider)
+
+> **Phase 3 notes:** two real bugs surfaced by the runtime smoke (unit tests structurally cannot catch them): (1) eager script preload in `onModuleInit` raced ConnectionManager's connect (NestJS runs onModuleInit concurrently) → moved to `onApplicationBootstrap`; (2) the lazy subscriber wasn't writable when `subscribe()` ran (offline queue disabled) → `createSubscriberClient` now enables the subscriber's offline queue (control-plane buffering; the data-plane main client stays fail-fast). Also DRY'd the identical serializer resolution into `resolveSerializer`. Two `/bymax-quality:code-review` follow-up passes drove: PubSubService now forwards swallowed handler errors to the `ICacheEvents` callback (observability, matching ConnectionManager), and three unnecessary `as Redis` casts were removed — two in ScriptManagerService (`script`/`evalsha`) and one for the PubSub subscriber (`subscribe`/`psubscribe`/`unsubscribe`/`punsubscribe` are all typed on the `Redis | Cluster` union via RedisCommander). The two remaining `as Redis` casts (the `isScannableClient` probe and the `getClient()` escape hatch, both in cache.service.ts) are intentional documented narrowings. Mutation testing (Stryker, Node 24) remains the Phase 4/5 release gate; Phase 3 tests were proactively hardened against the surviving mutants the review identified.
 
 ---
 

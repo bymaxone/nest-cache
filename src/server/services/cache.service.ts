@@ -19,13 +19,14 @@ import { Inject, Injectable, Optional } from '@nestjs/common'
 import type { ChainableCommander, Cluster, Redis } from 'ioredis'
 
 import { BYMAX_CACHE_OPTIONS, BYMAX_CACHE_SERIALIZER } from '../bymax-cache.constants'
+import { ScriptManagerService } from './script-manager.service'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
-import { JsonSerializer } from '../utils/json-serializer'
 import { KeyBuilder } from '../utils/key-builder'
+import { resolveSerializer } from '../utils/resolve-serializer'
 
 /** Production value of `NODE_ENV` that gates the destructive flush guard. */
 const PRODUCTION_ENV = 'production'
@@ -64,6 +65,8 @@ export class CacheService {
    * @param injectedSerializer - Optional `BYMAX_CACHE_SERIALIZER` provider; used
    *   only when `options.serializer` is absent. `@Optional()` so the token may be
    *   unprovided in tests / minimal wirings.
+   * @param scriptRegistry - Optional `ScriptManagerService`; required only for
+   *   {@link CacheService.eval}. `@Optional()` so the cache works without scripts.
    */
   constructor(
     @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
@@ -72,10 +75,12 @@ export class CacheService {
     // for these providers (CLAUDE.md §5, AGENTS.md §7).
     @Inject(ConnectionManager) private readonly connection: ConnectionManager,
     @Inject(KeyBuilder) private readonly keyBuilder: KeyBuilder,
-    @Optional() @Inject(BYMAX_CACHE_SERIALIZER) injectedSerializer?: ISerializer
+    @Optional() @Inject(BYMAX_CACHE_SERIALIZER) injectedSerializer?: ISerializer,
+    @Optional()
+    @Inject(ScriptManagerService)
+    private readonly scriptRegistry?: ScriptManagerService
   ) {
-    // Priority: explicit serializer option > injected token > default JSON.
-    this.serializer = options.serializer ?? injectedSerializer ?? new JsonSerializer()
+    this.serializer = resolveSerializer(options, injectedSerializer)
   }
 
   // ─── String / value commands ───────────────────────────────────────────────
@@ -603,5 +608,79 @@ export class CacheService {
       }
     }
     return total
+  }
+
+  // ─── Lua scripts ───────────────────────────────────────────────────────────
+
+  /**
+   * Executes a Lua script registered with the {@link ScriptManagerService}. The
+   * `keys` are namespaced before reaching Redis (the same isolation guarantee as
+   * every other command); `args` are passed through untouched.
+   *
+   * @param scriptName - Name the script was registered under (via `options.scripts`
+   *   or `ScriptManagerService.register`).
+   * @param keys - `KEYS[]` (bare; namespaced here before execution).
+   * @param args - `ARGV[]` for the script.
+   * @returns The script's return value, typed `unknown` (Redis Lua is dynamic).
+   * @throws {CacheException} `SCRIPT_REGISTRY_MISSING` when no script manager is
+   *   wired (the module always wires one; this guards manual instantiations).
+   * @throws {CacheException} `SCRIPT_NOT_REGISTERED` / `SCRIPT_EXECUTION_FAILED`
+   *   propagated from the script manager.
+   * @example
+   * ```ts
+   * const swapped = (await cache.eval('compareAndSet', ['session:abc'], ['v1', 'v2'])) as number
+   * ```
+   */
+  async eval(
+    scriptName: string,
+    keys: readonly string[],
+    args: ReadonlyArray<string | number>
+  ): Promise<unknown> {
+    if (!this.scriptRegistry) {
+      throw new CacheException(CACHE_ERROR_CODES.SCRIPT_REGISTRY_MISSING)
+    }
+    const namespacedKeys = keys.map((key) => this.keyBuilder.applyNamespace(key))
+    return this.scriptRegistry.eval(scriptName, namespacedKeys, args)
+  }
+
+  // ─── Health ────────────────────────────────────────────────────────────────
+
+  /**
+   * Reports whether Redis answers `PING`. Never throws — a connection failure
+   * resolves to `false`, making it safe to wire directly into a health endpoint
+   * (e.g. `@nestjs/terminus`).
+   *
+   * @returns `true` when the server replies `PONG`, otherwise `false`.
+   */
+  async isHealthy(): Promise<boolean> {
+    try {
+      const pong = await this.connection.getClient().ping()
+      return pong === 'PONG'
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Sends a raw `PING`. Unlike {@link CacheService.isHealthy}, this propagates a
+   * connection failure — use it when the caller wants to handle the error.
+   *
+   * @returns `'PONG'` on a healthy connection.
+   * @throws The underlying ioredis error when the connection is down.
+   */
+  async ping(): Promise<string> {
+    return this.connection.getClient().ping()
+  }
+
+  /**
+   * Returns the Redis `INFO` output, optionally scoped to a single section.
+   *
+   * @param section - Optional section name (e.g. `'memory'`, `'clients'`,
+   *   `'replication'`); omit for the full report.
+   * @returns The `INFO` text.
+   */
+  async info(section?: string): Promise<string> {
+    const client = this.connection.getClient()
+    return section === undefined ? client.info() : client.info(section)
   }
 }

@@ -1,10 +1,13 @@
 /**
  * `BymaxCacheModule` — the public NestJS dynamic module.
  *
- * Layer: server. Phase 1 surface: synchronous `forRoot()` wiring the
- * `ConnectionManager`, `KeyBuilder`, and DI tokens. The async `forRootAsync()`
- * lands in Phase 4 (CACHE-040); the inherited builder method is not yet wired
- * with the cache providers and must not be used until then.
+ * Layer: server. Synchronous `forRoot()` wires the full Phase 1–3 surface:
+ * `ConnectionManager`, `KeyBuilder`, `CacheService`, `PubSubService`,
+ * `ScriptManagerService`, the default serializer, and the DI tokens. The shared
+ * provider/export lists are factored into {@link BymaxCacheModule.buildCommonProviders}
+ * / {@link BymaxCacheModule.buildCommonExports} so the async `forRootAsync()`
+ * (Phase 4 / CACHE-040) can reuse them; until then the inherited builder method
+ * is overridden to fail loud.
  *
  * @see `docs/technical_specification.md` §2.1, §4 — Dynamic Module Pattern
  */
@@ -15,6 +18,7 @@ import {
   BYMAX_CACHE_EVENTS,
   BYMAX_CACHE_KEY_BUILDER,
   BYMAX_CACHE_OPTIONS,
+  BYMAX_CACHE_SCRIPT_REGISTRY,
   BYMAX_CACHE_SERIALIZER
 } from './bymax-cache.constants'
 import {
@@ -24,8 +28,11 @@ import {
   OPTIONS_TYPE
 } from './bymax-cache.module.builder'
 import { applyDefaults, validateOptions } from './config/default-options'
+import type { ResolvedOptions } from './config/resolved-options'
 import { ConnectionManager } from './connection/connection.manager'
 import { CacheService } from './services/cache.service'
+import { PubSubService } from './services/pubsub.service'
+import { ScriptManagerService } from './services/script-manager.service'
 import { JsonSerializer } from './utils/json-serializer'
 import { KeyBuilder } from './utils/key-builder'
 
@@ -47,31 +54,14 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
       { provide: MODULE_OPTIONS_TOKEN, useValue: options },
       { provide: BYMAX_CACHE_OPTIONS, useValue: resolved },
       { provide: BYMAX_CACHE_EVENTS, useValue: resolved.events ?? null },
-      // Honor a consumer-supplied serializer on the injectable token too (not
-      // just inside CacheService), so any provider that injects
-      // BYMAX_CACHE_SERIALIZER receives the configured serializer rather than the
-      // default. Falls back to the JsonSerializer class when none is supplied.
-      resolved.serializer
-        ? { provide: BYMAX_CACHE_SERIALIZER, useValue: resolved.serializer }
-        : { provide: BYMAX_CACHE_SERIALIZER, useClass: JsonSerializer },
-      ConnectionManager,
-      KeyBuilder,
-      { provide: BYMAX_CACHE_KEY_BUILDER, useExisting: KeyBuilder },
-      CacheService
+      ...BymaxCacheModule.buildCommonProviders(resolved)
     ]
 
     return {
       module: BymaxCacheModule,
       global: resolved.isGlobal,
       providers,
-      exports: [
-        BYMAX_CACHE_OPTIONS,
-        BYMAX_CACHE_KEY_BUILDER,
-        BYMAX_CACHE_SERIALIZER,
-        ConnectionManager,
-        KeyBuilder,
-        CacheService
-      ]
+      exports: BymaxCacheModule.buildCommonExports()
     }
   }
 
@@ -91,5 +81,48 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
     throw new Error(
       'BymaxCacheModule.forRootAsync is not available until Phase 4 — use forRoot for synchronous registration.'
     )
+  }
+
+  /**
+   * Providers shared by `forRoot` (and `forRootAsync` in Phase 4). The serializer
+   * provider honors a consumer-supplied serializer (`useValue`) so anything
+   * injecting `BYMAX_CACHE_SERIALIZER` receives the configured instance, and
+   * otherwise falls back to the default {@link JsonSerializer} class.
+   *
+   * @param resolved - Resolved options; needed for the conditional serializer.
+   * @returns The common provider list.
+   */
+  private static buildCommonProviders(resolved: ResolvedOptions): Provider[] {
+    return [
+      resolved.serializer
+        ? { provide: BYMAX_CACHE_SERIALIZER, useValue: resolved.serializer }
+        : { provide: BYMAX_CACHE_SERIALIZER, useClass: JsonSerializer },
+      ConnectionManager,
+      KeyBuilder,
+      CacheService,
+      PubSubService,
+      ScriptManagerService,
+      { provide: BYMAX_CACHE_KEY_BUILDER, useExisting: KeyBuilder },
+      { provide: BYMAX_CACHE_SCRIPT_REGISTRY, useExisting: ScriptManagerService }
+    ]
+  }
+
+  /**
+   * Tokens and services exported by `forRoot` (and `forRootAsync` in Phase 4).
+   *
+   * @returns The common export list.
+   */
+  private static buildCommonExports(): NonNullable<DynamicModule['exports']> {
+    return [
+      BYMAX_CACHE_OPTIONS,
+      BYMAX_CACHE_KEY_BUILDER,
+      BYMAX_CACHE_SCRIPT_REGISTRY,
+      BYMAX_CACHE_SERIALIZER,
+      ConnectionManager,
+      KeyBuilder,
+      CacheService,
+      PubSubService,
+      ScriptManagerService
+    ]
   }
 }

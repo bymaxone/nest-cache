@@ -5,6 +5,8 @@ import { Test } from '@nestjs/testing'
 import { ConnectionManager } from './connection/connection.manager'
 import { CacheException } from './errors/cache.exception'
 import { CacheService } from './services/cache.service'
+import { PubSubService } from './services/pubsub.service'
+import { ScriptManagerService } from './services/script-manager.service'
 import { JsonSerializer } from './utils/json-serializer'
 import { KeyBuilder } from './utils/key-builder'
 import { BymaxCacheModule } from './bymax-cache.module'
@@ -12,6 +14,7 @@ import {
   BYMAX_CACHE_EVENTS,
   BYMAX_CACHE_KEY_BUILDER,
   BYMAX_CACHE_OPTIONS,
+  BYMAX_CACHE_SCRIPT_REGISTRY,
   BYMAX_CACHE_SERIALIZER
 } from './bymax-cache.constants'
 import { MODULE_OPTIONS_TOKEN } from './bymax-cache.module.builder'
@@ -52,17 +55,23 @@ describe('BymaxCacheModule.forRoot', () => {
     expect(findProvider(providers, BYMAX_CACHE_EVENTS)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_KEY_BUILDER)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_SERIALIZER)).toBeDefined()
+    expect(findProvider(providers, BYMAX_CACHE_SCRIPT_REGISTRY)).toBeDefined()
     expect(providers).toContain(ConnectionManager)
     expect(providers).toContain(KeyBuilder)
     expect(providers).toContain(CacheService)
+    expect(providers).toContain(PubSubService)
+    expect(providers).toContain(ScriptManagerService)
 
     expect(mod.exports).toEqual([
       BYMAX_CACHE_OPTIONS,
       BYMAX_CACHE_KEY_BUILDER,
+      BYMAX_CACHE_SCRIPT_REGISTRY,
       BYMAX_CACHE_SERIALIZER,
       ConnectionManager,
       KeyBuilder,
-      CacheService
+      CacheService,
+      PubSubService,
+      ScriptManagerService
     ])
   })
 
@@ -142,6 +151,8 @@ describe('BymaxCacheModule.forRoot', () => {
     expect(moduleRef.get(ConnectionManager)).toBeInstanceOf(ConnectionManager)
     expect(moduleRef.get(KeyBuilder)).toBeInstanceOf(KeyBuilder)
     expect(moduleRef.get(CacheService)).toBeInstanceOf(CacheService)
+    expect(moduleRef.get(PubSubService)).toBeInstanceOf(PubSubService)
+    expect(moduleRef.get(ScriptManagerService)).toBeInstanceOf(ScriptManagerService)
     expect(moduleRef.get(BYMAX_CACHE_SERIALIZER)).toBeInstanceOf(JsonSerializer)
 
     await moduleRef.close()
