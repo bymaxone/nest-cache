@@ -2846,11 +2846,11 @@ await app.close()
 
 **Done criteria to close Phase 2:**
 
-- [ ] Smoke test works against Redis local
-- [ ] Coverage gates met
-- [ ] Commits com Conventional Commits (`feat(cache): add JsonSerializer`, `feat(cache): implement CacheService string commands`, etc.)
-- [ ] `/bymax-quality:code-review` applied
-- [ ] PR `phase-2`
+- [x] Smoke test works against Redis local
+- [x] Coverage gates met (100% stmts/branches/funcs/lines, 158 tests)
+- [ ] Commits com Conventional Commits (`feat(cache): add JsonSerializer`, `feat(cache): implement CacheService string commands`, etc.) — pending user approval
+- [x] `/bymax-quality:code-review` applied (4-lens adversarial workflow; 8 findings applied, 13 rejected)
+- [ ] PR `phase-2` — pending user approval
 
 ---
 

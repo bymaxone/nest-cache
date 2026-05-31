@@ -14,7 +14,8 @@ import type { DynamicModule, Provider } from '@nestjs/common'
 import {
   BYMAX_CACHE_EVENTS,
   BYMAX_CACHE_KEY_BUILDER,
-  BYMAX_CACHE_OPTIONS
+  BYMAX_CACHE_OPTIONS,
+  BYMAX_CACHE_SERIALIZER
 } from './bymax-cache.constants'
 import {
   ASYNC_OPTIONS_TYPE,
@@ -24,6 +25,8 @@ import {
 } from './bymax-cache.module.builder'
 import { applyDefaults, validateOptions } from './config/default-options'
 import { ConnectionManager } from './connection/connection.manager'
+import { CacheService } from './services/cache.service'
+import { JsonSerializer } from './utils/json-serializer'
 import { KeyBuilder } from './utils/key-builder'
 
 @Module({})
@@ -44,16 +47,25 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
       { provide: MODULE_OPTIONS_TOKEN, useValue: options },
       { provide: BYMAX_CACHE_OPTIONS, useValue: resolved },
       { provide: BYMAX_CACHE_EVENTS, useValue: resolved.events ?? null },
+      { provide: BYMAX_CACHE_SERIALIZER, useClass: JsonSerializer },
       ConnectionManager,
       KeyBuilder,
-      { provide: BYMAX_CACHE_KEY_BUILDER, useExisting: KeyBuilder }
+      { provide: BYMAX_CACHE_KEY_BUILDER, useExisting: KeyBuilder },
+      CacheService
     ]
 
     return {
       module: BymaxCacheModule,
       global: resolved.isGlobal,
       providers,
-      exports: [BYMAX_CACHE_OPTIONS, BYMAX_CACHE_KEY_BUILDER, ConnectionManager, KeyBuilder]
+      exports: [
+        BYMAX_CACHE_OPTIONS,
+        BYMAX_CACHE_KEY_BUILDER,
+        BYMAX_CACHE_SERIALIZER,
+        ConnectionManager,
+        KeyBuilder,
+        CacheService
+      ]
     }
   }
 

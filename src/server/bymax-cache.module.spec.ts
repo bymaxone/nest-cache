@@ -4,12 +4,15 @@ import { Test } from '@nestjs/testing'
 
 import { ConnectionManager } from './connection/connection.manager'
 import { CacheException } from './errors/cache.exception'
+import { CacheService } from './services/cache.service'
+import { JsonSerializer } from './utils/json-serializer'
 import { KeyBuilder } from './utils/key-builder'
 import { BymaxCacheModule } from './bymax-cache.module'
 import {
   BYMAX_CACHE_EVENTS,
   BYMAX_CACHE_KEY_BUILDER,
-  BYMAX_CACHE_OPTIONS
+  BYMAX_CACHE_OPTIONS,
+  BYMAX_CACHE_SERIALIZER
 } from './bymax-cache.constants'
 import { MODULE_OPTIONS_TOKEN } from './bymax-cache.module.builder'
 
@@ -47,15 +50,28 @@ describe('BymaxCacheModule.forRoot', () => {
     expect(findProvider(providers, BYMAX_CACHE_OPTIONS)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_EVENTS)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_KEY_BUILDER)).toBeDefined()
+    expect(findProvider(providers, BYMAX_CACHE_SERIALIZER)).toBeDefined()
     expect(providers).toContain(ConnectionManager)
     expect(providers).toContain(KeyBuilder)
+    expect(providers).toContain(CacheService)
 
     expect(mod.exports).toEqual([
       BYMAX_CACHE_OPTIONS,
       BYMAX_CACHE_KEY_BUILDER,
+      BYMAX_CACHE_SERIALIZER,
       ConnectionManager,
-      KeyBuilder
+      KeyBuilder,
+      CacheService
     ])
+  })
+
+  // The default serializer must be wired as the BYMAX_CACHE_SERIALIZER class
+  // provider, so a consumer that omits `options.serializer` still gets JSON.
+  it('wires JsonSerializer as the default serializer provider', () => {
+    const mod = BymaxCacheModule.forRoot({ connection: { host: 'h' } })
+
+    const provider = findProvider(mod.providers ?? [], BYMAX_CACHE_SERIALIZER)
+    expect(provider).toEqual({ provide: BYMAX_CACHE_SERIALIZER, useClass: JsonSerializer })
   })
 
   // When `isGlobal: false` is supplied, the resolved flag must flip the
@@ -91,16 +107,19 @@ describe('BymaxCacheModule.forRoot', () => {
     expect(() => BymaxCacheModule.forRoot({})).toThrow(CacheException)
   })
 
-  // The wired ConnectionManager and KeyBuilder must be resolvable from the DI
-  // container — proves the explicit @Inject tokens line up. lazyConnect keeps
-  // onModuleInit from awaiting a (mocked) readiness signal.
-  it('makes ConnectionManager and KeyBuilder injectable', async () => {
+  // The wired ConnectionManager, KeyBuilder, CacheService, and default serializer
+  // must all be resolvable from the DI container — proves the explicit @Inject
+  // tokens line up. lazyConnect keeps onModuleInit from awaiting a (mocked)
+  // readiness signal.
+  it('makes ConnectionManager, KeyBuilder, CacheService, and the serializer injectable', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [BymaxCacheModule.forRoot({ connection: { host: 'h', lazyConnect: true } })]
     }).compile()
 
     expect(moduleRef.get(ConnectionManager)).toBeInstanceOf(ConnectionManager)
     expect(moduleRef.get(KeyBuilder)).toBeInstanceOf(KeyBuilder)
+    expect(moduleRef.get(CacheService)).toBeInstanceOf(CacheService)
+    expect(moduleRef.get(BYMAX_CACHE_SERIALIZER)).toBeInstanceOf(JsonSerializer)
 
     await moduleRef.close()
   })
