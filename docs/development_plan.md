@@ -3571,11 +3571,11 @@ await app.close()
 
 **Done criteria to close Phase 3:**
 
-- [ ] Smoke test works
-- [ ] Coverage gates met
-- [ ] Commits com Conventional Commits (`feat(cache): add PubSubService`, `feat(cache): add ScriptManagerService with NOSCRIPT fallback`, `feat(cache): add health check methods`)
-- [ ] `/bymax-quality:code-review` applied
-- [ ] PR `phase-3`
+- [x] Smoke test works (real Redis: health, subscribe, psubscribe, CAS eval, NOSCRIPT recovery)
+- [x] Coverage gates met (100% stmts/branches/funcs/lines, 192 tests)
+- [ ] Commits com Conventional Commits (`feat(cache): add PubSubService`, `feat(cache): add ScriptManagerService with NOSCRIPT fallback`, `feat(cache): add health check methods`) — pending user approval
+- [x] `/bymax-quality:code-review` applied (4-lens adversarial workflow; 4 mutation-hardening fixes applied, 1 reject, 11 rejected)
+- [ ] PR `phase-3` — pending user approval
 
 ---
 

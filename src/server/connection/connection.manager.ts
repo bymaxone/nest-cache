@@ -91,10 +91,15 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    * quits only the main client, so a subscriber client must be quit/disconnected
    * by its owner (the Pub/Sub service, Phase 3).
    *
+   * The subscriber is a control-plane connection (only SUBSCRIBE / UNSUBSCRIBE),
+   * so its offline queue is enabled — a subscribe issued before the socket is
+   * ready buffers until connected instead of failing fast like the data-plane
+   * main client (whose offline queue stays disabled to avoid silent buffering).
+   *
    * @returns A fresh client wired with `subscriber`-role event listeners.
    */
   createSubscriberClient(): AnyRedis {
-    const client = this.createClient()
+    const client = this.createClient({ enableOfflineQueue: true })
     this.registerListeners(client, 'subscriber')
     return client
   }
@@ -141,8 +146,14 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
 
   // ─── Private ──────────────────────────────────────────────────────────────
 
-  /** Instantiates the client matching the configured mode. */
-  private createClient(): AnyRedis {
+  /**
+   * Instantiates the client matching the configured mode.
+   *
+   * @param overrides - Extra `RedisOptions` merged over the resolved defaults
+   *   (used to enable the subscriber's offline queue). Ignored in cluster mode,
+   *   where Pub/Sub has different semantics and is out of scope.
+   */
+  private createClient(overrides?: Partial<RedisOptions>): AnyRedis {
     if (this.options.mode === 'sentinel') {
       const sentinel = this.options.sentinel
       if (!sentinel) {
@@ -150,6 +161,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
       }
       return new Redis({
         ...this.redisOptionsResolved,
+        ...overrides,
         sentinels: sentinel.sentinels,
         name: sentinel.name,
         ...(sentinel.sentinelPassword !== undefined && {
@@ -166,7 +178,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
       }
       return new Cluster(cluster.nodes, cluster.options ?? {})
     }
-    return new Redis(this.redisOptionsResolved)
+    return new Redis({ ...this.redisOptionsResolved, ...overrides })
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */

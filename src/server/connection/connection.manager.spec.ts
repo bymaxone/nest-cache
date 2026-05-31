@@ -250,8 +250,10 @@ describe('ConnectionManager', () => {
 
   describe('createSubscriberClient', () => {
     // A subscriber client must be a NEW, distinct instance (a subscriber socket
-    // cannot run normal commands) and its events carry role 'subscriber'.
-    it('creates a distinct client with subscriber-role events', () => {
+    // cannot run normal commands) and its events carry role 'subscriber'. Unlike
+    // the data-plane main client, its offline queue is enabled so a subscribe
+    // issued before the socket is ready buffers instead of failing fast.
+    it('creates a distinct client with subscriber-role events and an offline queue', () => {
       const onEvent = jest.fn()
       const manager = makeManager({}, { onEvent })
 
@@ -260,6 +262,8 @@ describe('ConnectionManager', () => {
 
       expect(sub).not.toBe(main)
       expect(redisInstances).toHaveLength(2)
+      expect(redisInstances[0]?.options['enableOfflineQueue']).toBe(false)
+      expect(redisInstances[1]?.options['enableOfflineQueue']).toBe(true)
       redisInstances[1]?.emit('connect')
       expect(onEvent).toHaveBeenCalledWith('connect', { role: 'subscriber' })
     })
