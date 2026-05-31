@@ -1,5 +1,9 @@
 import { DEFAULT_KEY_SEPARATOR, DEFAULT_NAMESPACE } from '../constants/default-namespace'
-import { DEFAULT_SHUTDOWN_TIMEOUT_MS } from '../constants/default-timeouts'
+import {
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  MIN_CONNECT_TIMEOUT_MS,
+  MIN_SHUTDOWN_TIMEOUT_MS
+} from '../constants/default-timeouts'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { applyDefaults, validateOptions } from './default-options'
@@ -7,13 +11,21 @@ import { applyDefaults, validateOptions } from './default-options'
 import type { ISerializer } from '../interfaces/serializer.interface'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 
-/** Asserts a thrown CacheException carries the expected canonical code. */
-const expectCode = (fn: () => void, code: string): void => {
+/**
+ * Asserts a thrown CacheException carries the expected canonical code and,
+ * when `details` is supplied, the exact structured `details` payload. Pinning
+ * `details` kills the mutants that blank the throw site's `{ ... }` object or
+ * its string literals.
+ */
+const expectCode = (fn: () => void, code: string, details?: Record<string, unknown>): void => {
   expect(fn).toThrow(CacheException)
   try {
     fn()
   } catch (error) {
     expect((error as CacheException).code).toBe(code)
+    if (details) {
+      expect((error as CacheException).details).toEqual(details)
+    }
   }
 }
 
@@ -57,9 +69,12 @@ describe('validateOptions', () => {
   })
 
   // Standalone mode with no connection block at all must throw CONNECTION_FAILED
-  // — fail fast at forRoot rather than at first command.
+  // — fail fast at forRoot rather than at first command. Pins the `details`
+  // payload so the throw site's object/string mutants are caught.
   it('rejects standalone mode with no connection', () => {
-    expectCode(() => validateOptions({}), CACHE_ERROR_CODES.CONNECTION_FAILED)
+    expectCode(() => validateOptions({}), CACHE_ERROR_CODES.CONNECTION_FAILED, {
+      reason: 'missing connection.url or connection.host'
+    })
   })
 
   // Standalone mode with a connection block missing both url and host must throw
@@ -68,11 +83,15 @@ describe('validateOptions', () => {
     expectCode(() => validateOptions({ connection: {} }), CACHE_ERROR_CODES.CONNECTION_FAILED)
   })
 
-  // Sentinel mode without a sentinel block must throw SENTINEL_MISCONFIGURED.
+  // Sentinel mode without a sentinel block must throw SENTINEL_MISCONFIGURED,
+  // carrying the offending mode in `details` (pins the throw-site object/string).
   it('rejects sentinel mode with no sentinel block', () => {
     expectCode(
       () => validateOptions({ mode: 'sentinel' }),
-      CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED
+      CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED,
+      {
+        mode: 'sentinel'
+      }
     )
   })
 
@@ -107,9 +126,16 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
-  // Cluster mode without a cluster block must throw CLUSTER_MISCONFIGURED.
+  // Cluster mode without a cluster block must throw CLUSTER_MISCONFIGURED,
+  // carrying the offending mode in `details` (pins the throw-site object/string).
   it('rejects cluster mode with no cluster block', () => {
-    expectCode(() => validateOptions({ mode: 'cluster' }), CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED)
+    expectCode(
+      () => validateOptions({ mode: 'cluster' }),
+      CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED,
+      {
+        mode: 'cluster'
+      }
+    )
   })
 
   // Cluster mode with an empty nodes array must throw — the `nodes?.length`
@@ -117,6 +143,16 @@ describe('validateOptions', () => {
   it('rejects cluster mode with empty nodes', () => {
     expectCode(
       () => validateOptions({ mode: 'cluster', cluster: { nodes: [] } }),
+      CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED
+    )
+  })
+
+  // Cluster mode with a block but `nodes` UNDEFINED must still throw
+  // CLUSTER_MISCONFIGURED, not a TypeError. Pins the `nodes?.length` optional
+  // chain: dropping the `?.` would dereference `undefined.length` and crash.
+  it('rejects cluster mode with an undefined nodes list', () => {
+    expectCode(
+      () => validateOptions({ mode: 'cluster', cluster: {} as never }),
       CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED
     )
   })
@@ -129,11 +165,12 @@ describe('validateOptions', () => {
   })
 
   // An empty-string namespace must throw INVALID_NAMESPACE — keys would lose
-  // their isolation prefix.
+  // their isolation prefix. Pins the `{ namespace }` details payload.
   it('rejects an empty-string namespace', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h' }, namespace: '' }),
-      CACHE_ERROR_CODES.INVALID_NAMESPACE
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      { namespace: '' }
     )
   })
 
@@ -147,30 +184,56 @@ describe('validateOptions', () => {
   })
 
   // A namespace containing the key separator must throw — it would create
-  // ambiguous, un-splittable keys.
+  // ambiguous, un-splittable keys. Pins the full `details` (reason + namespace +
+  // separator) so the throw-site object and reason string are protected.
   it('rejects a namespace containing the separator', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h' }, namespace: 'a:b' }),
-      CACHE_ERROR_CODES.INVALID_NAMESPACE
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      {
+        reason: 'namespace contains key separator',
+        namespace: 'a:b',
+        separator: DEFAULT_KEY_SEPARATOR
+      }
     )
   })
 
   // A shutdown timeout below the minimum must throw CONNECTION_FAILED — too short
-  // a window risks killing in-flight commands.
+  // a window risks killing in-flight commands. Pins the `{ reason, value, min }`
+  // details payload.
   it('rejects a shutdown timeout below the minimum', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h' }, shutdownTimeoutMs: 50 }),
-      CACHE_ERROR_CODES.CONNECTION_FAILED
+      CACHE_ERROR_CODES.CONNECTION_FAILED,
+      { reason: 'shutdownTimeoutMs too low', value: 50, min: MIN_SHUTDOWN_TIMEOUT_MS }
     )
+  })
+
+  // A shutdown timeout EXACTLY at the minimum must NOT throw — pins the `<`
+  // boundary so a `<=` mutant (which would reject the minimum) is caught.
+  it('accepts a shutdown timeout exactly at the minimum', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, shutdownTimeoutMs: MIN_SHUTDOWN_TIMEOUT_MS })
+    ).not.toThrow()
   })
 
   // A connect timeout below the minimum must throw — exercises the
   // `connectTimeout !== undefined && connectTimeout < MIN` guard's true branch.
+  // Pins the `{ reason, value, min }` details payload.
   it('rejects a connect timeout below the minimum', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h', connectTimeout: 50 } }),
-      CACHE_ERROR_CODES.CONNECTION_FAILED
+      CACHE_ERROR_CODES.CONNECTION_FAILED,
+      { reason: 'connectTimeout too low', value: 50, min: MIN_CONNECT_TIMEOUT_MS }
     )
+  })
+
+  // A connect timeout EXACTLY at the minimum must NOT throw — pins the `<`
+  // boundary so a `<=` mutant (which would reject the minimum) is caught.
+  it('accepts a connect timeout exactly at the minimum', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h', connectTimeout: MIN_CONNECT_TIMEOUT_MS } })
+    ).not.toThrow()
   })
 
   // A connect timeout at or above the minimum must pass — the false branch of

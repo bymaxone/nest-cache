@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 
 import { applyDefaults } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
+import * as cacheExceptionModule from '../errors/cache.exception'
 import { CacheException } from '../errors/cache.exception'
 import { ConnectionManager } from './connection.manager'
 
@@ -83,19 +84,50 @@ const makeManager = (
   return new ConnectionManager(resolved, events)
 }
 
+/**
+ * Installs a spy on the `CacheException` constructor (via the live module
+ * namespace binding the source also imports) and returns the array it fills with
+ * every instance the system under test constructs — including exceptions the
+ * manager swallows internally (e.g. the shutdown-timeout exception caught by
+ * `onModuleDestroy`). Lets a test assert the raw `details` of an otherwise
+ * unobservable throw. Restore with `jest.restoreAllMocks()` in `afterEach`.
+ */
+const captureCacheExceptions = (): CacheException[] => {
+  const captured: CacheException[] = []
+  const original = cacheExceptionModule.CacheException
+  jest
+    .spyOn(cacheExceptionModule, 'CacheException')
+    .mockImplementation((...args: ConstructorParameters<typeof CacheException>): CacheException => {
+      const instance = new original(...args)
+      captured.push(instance)
+      return instance
+    })
+  return captured
+}
+
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 describe('ConnectionManager', () => {
   describe('onModuleInit', () => {
     // Standalone init creates the main client and resolves once the client emits
-    // `ready` — the happy path that gates app bootstrap on a live connection.
+    // `ready` — the happy path that gates app bootstrap on a live connection. The
+    // `ready` resolution must also detach BOTH one-shot listeners via cleanup()
+    // (mutants L237 BlockStatement → {}, L238 'ready' → '', L239 'error' → '').
     it('creates the client and resolves on ready', async () => {
       const manager = makeManager({})
 
       const init = manager.onModuleInit()
       const client = redisInstances[0]
       expect(client).toBeDefined()
+      const offSpy = jest.spyOn(client as EventEmitter, 'off')
       client?.emit('ready')
 
       await expect(init).resolves.toBeUndefined()
+      // cleanup() must remove both the 'ready' and 'error' listeners on resolve.
+      expect(offSpy).toHaveBeenCalledWith('ready', expect.any(Function))
+      expect(offSpy).toHaveBeenCalledWith('error', expect.any(Function))
     })
 
     // With `lazyConnect`, init must NOT await readiness — it resolves even though
@@ -118,25 +150,35 @@ describe('ConnectionManager', () => {
     })
 
     // A connection error during the readiness wait must reject onModuleInit with
-    // a CONNECTION_FAILED CacheException — bootstrap fails loud, not silent.
+    // a CONNECTION_FAILED CacheException — bootstrap fails loud, not silent. The
+    // error path must also detach BOTH one-shot listeners via cleanup() (mutants
+    // L237 BlockStatement → {}, L238 'ready' → '', L239 'error' → '') and pin the
+    // CONNECTION_FAILED details payload (mutant L247 ObjectLiteral → {}).
     it('rejects with CONNECTION_FAILED when the client errors before ready', async () => {
       const manager = makeManager({})
 
       const init = manager.onModuleInit()
       const client = redisInstances[0]
+      const offSpy = jest.spyOn(client as EventEmitter, 'off')
       client?.emit('error', new Error('boom'))
 
       await expect(init).rejects.toBeInstanceOf(CacheException)
       await init.catch((error: unknown) => {
         expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
+        // `ObjectLiteral → {}` would empty these details — fails this toEqual.
+        expect((error as CacheException).details).toEqual({ error: 'boom' })
       })
+      // cleanup() must remove both the 'ready' and 'error' listeners on reject.
+      expect(offSpy).toHaveBeenCalledWith('ready', expect.any(Function))
+      expect(offSpy).toHaveBeenCalledWith('error', expect.any(Function))
     })
   })
 
   describe('createClient — modes', () => {
-    // A valid sentinel block (with sentinelPassword/password/role) yields a
-    // FakeRedis seeded with the sentinel options.
+    // A valid sentinel block (with sentinelPassword/password/role/natMap) yields a
+    // FakeRedis seeded with the sentinel options — the true side of every spread.
     it('creates a sentinel client with all optional fields', () => {
+      const natMap = { '10.0.0.2:6379': { host: '127.0.0.1', port: 6390 } }
       const manager = makeManager({
         mode: 'sentinel',
         sentinel: {
@@ -144,7 +186,8 @@ describe('ConnectionManager', () => {
           sentinels: [{ host: 's', port: 26379 }],
           sentinelPassword: 'sp',
           password: 'p',
-          role: 'master'
+          role: 'master',
+          natMap
         }
       })
 
@@ -154,6 +197,7 @@ describe('ConnectionManager', () => {
       expect(opts['sentinelPassword']).toBe('sp')
       expect(opts['password']).toBe('p')
       expect(opts['role']).toBe('master')
+      expect(opts['natMap']).toBe(natMap)
     })
 
     // A sentinel block WITHOUT the optional secrets/role covers the false side of
@@ -168,7 +212,12 @@ describe('ConnectionManager', () => {
       const opts = redisInstances[0]?.options ?? {}
       expect(opts['name']).toBe('mymaster')
       expect('sentinelPassword' in opts).toBe(false)
+      // Pins the ConditionalExpression on the `password` spread (mutant L172):
+      // `→ true` would always spread `{ password: undefined }`, adding the key.
+      expect(opts).not.toHaveProperty('password')
       expect('role' in opts).toBe(false)
+      // Same for the natMap spread — absent when not supplied.
+      expect(opts).not.toHaveProperty('natMap')
     })
 
     // Sentinel mode with a missing sentinel block (forced past validation) must
@@ -186,6 +235,10 @@ describe('ConnectionManager', () => {
         manager.getClient()
       } catch (error) {
         expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED)
+        // Pins the details payload on the SENTINEL_MISCONFIGURED throw (mutant
+        // L162): `ObjectLiteral → {}` would drop the key and `StringLiteral
+        // 'sentinel' → ''` would blank the value — both fail this toEqual.
+        expect((error as CacheException).details).toEqual({ mode: 'sentinel' })
       }
     })
 
@@ -230,6 +283,10 @@ describe('ConnectionManager', () => {
         manager.getClient()
       } catch (error) {
         expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED)
+        // Pins the details payload on the CLUSTER_MISCONFIGURED throw (mutant
+        // L179): `ObjectLiteral → {}` would drop the key and `StringLiteral
+        // 'cluster' → ''` would blank the value — both fail this toEqual.
+        expect((error as CacheException).details).toEqual({ mode: 'cluster' })
       }
     })
   })
@@ -359,6 +416,12 @@ describe('ConnectionManager', () => {
     it('forces disconnect and signals forced_disconnect when quit exceeds the timeout', async () => {
       jest.useFakeTimers()
       try {
+        // Capture the swallowed SHUTDOWN_TIMEOUT exception so its raw `details`
+        // becomes observable — pins the ObjectLiteral on
+        // `{ timeoutMs: this.options.shutdownTimeoutMs }` (mutant L123). The
+        // `ObjectLiteral → {}` mutant would empty those details, failing the
+        // toEqual below.
+        const thrown = captureCacheExceptions()
         const onEvent = jest.fn()
         const manager = makeManager({ shutdownTimeoutMs: 100 }, { onEvent })
         manager.getClient()
@@ -375,6 +438,11 @@ describe('ConnectionManager', () => {
           reason: 'forced_disconnect',
           shutdownTimeoutMs: 100
         })
+        const timeoutException = thrown.find(
+          (error) => error.code === CACHE_ERROR_CODES.SHUTDOWN_TIMEOUT
+        )
+        expect(timeoutException).toBeDefined()
+        expect(timeoutException?.details).toEqual({ timeoutMs: 100 })
       } finally {
         jest.useRealTimers()
       }

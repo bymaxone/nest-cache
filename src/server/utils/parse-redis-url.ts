@@ -46,7 +46,10 @@ export function parseRedisUrl(url: string): Partial<RedisOptions> {
     result.password = decodeURIComponent(parsed.password)
   }
 
-  const dbSegment = parsed.pathname.replace(/^\//, '')
+  // A `redis://`/`rediss://` URL has an authority, so its pathname is either '' or
+  // starts with '/'. Dropping the first character yields the db segment without a
+  // regex (which keeps an equivalent `/^\//`-vs-`/\//` mutant out of the suite).
+  const dbSegment = parsed.pathname.slice(1)
   if (dbSegment && /^\d+$/.test(dbSegment)) {
     result.db = Number.parseInt(dbSegment, 10)
   }

@@ -1,6 +1,9 @@
 import type { Config } from 'jest'
 
-import base from './jest.config'
+// Explicit `.ts` extension: Stryker runs under Node 24, whose native TS
+// type-stripping loads this config as ESM, and ESM relative imports require the
+// file extension (ts-node's CJS loader on older Node tolerated the bare path).
+import base from './jest.config.ts'
 
 /**
  * Stryker-only Jest configuration.

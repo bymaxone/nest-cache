@@ -55,7 +55,16 @@ const config: Config = {
       statements: 100
     }
   },
-  testTimeout: 30_000,
+  // This run includes the Testcontainers E2E specs (60s allows for container
+  // boots, e.g. the real Redis Cluster).
+  testTimeout: 60_000,
+  // Boot the containers SERIALLY: concurrent starts starve the Docker daemon and
+  // the real Redis Cluster destabilizes (CLUSTERDOWN) under parallel boots on CI
+  // runners. The dedicated `test:e2e` run uses `--runInBand` for the same reason.
+  maxWorkers: 1,
+  // The restart/cluster/sentinel E2E leave a native ioredis handle async_hooks
+  // can't track (verified via --detectOpenHandles); force a clean exit.
+  forceExit: true,
   clearMocks: true,
   restoreMocks: true,
   passWithNoTests: process.env['CI'] !== 'true'

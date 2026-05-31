@@ -170,7 +170,8 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
           sentinelPassword: sentinel.sentinelPassword
         }),
         ...(sentinel.password !== undefined && { password: sentinel.password }),
-        ...(sentinel.role !== undefined && { role: sentinel.role })
+        ...(sentinel.role !== undefined && { role: sentinel.role }),
+        ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap })
       })
     }
     if (this.options.mode === 'cluster') {

@@ -19,12 +19,14 @@ import type { Redis } from 'ioredis'
 describe('ScriptManagerService', () => {
   let script: jest.Mock
   let evalsha: jest.Mock
+  let evalCmd: jest.Mock
   let connection: ConnectionManager
   let registry: ScriptManagerService
 
   /**
    * Builds a ScriptManagerService whose managed client is the shared `script` /
-   * `evalsha` jest mocks. getClient is spied so no real ioredis client is created.
+   * `evalsha` / `eval` jest mocks. getClient is spied so no real ioredis client is
+   * created. Pass `{ mode: 'cluster' }` to exercise the cluster EVAL path.
    */
   const build = (overrides: Partial<BymaxCacheModuleOptions> = {}): ScriptManagerService => {
     const options: ResolvedOptions = applyDefaults({
@@ -33,14 +35,18 @@ describe('ScriptManagerService', () => {
       ...overrides
     })
     connection = new ConnectionManager(options)
-    // Fake the managed client — ScriptManager only calls script()/evalsha().
-    jest.spyOn(connection, 'getClient').mockReturnValue({ script, evalsha } as unknown as Redis)
+    // Fake the managed client — ScriptManager calls script()/evalsha() (standalone)
+    // or eval() (cluster).
+    jest
+      .spyOn(connection, 'getClient')
+      .mockReturnValue({ script, evalsha, eval: evalCmd } as unknown as Redis)
     return new ScriptManagerService(options, connection)
   }
 
   beforeEach(() => {
     script = jest.fn().mockResolvedValue('abc123')
     evalsha = jest.fn().mockResolvedValue(['ok'])
+    evalCmd = jest.fn().mockResolvedValue(['cluster-ok'])
     registry = build()
   })
 
@@ -59,11 +65,14 @@ describe('ScriptManagerService', () => {
     expect(script).toHaveBeenCalledTimes(1)
   })
 
-  // Loading an unknown script must fail closed with SCRIPT_NOT_REGISTERED.
+  // Loading an unknown script must fail closed with SCRIPT_NOT_REGISTERED, carrying
+  // the offending name in details. The details assertion kills the ObjectLiteral
+  // mutant that empties `{ name }` to `{}` in load's fail-closed throw.
   it('throws SCRIPT_NOT_REGISTERED when loading an unknown script', async () => {
     await expect(registry.load('missing')).rejects.toBeInstanceOf(CacheException)
     await registry.load('missing').catch((error: unknown) => {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED)
+      expect((error as CacheException).details).toEqual({ name: 'missing' })
     })
   })
 
@@ -87,11 +96,14 @@ describe('ScriptManagerService', () => {
     expect(evalsha).toHaveBeenCalledWith('abc123', 1, 'k')
   })
 
-  // Evaluating an unknown script must fail closed with SCRIPT_NOT_REGISTERED.
+  // Evaluating an unknown script must fail closed with SCRIPT_NOT_REGISTERED, carrying
+  // the offending name in details. The details assertion kills the ObjectLiteral
+  // mutant that empties `{ name }` to `{}` in eval's fail-closed throw.
   it('throws SCRIPT_NOT_REGISTERED when evaluating an unknown script', async () => {
     await expect(registry.eval('missing', [], [])).rejects.toBeInstanceOf(CacheException)
     await registry.eval('missing', [], []).catch((error: unknown) => {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED)
+      expect((error as CacheException).details).toEqual({ name: 'missing' })
     })
   })
 
@@ -111,15 +123,24 @@ describe('ScriptManagerService', () => {
   })
 
   // If the retry after a NOSCRIPT reload also fails, it must surface as
-  // SCRIPT_EXECUTION_FAILED (the inner retry catch).
+  // SCRIPT_EXECUTION_FAILED (the inner retry catch) carrying the script name and
+  // the original retry error in details. The details assertion kills the
+  // ObjectLiteral mutant that empties the reload+retry catch's details to `{}`.
   it('wraps a failed NOSCRIPT retry as SCRIPT_EXECUTION_FAILED', async () => {
     evalsha
       .mockRejectedValueOnce(new Error('NOSCRIPT No matching script'))
       .mockRejectedValueOnce(new Error('ERR retry failed'))
 
-    await expect(registry.eval('cas', ['k'], [])).rejects.toBeInstanceOf(CacheException)
-    await registry.eval('cas', ['k'], []).catch((error: unknown) => {
-      expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    // A single eval consumes both `mockRejectedValueOnce`s (NOSCRIPT then the
+    // failed retry); capturing the thrown error lets the details assertion run
+    // (a second eval would hit the default resolved mock and skip the catch).
+    const error = await registry.eval('cas', ['k'], []).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect((error as CacheException).details).toEqual({
+      name: 'cas',
+      originalError: 'ERR retry failed'
     })
   })
 
@@ -171,6 +192,55 @@ describe('ScriptManagerService', () => {
       expect(cacheError.details?.['originalError']).toBe('plain-string-failure')
     })
     await expect(registry.eval('cas', [], [])).rejects.toBeInstanceOf(CacheException)
+  })
+
+  // In cluster mode eval must use EVAL with the full Lua body (routed by key),
+  // never EVALSHA/SCRIPT LOAD — which can hit different nodes and NOSCRIPT. Pins
+  // the `mode === 'cluster'` branch and the exact EVAL arguments.
+  it('uses EVAL with the script body in cluster mode', async () => {
+    const cluster = build({ mode: 'cluster' })
+
+    const result = await cluster.eval('cas', ['{t}:k'], ['x'])
+
+    expect(evalCmd).toHaveBeenCalledWith('return 1', 1, '{t}:k', 'x')
+    expect(result).toEqual(['cluster-ok'])
+    expect(evalsha).not.toHaveBeenCalled()
+    expect(script).not.toHaveBeenCalled()
+  })
+
+  // A cluster EVAL failure must surface as SCRIPT_EXECUTION_FAILED with the
+  // original error in details (the cluster branch's catch) — and never echo the
+  // Lua source.
+  it('wraps a cluster EVAL failure as SCRIPT_EXECUTION_FAILED', async () => {
+    const cluster = build({ mode: 'cluster' })
+    evalCmd.mockRejectedValue(new Error('CLUSTERDOWN Hash slot not served'))
+
+    const error = await cluster.eval('cas', ['{t}:k'], []).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect((error as CacheException).details).toEqual({
+      name: 'cas',
+      originalError: 'CLUSTERDOWN Hash slot not served'
+    })
+  })
+
+  // A cluster EVAL with zero keys would execute on an arbitrary node instead of
+  // the slot owner — which violates the routing contract and produces non-deterministic
+  // results. The method must fail closed before any network call, carrying the
+  // script name and the reason so callers can diagnose the misuse.
+  it('throws SCRIPT_EXECUTION_FAILED in cluster mode when called with zero keys', async () => {
+    const cluster = build({ mode: 'cluster' })
+
+    const error = await cluster.eval('cas', [], ['x']).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect((error as CacheException).details).toEqual({
+      name: 'cas',
+      reason: 'cluster EVAL requires at least one key for slot routing'
+    })
+    expect(evalCmd).not.toHaveBeenCalled()
   })
 
   // register must add a script at runtime, making it invocable afterwards.

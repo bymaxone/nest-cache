@@ -35,11 +35,45 @@ describe('parseRedisUrl', () => {
     expect(result.password).toBe('p!ss')
   })
 
-  // A numeric pathname segment selects the logical database index.
-  it('reads the db index from a numeric pathname', () => {
+  // A URL without credentials must leave username and password unset — the false
+  // side of the `if (parsed.username)` / `if (parsed.password)` guards. Pins those
+  // conditionals so an "always-true" mutant (which would set them to '') is caught.
+  it('leaves username and password unset when the URL has no credentials', () => {
+    const result = parseRedisUrl('redis://host:6379')
+
+    expect(result.username).toBeUndefined()
+    expect(result.password).toBeUndefined()
+  })
+
+  // A single-digit numeric pathname segment selects the logical database index.
+  it('reads a single-digit db index from a numeric pathname', () => {
     const result = parseRedisUrl('redis://host:6379/3')
 
     expect(result.db).toBe(3)
+  })
+
+  // A multi-digit db index must be read in full — pins the `+` quantifier in
+  // `/^\d+$/` (a `/^\d$/` mutant would match only the first digit and drop db).
+  it('reads a multi-digit db index', () => {
+    const result = parseRedisUrl('redis://host:6379/15')
+
+    expect(result.db).toBe(15)
+  })
+
+  // A digit-prefixed but non-numeric segment must NOT set db — pins the `$` anchor
+  // in `/^\d+$/` (a `/^\d+/` mutant would match the leading digits and set db).
+  it('does not set db for a digit-prefixed alphanumeric segment', () => {
+    const result = parseRedisUrl('redis://host:6379/2a')
+
+    expect(result.db).toBeUndefined()
+  })
+
+  // A digit-suffixed but non-numeric segment must NOT set db — pins the `^` anchor
+  // in `/^\d+$/` (a `/\d+$/` mutant would match the trailing digit and set db).
+  it('does not set db for a digit-suffixed alphanumeric segment', () => {
+    const result = parseRedisUrl('redis://host:6379/a2')
+
+    expect(result.db).toBeUndefined()
   })
 
   // An empty pathname must leave `db` unset so the discrete `db` field (or the
