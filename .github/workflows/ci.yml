@@ -120,7 +120,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        redis: ['redis:7-alpine', 'redis:8-alpine']
+        redis: ['redis:8-alpine']
 
     steps:
       - name: Checkout

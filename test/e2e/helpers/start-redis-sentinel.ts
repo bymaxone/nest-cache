@@ -67,7 +67,7 @@ export async function startRedisSentinel(): Promise<StartedRedisSentinel> {
       '-c',
       `printf '${conf}\\n' > /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf`
     ])
-    .withWaitStrategy(Wait.forLogMessage(/monitor master|Ready to accept connections/i))
+    .withWaitStrategy(Wait.forLogMessage(/Ready to accept connections/i))
     .start()
 
   return {

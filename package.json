@@ -49,7 +49,7 @@
     "test:types": "tsc --noEmit -p tsconfig.typetest.json",
     "size": "node scripts/check-size.mjs",
     "clean": "rm -rf dist coverage",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm test:cov:all && pnpm build",
     "release": "pnpm publish --provenance",
     "prepare": "husky"
   },

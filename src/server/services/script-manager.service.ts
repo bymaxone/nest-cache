@@ -121,7 +121,9 @@ export class ScriptManagerService implements OnApplicationBootstrap {
    * and the call retried. CLUSTER uses `EVAL` (the full body): `EVALSHA` routes to
    * the key's slot owner while `SCRIPT LOAD` is keyless (lands on an arbitrary
    * node), so the owner could `NOSCRIPT` and a keyless reload would not fix it —
-   * `EVAL` ships the body and routes by key, so it always runs on the owner.
+   * `EVAL` ships the body and routes by key to the slot owner (callers must
+   * supply at least one key in cluster mode — a keyless `EVAL` executes on an
+   * arbitrary node, not necessarily the one owning the target data).
    *
    * Keys must already be namespaced — {@link CacheService.eval} handles that for
    * consumer-facing usage. In cluster mode all keys of a single call must hash to
