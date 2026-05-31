@@ -132,11 +132,15 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
         useFactory: (resolved: ResolvedOptions): ICacheEvents | null => resolved.events ?? null,
         inject: [BYMAX_CACHE_OPTIONS]
       },
+      // Let Nest own the default serializer's lifecycle — matching forRoot's
+      // `useClass: JsonSerializer` — so the factory selects a consumer-supplied
+      // serializer over a container-managed default rather than `new`-ing one.
+      JsonSerializer,
       {
         provide: BYMAX_CACHE_SERIALIZER,
-        useFactory: (resolved: ResolvedOptions): ISerializer =>
-          resolved.serializer ?? new JsonSerializer(),
-        inject: [BYMAX_CACHE_OPTIONS]
+        useFactory: (resolved: ResolvedOptions, defaultSerializer: JsonSerializer): ISerializer =>
+          resolved.serializer ?? defaultSerializer,
+        inject: [BYMAX_CACHE_OPTIONS, JsonSerializer]
       },
       ...BymaxCacheModule.buildCommonProviders()
     ]

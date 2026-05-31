@@ -93,5 +93,6 @@ type _Unsub = Expect<Equal<Unsubscribe, () => Promise<void>>>
 type _ScriptName = Expect<Equal<IScriptDefinition['name'], string>>
 type _ScriptLua = Expect<Equal<IScriptDefinition['lua'], string>>
 
-// `ICacheEvents.onEvent` is an optional observability callback.
-type _OnEvent = Expect<Equal<ICacheEvents['onEvent'] extends undefined ? true : false, false>>
+// `ICacheEvents.onEvent` is an optional observability callback — `undefined` is
+// assignable to its declared type.
+type _OnEvent = Expect<Equal<undefined extends ICacheEvents['onEvent'] ? true : false, true>>

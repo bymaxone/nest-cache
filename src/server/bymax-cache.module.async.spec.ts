@@ -130,6 +130,7 @@ describe('BymaxCacheModule.forRootAsync', () => {
       BYMAX_CACHE_SERIALIZER,
       BYMAX_CACHE_KEY_BUILDER,
       BYMAX_CACHE_SCRIPT_REGISTRY,
+      JsonSerializer,
       ConnectionManager,
       KeyBuilder,
       CacheService,
