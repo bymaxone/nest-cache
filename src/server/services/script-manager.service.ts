@@ -121,9 +121,9 @@ export class ScriptManagerService implements OnApplicationBootstrap {
    * and the call retried. CLUSTER uses `EVAL` (the full body): `EVALSHA` routes to
    * the key's slot owner while `SCRIPT LOAD` is keyless (lands on an arbitrary
    * node), so the owner could `NOSCRIPT` and a keyless reload would not fix it —
-   * `EVAL` ships the body and routes by key to the slot owner (callers must
-   * supply at least one key in cluster mode — a keyless `EVAL` executes on an
-   * arbitrary node, not necessarily the one owning the target data).
+   * `EVAL` ships the body and routes by key to the slot owner; a keyless `EVAL`
+   * would execute on an arbitrary node — this method throws
+   * `SCRIPT_EXECUTION_FAILED` when called in cluster mode with zero keys.
    *
    * Keys must already be namespaced — {@link CacheService.eval} handles that for
    * consumer-facing usage. In cluster mode all keys of a single call must hash to
@@ -149,6 +149,12 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     }
     const client = this.connection.getClient()
     if (this.options.mode === 'cluster') {
+      if (keys.length === 0) {
+        throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
+          name,
+          reason: 'cluster EVAL requires at least one key for slot routing'
+        })
+      }
       try {
         return await client.eval(entry.lua, keys.length, ...keys, ...args)
       } catch (err) {

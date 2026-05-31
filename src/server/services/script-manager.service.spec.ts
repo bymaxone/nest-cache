@@ -225,6 +225,24 @@ describe('ScriptManagerService', () => {
     })
   })
 
+  // A cluster EVAL with zero keys would execute on an arbitrary node instead of
+  // the slot owner — which violates the routing contract and produces non-deterministic
+  // results. The method must fail closed before any network call, carrying the
+  // script name and the reason so callers can diagnose the misuse.
+  it('throws SCRIPT_EXECUTION_FAILED in cluster mode when called with zero keys', async () => {
+    const cluster = build({ mode: 'cluster' })
+
+    const error = await cluster.eval('cas', [], ['x']).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect((error as CacheException).details).toEqual({
+      name: 'cas',
+      reason: 'cluster EVAL requires at least one key for slot routing'
+    })
+    expect(evalCmd).not.toHaveBeenCalled()
+  })
+
   // register must add a script at runtime, making it invocable afterwards.
   it('registers a script dynamically', async () => {
     registry.register('extra', 'return 2')
