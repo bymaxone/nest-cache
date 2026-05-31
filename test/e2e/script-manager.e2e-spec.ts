@@ -23,8 +23,8 @@ const COMPARE_AND_SET_LUA = `
 `
 
 describe('ScriptManagerService E2E (real Redis)', () => {
-  let redis: StartedRedis | undefined
-  let app: TestingModule | undefined
+  let redis: StartedRedis
+  let app: TestingModule
   let cache: CacheService
 
   beforeAll(async () => {

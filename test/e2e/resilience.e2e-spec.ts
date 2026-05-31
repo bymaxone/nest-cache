@@ -28,8 +28,8 @@ async function waitUntilHealthy(cache: CacheService, timeoutMs: number): Promise
 }
 
 describe('Resilience E2E (real Redis)', () => {
-  let redis: StartedRedis | undefined
-  let app: TestingModule | undefined
+  let redis: StartedRedis
+  let app: TestingModule
   let cache: CacheService
 
   beforeAll(async () => {

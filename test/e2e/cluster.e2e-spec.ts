@@ -25,8 +25,8 @@ const COMPARE_AND_SET_LUA = `
 `
 
 describe('Redis Cluster topology E2E (real cluster)', () => {
-  let cluster: StartedRedisCluster | undefined
-  let app: TestingModule | undefined
+  let cluster: StartedRedisCluster
+  let app: TestingModule
   let cache: CacheService
 
   beforeAll(async () => {

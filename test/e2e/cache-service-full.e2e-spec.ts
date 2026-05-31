@@ -23,8 +23,8 @@ interface Profile {
 }
 
 describe('CacheService full surface E2E (real Redis)', () => {
-  let redis: StartedRedis | undefined
-  let app: TestingModule | undefined
+  let redis: StartedRedis
+  let app: TestingModule
   let cache: CacheService
   let keyBuilder: KeyBuilder
 

@@ -23,8 +23,8 @@ const REDIS_URL = Symbol('REDIS_URL')
 const INCREMENT_LUA = `return redis.call('INCRBY', KEYS[1], ARGV[1])`
 
 describe('BymaxCacheModule.forRootAsync E2E (real Redis)', () => {
-  let redis: StartedRedis | undefined
-  let app: INestApplicationContext | undefined
+  let redis: StartedRedis
+  let app: INestApplicationContext
   let cache: CacheService
 
   beforeAll(async () => {

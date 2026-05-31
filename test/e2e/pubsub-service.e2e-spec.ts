@@ -24,7 +24,7 @@ jest.mock('ioredis', () => {
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
 describe('PubSubService E2E (ioredis-mock)', () => {
-  let app: TestingModule | undefined
+  let app: TestingModule
   let pubsub: PubSubService
 
   beforeAll(async () => {

@@ -15,8 +15,8 @@ import { startRedisSentinel, type StartedRedisSentinel } from './helpers/start-r
 import type { TestingModule } from '@nestjs/testing'
 
 describe('Redis Sentinel topology E2E (real sentinel)', () => {
-  let redis: StartedRedisSentinel | undefined
-  let app: TestingModule | undefined
+  let redis: StartedRedisSentinel
+  let app: TestingModule
   let cache: CacheService
 
   beforeAll(async () => {

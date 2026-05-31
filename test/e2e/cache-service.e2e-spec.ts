@@ -24,7 +24,7 @@ interface User {
 }
 
 describe('CacheService E2E (ioredis-mock)', () => {
-  let app: TestingModule | undefined
+  let app: TestingModule
   let cache: CacheService
 
   beforeAll(async () => {
