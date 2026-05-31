@@ -7,7 +7,7 @@ describe('CACHE_ERROR_MESSAGES', () => {
     expect(CACHE_ERROR_MESSAGES).toBeInstanceOf(Map)
   })
 
-  // Every one of the 14 canonical codes must have a message — a missing entry
+  // Every one of the 15 canonical codes must have a message — a missing entry
   // would surface as the generic fallback, hiding the specific failure mode.
   it('covers every canonical error code', () => {
     const codes = Object.values(CACHE_ERROR_CODES)

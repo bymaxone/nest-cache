@@ -1,10 +1,10 @@
 /**
  * Public API of the `@bymax-one/nest-cache` (server) subpath.
  *
- * The NestJS-facing surface for Phase 1: the dynamic module, the connection
- * manager, the key builder, the public contracts, DI tokens, and errors. The
- * cache / pub-sub / script services land in Phases 2-3 per
- * `docs/development_plan.md`.
+ * The NestJS-facing surface through Phase 2: the dynamic module, the connection
+ * manager, the key builder, the typed cache service, the default serializer, the
+ * public contracts, DI tokens, and errors. The pub-sub / script services land in
+ * Phase 3 per `docs/development_plan.md`.
  */
 
 // Module
@@ -13,6 +13,10 @@ export { BymaxCacheModule } from './bymax-cache.module'
 // Services / managers (Phase 1)
 export { ConnectionManager } from './connection/connection.manager'
 export { KeyBuilder } from './utils/key-builder'
+
+// Cache service + default serializer (Phase 2)
+export { CacheService } from './services/cache.service'
+export { JsonSerializer } from './utils/json-serializer'
 
 // Interfaces / contracts
 export type {

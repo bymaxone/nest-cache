@@ -1,7 +1,7 @@
 # Development Tasks — @bymax-one/nest-cache
 
 > **Version:** 2.0.0
-> **Last updated:** 2026-05-30 (aligned to the Bymax lib standard — see spec §0)
+> **Last updated:** 2026-05-31 (Phase 2 complete — CacheService + JsonSerializer)
 > **Status:** Draft for execution
 > **Based on:** [`development_plan.md`](./development_plan.md) + [`technical_specification.md`](./technical_specification.md)
 > **Total tasks:** 58
@@ -49,12 +49,12 @@
 
 > **Status legend:** 🔴 Not Started · 🟡 In Progress · 🟢 Done · ⚪ Blocked · 🔵 In Review
 
-> **Overall progress:** 🟡 15 / 58 tasks done (26%)
+> **Overall progress:** 🟡 27 / 58 tasks done (47%)
 
 | #   | Phase                                  | Done / Total | %    | Status |
 | --- | -------------------------------------- | ------------ | ---- | ------ |
 | 1   | Foundation + Connection Manager        | 15 / 15      | 100% | 🟢     |
-| 2   | CacheService + Typed Helpers           | 0 / 12       | 0%   | 🔴     |
+| 2   | CacheService + Typed Helpers           | 12 / 12      | 100% | 🟢     |
 | 3   | Pub/Sub + ScriptManager + Health       | 0 / 12       | 0%   | 🔴     |
 | 4   | forRootAsync + E2E + Mutation Baseline | 0 / 9        | 0%   | 🔴     |
 | 5   | Release v0.1.0                         | 0 / 10       | 0%   | 🔴     |
@@ -1137,7 +1137,7 @@ node -e "import('./dist/server/index.mjs').then(m => console.log(Object.keys(m).
 ### CACHE-016: JsonSerializer (default ISerializer impl)
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-009, CACHE-011
 - **Agent:** typescript-reviewer
@@ -1183,12 +1183,12 @@ node -e "import('./dist/server/index.mjs').then(m => console.log(Object.keys(m).
 
 **Acceptance criteria:**
 
-- [ ] `serialize({a:1})` returns `'{"a":1}'`
-- [ ] `deserialize('{"a":1}')` returns `{a:1}`
-- [ ] `serialize` on circular reference throws `CacheException(SERIALIZATION_FAILED)`
-- [ ] `deserialize` on malformed JSON throws `CacheException(DESERIALIZATION_FAILED)`
-- [ ] `deserialize` includes `preview` truncated at 100 chars in `details`
-- [ ] `pnpm typecheck` passes
+- [x] `serialize({a:1})` returns `'{"a":1}'`
+- [x] `deserialize('{"a":1}')` returns `{a:1}`
+- [x] `serialize` on circular reference throws `CacheException(SERIALIZATION_FAILED)`
+- [x] `deserialize` on malformed JSON throws `CacheException(DESERIALIZATION_FAILED)`
+- [x] `deserialize` includes `preview` truncated at 100 chars in `details`
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -1208,7 +1208,7 @@ pnpm typecheck
 ### CACHE-017: Tests — Phase 1 unit specs (parseRedisUrl, KeyBuilder, validateOptions/applyDefaults, CacheException, ConnectionManager, BymaxCacheModule)
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-015
 - **Agent:** tester
@@ -1238,11 +1238,11 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] 6 spec files created, AAA pattern
-- [ ] `pnpm test` zero failures
-- [ ] 95% coverage on the 5 critical paths
-- [ ] Global coverage ≥ 80%
-- [ ] `clearMocks: true` and `restoreMocks: true` honored (no spillover between tests)
+- [x] 6 spec files created, AAA pattern
+- [x] `pnpm test` zero failures
+- [x] 95% coverage on the 5 critical paths
+- [x] Global coverage ≥ 80%
+- [x] `clearMocks: true` and `restoreMocks: true` honored (no spillover between tests)
 
 **Validation commands:**
 
@@ -1263,7 +1263,7 @@ pnpm test:cov
 ### CACHE-018: Tests — JsonSerializer
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-016
 - **Agent:** tester
@@ -1290,8 +1290,8 @@ pnpm test:cov
 
 **Acceptance criteria:**
 
-- [ ] 5 cases covering all paths
-- [ ] 100% coverage
+- [x] 5 cases covering all paths
+- [x] 100% coverage
 
 **Validation commands:**
 
@@ -1311,7 +1311,7 @@ pnpm test src/server/utils/json-serializer.spec.ts
 ### CACHE-019: CacheService — string/numeric/del/exists/expire/ttl + batch
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-014, CACHE-016
 - **Agent:** database-reviewer
@@ -1349,18 +1349,18 @@ pnpm test src/server/utils/json-serializer.spec.ts
 
 **Acceptance criteria:**
 
-- [ ] `get/set` roundtrip preserves JSON values
-- [ ] `get` returns `null` for non-existent key
-- [ ] `set` with `ttlSeconds` applies EX
-- [ ] `setNx` returns `true` on first write, `false` on subsequent
-- [ ] `del`/`delMany` return count
-- [ ] `delMany([])` returns 0 without calling Redis
-- [ ] `incr`/`decr` accept custom `by`
-- [ ] `expire` returns boolean
-- [ ] `ttl` returns `-2`/`-1` correctly
-- [ ] `mget([])` returns `[]` without calling Redis
-- [ ] Custom serializer (options) respected over default
-- [ ] `pnpm typecheck` passes
+- [x] `get/set` roundtrip preserves JSON values
+- [x] `get` returns `null` for non-existent key
+- [x] `set` with `ttlSeconds` applies EX
+- [x] `setNx` returns `true` on first write, `false` on subsequent
+- [x] `del`/`delMany` return count
+- [x] `delMany([])` returns 0 without calling Redis
+- [x] `incr`/`decr` accept custom `by`
+- [x] `expire` returns boolean
+- [x] `ttl` returns `-2`/`-1` correctly
+- [x] `mget([])` returns `[]` without calling Redis
+- [x] Custom serializer (options) respected over default
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -1380,7 +1380,7 @@ pnpm typecheck
 ### CACHE-020: CacheService — hash + set commands
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-019
 - **Agent:** database-reviewer
@@ -1414,14 +1414,14 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `hset`/`hget` roundtrip via serializer
-- [ ] `hgetall` returns `{}` for non-existent hash
-- [ ] `hdel(...[])` returns 0 without calling Redis
-- [ ] `sadd`/`srem` return count
-- [ ] `sadd(...[])` and `srem(...[])` return 0 without calling Redis
-- [ ] `sismember` returns boolean
-- [ ] Set members are strings (not serialized)
-- [ ] `pnpm typecheck` passes
+- [x] `hset`/`hget` roundtrip via serializer
+- [x] `hgetall` returns `{}` for non-existent hash
+- [x] `hdel(...[])` returns 0 without calling Redis
+- [x] `sadd`/`srem` return count
+- [x] `sadd(...[])` and `srem(...[])` return 0 without calling Redis
+- [x] `sismember` returns boolean
+- [x] Set members are strings (not serialized)
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -1441,7 +1441,7 @@ pnpm typecheck
 ### CACHE-021: CacheService — iteration (keys, scan async iterable) + pipeline + getClient
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-020
 - **Agent:** database-reviewer
@@ -1465,12 +1465,12 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `keys('users', '*')` returns matching keys
-- [ ] `scan` async iteration works with `for await`
-- [ ] `scan` throws in cluster mode (without `scanStream`)
-- [ ] `pipeline()` returns chainable `ChainableCommander`
-- [ ] `getClient()` returns raw ioredis client
-- [ ] `pnpm typecheck` passes
+- [x] `keys('users', '*')` returns matching keys
+- [x] `scan` async iteration works with `for await`
+- [x] `scan` throws in cluster mode (without `scanStream`)
+- [x] `pipeline()` returns chainable `ChainableCommander`
+- [x] `getClient()` returns raw ioredis client
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -1490,7 +1490,7 @@ pnpm typecheck
 ### CACHE-022: CacheService — flushNamespace with production safety guard
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-021
 - **Agent:** security-reviewer
@@ -1537,13 +1537,13 @@ pnpm typecheck
 >
 > **Acceptance criteria:**
 
-- [ ] `flushNamespace()` in `NODE_ENV=production` without `allowFlushInProduction` throws `FLUSH_DISABLED_IN_PRODUCTION`
-- [ ] In `NODE_ENV=production` with `allowFlushInProduction: true` runs
-- [ ] In `NODE_ENV=development` runs without flag
-- [ ] SCAN pattern uses `{namespace}:*`
-- [ ] Returns total count
-- [ ] Cluster mode throws Error (scan limitation)
-- [ ] `pnpm typecheck` passes
+- [x] `flushNamespace()` in `NODE_ENV=production` without `allowFlushInProduction` throws `FLUSH_DISABLED_IN_PRODUCTION`
+- [x] In `NODE_ENV=production` with `allowFlushInProduction: true` runs
+- [x] In `NODE_ENV=development` runs without flag
+- [x] SCAN pattern uses `{namespace}:*`
+- [x] Returns total count
+- [x] Cluster mode throws Error (scan limitation)
+- [x] `pnpm typecheck` passes
 
 **Validation commands:**
 
@@ -1563,7 +1563,7 @@ pnpm typecheck
 ### CACHE-023: Wire CacheService + JsonSerializer in BymaxCacheModule + update barrel
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-022
 - **Agent:** architect
@@ -1595,11 +1595,11 @@ pnpm typecheck
 
 **Acceptance criteria:**
 
-- [ ] `module.get(CacheService)` returns functional instance after `forRoot`
-- [ ] `options.serializer` (when provided) has priority over the injected `JsonSerializer`
-- [ ] `BYMAX_CACHE_SERIALIZER` token resolves to `JsonSerializer` when custom is not provided
-- [ ] Barrel updated
-- [ ] `pnpm typecheck && pnpm build` pass
+- [x] `module.get(CacheService)` returns functional instance after `forRoot`
+- [x] `options.serializer` (when provided) has priority over the injected `JsonSerializer`
+- [x] `BYMAX_CACHE_SERIALIZER` token resolves to `JsonSerializer` when custom is not provided
+- [x] Barrel updated
+- [x] `pnpm typecheck && pnpm build` pass
 
 **Validation commands:**
 
@@ -1619,7 +1619,7 @@ pnpm typecheck && pnpm build
 ### CACHE-024: Tests — CacheService string/numeric/expire/batch
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-019
 - **Agent:** tester
@@ -1655,8 +1655,8 @@ pnpm typecheck && pnpm build
 
 **Acceptance criteria:**
 
-- [ ] 15+ AAA cases
-- [ ] `pnpm test src/server/services/cache.service.spec.ts` passes
+- [x] 15+ AAA cases
+- [x] `pnpm test src/server/services/cache.service.spec.ts` passes
 
 **Validation commands:**
 
@@ -1676,7 +1676,7 @@ pnpm test src/server/services/cache.service.spec.ts
 ### CACHE-025: Tests — CacheService hash/set/scan/flushNamespace
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-020, CACHE-021, CACHE-022
 - **Agent:** tester
@@ -1704,9 +1704,9 @@ pnpm test src/server/services/cache.service.spec.ts
 
 **Acceptance criteria:**
 
-- [ ] 13 additional cases
-- [ ] flushNamespace safety guard tested in both modes
-- [ ] 95% combined coverage
+- [x] 13 additional cases
+- [x] flushNamespace safety guard tested in both modes
+- [x] 95% combined coverage
 
 **Validation commands:**
 
@@ -1727,7 +1727,7 @@ NODE_ENV=production pnpm test src/server/services/cache.service.spec.ts -- -t fl
 ### CACHE-026: Phase 2 smoke test + bundle size check
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-023, CACHE-024, CACHE-025
 - **Agent:** general-purpose
@@ -1779,9 +1779,9 @@ NODE_ENV=production pnpm test src/server/services/cache.service.spec.ts -- -t fl
 
 **Acceptance criteria:**
 
-- [ ] Smoke test passes (if local Redis available) OR step marked as REVIEW
-- [ ] `pnpm build` produces `dist/server/index.{mjs,cjs,d.ts}` and `dist/shared/index.{mjs,cjs,d.ts}`
-- [ ] `pnpm size` server entry < 14 KiB brotli, shared < 1.5 KiB brotli
+- [x] Smoke test passes (if local Redis available) OR step marked as REVIEW
+- [x] `pnpm build` produces `dist/server/index.{mjs,cjs,d.ts}` and `dist/shared/index.{mjs,cjs,d.ts}`
+- [x] `pnpm size` server entry < 14 KiB brotli, shared < 1.5 KiB brotli
 
 **Validation commands:**
 
@@ -1803,7 +1803,7 @@ node /tmp/cache-smoke-phase2.mjs
 ### CACHE-027: Phase 2 validation (typecheck + lint + test:cov + build + size + code review)
 
 - **Phase:** 2
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-016 to CACHE-026
 - **Agent:** code-reviewer
@@ -1841,9 +1841,9 @@ node /tmp/cache-smoke-phase2.mjs
 
 **Acceptance criteria:**
 
-- [ ] All 5 commands above pass
-- [ ] `/bymax-quality:code-review` executed and findings applied
-- [ ] In the Phase 2 task pending (all DONE)
+- [x] All 5 commands above pass
+- [x] `/bymax-quality:code-review` executed and findings applied
+- [x] In the Phase 2 task pending (all DONE)
 
 **Validation commands:**
 
@@ -1857,6 +1857,25 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size
 2. `Status` → DONE
 3. Dashboard: Phase 2 1→0, DONE 26→27, Progress 100% ✅; TOTAL 32→31, 26→27, 47%
 4. Commit: `chore(cache): complete Phase 2 validation (CACHE-027)`
+
+---
+
+### Phase 2 — Completion Log
+
+- CACHE-016 ✅ 2026-05-31 — JsonSerializer (default ISerializer); fail-closed both directions; shared `extractErrorMessage` helper; PII-safe 100-char preview; top-level `undefined`/function rejected at write time
+- CACHE-017 ✅ 2026-05-30 — satisfied early in Phase 1 (co-located Phase 1 specs were written alongside the implementation to honor the TDD / 100%-coverage gate)
+- CACHE-018 ✅ 2026-05-31 — JsonSerializer specs (round-trip, circular, non-Error throw, malformed JSON with bare message, preview truncation + boundary, top-level undefined/function guard)
+- CACHE-019 ✅ 2026-05-31 — CacheService string/raw/setNx + del/delMany/exists + numeric (incr/decr) + expiration (expire/ttl/persist) + batch (mget/mset)
+- CACHE-020 ✅ 2026-05-31 — CacheService hash (hget/hset/hgetall/hdel) + set (sadd/srem/smembers/sismember/scard) commands
+- CACHE-021 ✅ 2026-05-31 — CacheService iteration (keys + async-iterable scan) + pipeline() + getClient() escape hatches
+- CACHE-022 ✅ 2026-05-31 — flushNamespace via SCAN + UNLINK with the production safety guard (allowFlushInProduction)
+- CACHE-023 ✅ 2026-05-31 — wired CacheService + BYMAX_CACHE_SERIALIZER (useClass JsonSerializer) into forRoot; Phase 2 barrel surface. NOTE: CacheService uses explicit `@Inject(ConnectionManager)`/`@Inject(KeyBuilder)` — the published bundle is built without emitDecoratorMetadata, so implicit type DI breaks in dist (CLAUDE.md §5); caught by the runtime smoke test
+- CACHE-024 ✅ 2026-05-31 — CacheService string/numeric/expire/batch specs (with INCR-vs-INCRBY routing assertions)
+- CACHE-025 ✅ 2026-05-31 — CacheService hash/set/scan/flushNamespace specs (cluster-mode throws via scanStream shadowing; empty-chunk skip via controlled stream; env guard in all three modes)
+- CACHE-026 ✅ 2026-05-31 — Phase 2 runtime smoke test PASSED against local Redis (set/get, incr, hash, scan, flushNamespace); bundle server 8.56 KB / shared 0.38 KB brotli (budgets 14 / 1.5 KB)
+- CACHE-027 ✅ 2026-05-31 — Phase 2 validation: typecheck + lint (0/0) + test:cov (100% stmts/branches/funcs/lines, 158 tests) + build + size all green; `/security-review` (0 findings) + `/bymax-quality:code-review` (4-lens adversarial workflow: 8 confirmed findings applied — 1 fail-closed bug fix + 7 mutation/JSDoc hardenings — 13 false positives rejected)
+
+> **Phase 2 verified-clean note:** the only production behavior change beyond the planned skeleton is the explicit `@Inject` DI fix (CACHE-023) and the top-level `undefined`/function guard in `JsonSerializer.serialize` (fail-closed at write time). Mutation testing (Stryker, Node 24) remains the Phase 4/5 release gate — Phase 2 tests were proactively hardened against the surviving mutants the review identified.
 
 ---
 

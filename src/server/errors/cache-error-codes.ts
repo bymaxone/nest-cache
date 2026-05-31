@@ -40,5 +40,9 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
     CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED,
     'Sentinel mode requires sentinel.sentinels and sentinel.name.'
   ],
-  [CACHE_ERROR_CODES.SHUTDOWN_TIMEOUT, 'Graceful shutdown exceeded the timeout.']
+  [CACHE_ERROR_CODES.SHUTDOWN_TIMEOUT, 'Graceful shutdown exceeded the timeout.'],
+  [
+    CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER,
+    'This operation requires standalone or sentinel mode; it is not supported in cluster mode.'
+  ]
 ])
