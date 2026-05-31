@@ -172,6 +172,55 @@ describe('PubSubService', () => {
     expect(offSpy).toHaveBeenCalledWith('message', expect.any(Function))
   })
 
+  // Multiple handlers on the SAME channel must share one SUBSCRIBE; unsubscribing
+  // one must NOT stop delivery to the others, and UNSUBSCRIBE fires only on the
+  // last listener (ref-counting — guards the silent multi-subscriber breakage).
+  it('ref-counts the channel so one unsubscribe does not break the others', async () => {
+    const subscriber = connection.createSubscriberClient() as Redis
+    jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(subscriber)
+    const subSpy = jest.spyOn(subscriber, 'subscribe')
+    const unsubSpy = jest.spyOn(subscriber, 'unsubscribe')
+    const a: string[] = []
+    const b: string[] = []
+    const offA = await pubsub.subscribe<string>('shared', (message) => {
+      a.push(message)
+    })
+    const offB = await pubsub.subscribe<string>('shared', (message) => {
+      b.push(message)
+    })
+
+    expect(subSpy).toHaveBeenCalledTimes(1) // SUBSCRIBE issued once for the channel
+
+    await pubsub.publish('shared', 'first')
+    await tick()
+    expect(a).toEqual(['first'])
+    expect(b).toEqual(['first'])
+
+    await offA()
+    expect(unsubSpy).not.toHaveBeenCalled() // not the last listener — no UNSUBSCRIBE
+    await pubsub.publish('shared', 'second')
+    await tick()
+    expect(a).toEqual(['first']) // A is detached
+    expect(b).toEqual(['first', 'second']) // B still receives
+
+    await offB()
+    expect(unsubSpy).toHaveBeenCalledWith('ps:shared') // last listener — UNSUBSCRIBE
+  })
+
+  // Calling the returned unsubscribe twice must be a no-op the second time, so a
+  // double release can never over-decrement a channel another handler still uses.
+  it('is idempotent when the returned unsubscribe is called twice', async () => {
+    const subscriber = connection.createSubscriberClient() as Redis
+    jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(subscriber)
+    const unsubSpy = jest.spyOn(subscriber, 'unsubscribe')
+    const off = await pubsub.subscribe('shared', () => undefined)
+
+    await off()
+    await off()
+
+    expect(unsubSpy).toHaveBeenCalledTimes(1)
+  })
+
   // psubscribe must deliver messages from any matching channel with the concrete
   // channel and pattern, and its unsubscribe must pattern-unsubscribe.
   it('delivers pattern-matched messages and unsubscribes the pattern', async () => {

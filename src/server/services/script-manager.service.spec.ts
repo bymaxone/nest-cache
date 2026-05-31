@@ -123,6 +123,22 @@ describe('ScriptManagerService', () => {
     })
   })
 
+  // If the NOSCRIPT reload (SCRIPT LOAD) itself fails, the failure must still be
+  // wrapped as SCRIPT_EXECUTION_FAILED — the contract holds for a reload failure,
+  // not only a retry failure. (The reload is inside the retry try/catch.)
+  it('wraps a failed NOSCRIPT reload as SCRIPT_EXECUTION_FAILED', async () => {
+    await registry.load('cas')
+    script.mockClear()
+    evalsha.mockRejectedValueOnce(new Error('NOSCRIPT No matching script'))
+    script.mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'))
+
+    const error = await registry.eval('cas', ['k'], []).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect(script).toHaveBeenCalledTimes(1) // the reload was attempted and failed
+  })
+
   // A non-NOSCRIPT error must be wrapped as SCRIPT_EXECUTION_FAILED with the
   // original message preserved in details (Error branch of the message extractor),
   // and must FAIL FAST — no reload (SCRIPT LOAD) and no retry. The pre-load +

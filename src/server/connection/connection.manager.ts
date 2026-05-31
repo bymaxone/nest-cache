@@ -95,6 +95,8 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    * so its offline queue is enabled — a subscribe issued before the socket is
    * ready buffers until connected instead of failing fast like the data-plane
    * main client (whose offline queue stays disabled to avoid silent buffering).
+   * This override applies to standalone/sentinel modes only; in cluster mode
+   * {@link createClient} ignores it (cluster Pub/Sub is an experimental passthrough).
    *
    * @returns A fresh client wired with `subscriber`-role event listeners.
    */

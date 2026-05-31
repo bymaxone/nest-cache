@@ -150,10 +150,12 @@ export class ScriptManagerService implements OnApplicationBootstrap {
           originalError: toErrorMessage(err)
         })
       }
-      // The server evicted the SHA — reload once and retry.
-      const reloadedSha = (await client.script(SCRIPT_LOAD, entry.lua)) as string
-      entry.sha = reloadedSha
+      // The server evicted the SHA — reload once and retry. Wrap a failure of
+      // EITHER the reload (SCRIPT LOAD) or the retry, so the method's contract of
+      // surfacing SCRIPT_EXECUTION_FAILED holds even if the reload itself fails.
       try {
+        const reloadedSha = (await client.script(SCRIPT_LOAD, entry.lua)) as string
+        entry.sha = reloadedSha
         return await client.evalsha(reloadedSha, keys.length, ...keys, ...args)
       } catch (retryErr) {
         throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {

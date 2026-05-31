@@ -34,10 +34,21 @@ import { resolveSerializer } from '../utils/resolve-serializer'
 /** Detaches a subscription's listener and unsubscribes its channel/pattern. */
 export type Unsubscribe = () => Promise<void>
 
+/** Mutable live-listener counter for one namespaced channel or pattern. */
+interface SubscriptionRef {
+  count: number
+}
+
 @Injectable()
 export class PubSubService implements OnModuleDestroy {
   /** Lazily-created dedicated subscriber connection (null until first subscribe). */
   private subscriber: Redis | Cluster | null = null
+
+  /** Live-listener ref-count per namespaced channel; UNSUBSCRIBE fires on the last. */
+  private readonly channelRefs = new Map<string, SubscriptionRef>()
+
+  /** Live-listener ref-count per namespaced pattern; PUNSUBSCRIBE fires on the last. */
+  private readonly patternRefs = new Map<string, SubscriptionRef>()
 
   /** Resolved serializer: explicit option wins, then injected token, then JSON. */
   private readonly serializer: ISerializer
@@ -89,13 +100,16 @@ export class PubSubService implements OnModuleDestroy {
    * @typeParam T - The expected message payload type.
    * @param channel - Bare channel name (namespaced before subscribing).
    * @param handler - Invoked per message with `(message, channel)`.
-   * @returns An {@link Unsubscribe} that detaches this listener and unsubscribes
-   *   the channel.
+   * @returns An {@link Unsubscribe} that detaches THIS listener; the channel is
+   *   only UNSUBSCRIBE'd once its last listener is removed, so unsubscribing one
+   *   handler never breaks others subscribed to the same channel.
    */
   async subscribe<T>(channel: string, handler: IPubSubHandler<T>): Promise<Unsubscribe> {
     const fullChannel = this.keyBuilder.applyNamespace(channel)
     const subscriber = this.ensureSubscriber()
-    await subscriber.subscribe(fullChannel)
+    const ref = await this.retainSubscription(this.channelRefs, fullChannel, () =>
+      subscriber.subscribe(fullChannel)
+    )
 
     const listener = async (incoming: string, raw: string): Promise<void> => {
       if (incoming !== fullChannel) {
@@ -111,10 +125,13 @@ export class PubSubService implements OnModuleDestroy {
     }
     subscriber.on('message', listener)
 
-    return async (): Promise<void> => {
-      subscriber.off('message', listener)
-      await subscriber.unsubscribe(fullChannel)
-    }
+    return this.makeUnsubscribe(
+      () => subscriber.off('message', listener),
+      () =>
+        this.releaseSubscription(this.channelRefs, fullChannel, ref, () =>
+          subscriber.unsubscribe(fullChannel)
+        )
+    )
   }
 
   /**
@@ -125,13 +142,15 @@ export class PubSubService implements OnModuleDestroy {
    * @param pattern - Bare glob pattern (namespaced before subscribing).
    * @param handler - Invoked per message with `(message, channel, pattern)`,
    *   both in their full namespaced form.
-   * @returns An {@link Unsubscribe} that detaches this listener and
-   *   pattern-unsubscribes.
+   * @returns An {@link Unsubscribe} that detaches THIS listener; the pattern is
+   *   only PUNSUBSCRIBE'd once its last listener is removed.
    */
   async psubscribe<T>(pattern: string, handler: IPubSubPatternHandler<T>): Promise<Unsubscribe> {
     const fullPattern = this.keyBuilder.applyNamespace(pattern)
     const subscriber = this.ensureSubscriber()
-    await subscriber.psubscribe(fullPattern)
+    const ref = await this.retainSubscription(this.patternRefs, fullPattern, () =>
+      subscriber.psubscribe(fullPattern)
+    )
 
     const listener = async (
       matchedPattern: string,
@@ -150,10 +169,13 @@ export class PubSubService implements OnModuleDestroy {
     }
     subscriber.on('pmessage', listener)
 
-    return async (): Promise<void> => {
-      subscriber.off('pmessage', listener)
-      await subscriber.punsubscribe(fullPattern)
-    }
+    return this.makeUnsubscribe(
+      () => subscriber.off('pmessage', listener),
+      () =>
+        this.releaseSubscription(this.patternRefs, fullPattern, ref, () =>
+          subscriber.punsubscribe(fullPattern)
+        )
+    )
   }
 
   /** Closes the subscriber connection gracefully, forcing disconnect on failure. */
@@ -186,6 +208,74 @@ export class PubSubService implements OnModuleDestroy {
       this.subscriber = this.connection.createSubscriberClient()
     }
     return this.subscriber
+  }
+
+  /**
+   * Subscribes the target (channel or pattern) only when it gains its FIRST
+   * listener, then increments and returns its shared {@link SubscriptionRef} so a
+   * later release knows when to issue the matching UNSUBSCRIBE / PUNSUBSCRIBE.
+   *
+   * @param refs - The channel or pattern ref-count map.
+   * @param target - The full namespaced channel/pattern.
+   * @param subscribe - Issues the SUBSCRIBE / PSUBSCRIBE for `target`.
+   * @returns The shared ref for `target` (captured by the unsubscribe closure).
+   */
+  private async retainSubscription(
+    refs: Map<string, SubscriptionRef>,
+    target: string,
+    subscribe: () => Promise<unknown>
+  ): Promise<SubscriptionRef> {
+    let ref = refs.get(target)
+    if (!ref) {
+      ref = { count: 0 }
+      refs.set(target, ref)
+      await subscribe()
+    }
+    ref.count += 1
+    return ref
+  }
+
+  /**
+   * Decrements the (closure-captured) ref and issues the UNSUBSCRIBE / PUNSUBSCRIBE
+   * only when the LAST listener is removed — so unsubscribing one handler never
+   * silently stops delivery to the others on the same channel/pattern.
+   *
+   * @param refs - The channel or pattern ref-count map.
+   * @param target - The full namespaced channel/pattern.
+   * @param ref - The shared ref returned by {@link retainSubscription}.
+   * @param unsubscribe - Issues the UNSUBSCRIBE / PUNSUBSCRIBE for `target`.
+   */
+  private async releaseSubscription(
+    refs: Map<string, SubscriptionRef>,
+    target: string,
+    ref: SubscriptionRef,
+    unsubscribe: () => Promise<unknown>
+  ): Promise<void> {
+    ref.count -= 1
+    if (ref.count === 0) {
+      refs.delete(target)
+      await unsubscribe()
+    }
+  }
+
+  /**
+   * Builds an idempotent {@link Unsubscribe}: the first call detaches the listener
+   * and releases the subscription; later calls are no-ops, so a double unsubscribe
+   * cannot over-decrement a shared channel/pattern.
+   *
+   * @param detach - Removes this subscription's event listener.
+   * @param release - Decrements the reference count (see {@link releaseSubscription}).
+   */
+  private makeUnsubscribe(detach: () => void, release: () => Promise<void>): Unsubscribe {
+    let released = false
+    return async (): Promise<void> => {
+      if (released) {
+        return
+      }
+      released = true
+      detach()
+      await release()
+    }
   }
 
   /**
