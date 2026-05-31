@@ -26,7 +26,8 @@ export const CACHE_ERROR_CODES = {
   FLUSH_DISABLED_IN_PRODUCTION: 'cache.flush_disabled_in_production',
   CLUSTER_MISCONFIGURED: 'cache.cluster_misconfigured',
   SENTINEL_MISCONFIGURED: 'cache.sentinel_misconfigured',
-  SHUTDOWN_TIMEOUT: 'cache.shutdown_timeout'
+  SHUTDOWN_TIMEOUT: 'cache.shutdown_timeout',
+  UNSUPPORTED_IN_CLUSTER: 'cache.unsupported_in_cluster'
 } as const
 
 /** Union of every cache error code string value. */

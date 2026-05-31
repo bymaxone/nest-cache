@@ -16,6 +16,7 @@ import {
 } from './bymax-cache.constants'
 import { MODULE_OPTIONS_TOKEN } from './bymax-cache.module.builder'
 
+import type { ISerializer } from './interfaces/serializer.interface'
 import type { DynamicModule, Provider } from '@nestjs/common'
 
 // Mock ioredis so constructing the module's ConnectionManager (during the
@@ -72,6 +73,28 @@ describe('BymaxCacheModule.forRoot', () => {
 
     const provider = findProvider(mod.providers ?? [], BYMAX_CACHE_SERIALIZER)
     expect(provider).toEqual({ provide: BYMAX_CACHE_SERIALIZER, useClass: JsonSerializer })
+  })
+
+  // A consumer-supplied serializer must be wired onto the BYMAX_CACHE_SERIALIZER
+  // token via useValue, so anything injecting the token receives the configured
+  // serializer rather than the default — matching the token's "override" contract.
+  it('wires options.serializer onto the serializer token when supplied', () => {
+    const customSerializer: ISerializer = {
+      serialize<T>(value: T): string {
+        return JSON.stringify(value)
+      },
+      deserialize<T>(raw: string): T {
+        return JSON.parse(raw) as T
+      }
+    }
+
+    const mod = BymaxCacheModule.forRoot({
+      connection: { host: 'h' },
+      serializer: customSerializer
+    })
+
+    const provider = findProvider(mod.providers ?? [], BYMAX_CACHE_SERIALIZER)
+    expect(provider).toEqual({ provide: BYMAX_CACHE_SERIALIZER, useValue: customSerializer })
   })
 
   // When `isGlobal: false` is supplied, the resolved flag must flip the

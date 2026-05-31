@@ -446,9 +446,10 @@ describe('CacheService', () => {
       expect(scanSpy).toHaveBeenCalledWith({ match: 'test:users:*', count: 7 })
     })
 
-    // Cluster mode exposes no scanStream; scan must throw rather than silently
+    // Cluster mode exposes no scanStream; scan must throw a structured
+    // CacheException (UNSUPPORTED_IN_CLUSTER) rather than a raw Error or silently
     // returning nothing. Shadowing the method with undefined simulates Cluster.
-    it('scan throws when scanStream is unavailable (cluster mode)', async () => {
+    it('scan throws UNSUPPORTED_IN_CLUSTER when scanStream is unavailable (cluster mode)', async () => {
       // Simulate Cluster mode by shadowing the prototype scanStream with undefined.
       Object.defineProperty(connection.getClient(), 'scanStream', {
         value: undefined,
@@ -460,7 +461,10 @@ describe('CacheService', () => {
           // unreachable — generator throws before yielding
         }
       }
-      await expect(drain()).rejects.toThrow(/standalone\/sentinel/)
+      await expect(drain()).rejects.toBeInstanceOf(CacheException)
+      await drain().catch((error: unknown) => {
+        expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+      })
     })
   })
 
@@ -553,8 +557,9 @@ describe('CacheService', () => {
       await expect(cache.flushNamespace()).resolves.toBe(0)
     })
 
-    // Cluster mode exposes no scanStream; flush must throw rather than no-op.
-    it('throws when scanStream is unavailable (cluster mode)', async () => {
+    // Cluster mode exposes no scanStream; flush must throw a structured
+    // CacheException (UNSUPPORTED_IN_CLUSTER) rather than a raw Error or no-op.
+    it('throws UNSUPPORTED_IN_CLUSTER when scanStream is unavailable (cluster mode)', async () => {
       jest.replaceProperty(process.env, 'NODE_ENV', 'development')
       // Simulate Cluster mode by shadowing the prototype scanStream with undefined.
       Object.defineProperty(connection.getClient(), 'scanStream', {
@@ -562,7 +567,10 @@ describe('CacheService', () => {
         configurable: true
       })
 
-      await expect(cache.flushNamespace()).rejects.toThrow(/standalone\/sentinel/)
+      await expect(cache.flushNamespace()).rejects.toBeInstanceOf(CacheException)
+      await cache.flushNamespace().catch((error: unknown) => {
+        expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+      })
     })
   })
 

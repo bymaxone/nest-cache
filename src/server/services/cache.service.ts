@@ -504,7 +504,8 @@ export class CacheService {
    * @param pattern - Glob pattern for the id segment, e.g. `'*'`.
    * @param count - Per-batch hint passed to `SCAN` (not a hard limit).
    * @returns An async iterable of fully-namespaced keys.
-   * @throws {Error} When the client has no `scanStream` (Cluster mode).
+   * @throws {CacheException} `UNSUPPORTED_IN_CLUSTER` when called in cluster mode
+   *   (no usable top-level `scanStream`).
    * @example
    * ```ts
    * for await (const key of cache.scan('users', '*')) {
@@ -516,7 +517,7 @@ export class CacheService {
     const fullPattern = this.keyBuilder.build(prefix, pattern)
     const client = this.connection.getClient()
     if (!isScannableClient(client)) {
-      throw new Error('scan() requires standalone/sentinel mode (Cluster has different semantics)')
+      throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'scan' })
     }
     const stream = client.scanStream({ match: fullPattern, count })
     for await (const chunk of stream) {
@@ -576,7 +577,8 @@ export class CacheService {
    *
    * @returns The total number of keys removed.
    * @throws {CacheException} `FLUSH_DISABLED_IN_PRODUCTION` under the production guard.
-   * @throws {Error} When the client has no `scanStream` (Cluster mode).
+   * @throws {CacheException} `UNSUPPORTED_IN_CLUSTER` when called in cluster mode
+   *   (no usable top-level `scanStream`).
    */
   async flushNamespace(): Promise<number> {
     if (process.env['NODE_ENV'] === PRODUCTION_ENV && !this.options.allowFlushInProduction) {
@@ -585,7 +587,9 @@ export class CacheService {
 
     const client = this.connection.getClient()
     if (!isScannableClient(client)) {
-      throw new Error('flushNamespace() requires standalone/sentinel mode')
+      throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, {
+        operation: 'flushNamespace'
+      })
     }
 
     const pattern = `${this.keyBuilder.getNamespacePrefix()}*`

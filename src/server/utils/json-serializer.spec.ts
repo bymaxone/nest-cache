@@ -86,11 +86,23 @@ describe('JsonSerializer', () => {
     }
   })
 
-  // The guard is TOP-LEVEL only: nested undefined/function members are dropped by
-  // standard JSON semantics and the surviving members still serialize — pins the
-  // guard's scope so a broadened-condition mutant (firing on nested values) dies.
-  it('drops nested undefined/function members and serializes the rest', () => {
-    const value = { a: undefined, b: (): void => undefined, c: 1 }
+  // A top-level symbol is the third JSON.stringify→undefined case (flagged in
+  // review) and must fail closed exactly like undefined / function.
+  it('throws SERIALIZATION_FAILED for a top-level symbol value', () => {
+    expect(() => serializer.serialize(Symbol('x'))).toThrow(CacheException)
+    try {
+      serializer.serialize(Symbol('x'))
+    } catch (error) {
+      expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
+    }
+  })
+
+  // The guard is TOP-LEVEL only: nested undefined/function/symbol members are
+  // dropped by standard JSON semantics and the surviving members still serialize
+  // — pins the guard's scope so a broadened-condition mutant (firing on nested
+  // values) dies.
+  it('drops nested undefined/function/symbol members and serializes the rest', () => {
+    const value = { a: undefined, b: (): void => undefined, s: Symbol('x'), c: 1 }
 
     expect(serializer.serialize(value)).toBe('{"c":1}')
   })

@@ -60,20 +60,22 @@ export class JsonSerializer implements ISerializer {
    * @returns The JSON string representation.
    * @throws {CacheException} `SERIALIZATION_FAILED` when the value cannot be
    *   stringified. This covers `JSON.stringify` throwing (circular reference,
-   *   `BigInt`) AND the silent cases where a top-level `undefined` or function
-   *   would make `JSON.stringify` return the JS value `undefined` instead of a
-   *   string. The original message is attached under `details.error`; the value
-   *   itself is never echoed, as it may carry secrets (CLAUDE.md §4).
+   *   `BigInt`) AND the silent cases where a top-level `undefined`, function, or
+   *   `symbol` would make `JSON.stringify` return the JS value `undefined`
+   *   instead of a string. The original message is attached under
+   *   `details.error`; the value itself is never echoed, as it may carry secrets
+   *   (CLAUDE.md §4).
    */
   serialize<T>(value: T): string {
-    // `JSON.stringify(undefined)` and `JSON.stringify(() => {})` return the JS
-    // value `undefined` (not a string) WITHOUT throwing, which would escape the
-    // try/catch and break both the `string` return contract and the fail-closed
-    // invariant (CLAUDE.md §4). Reject those top-level cases up front; nested
-    // `undefined`/function members remain valid JSON and pass through untouched.
-    if (value === undefined || typeof value === 'function') {
+    // `JSON.stringify(undefined)`, `JSON.stringify(() => {})`, and
+    // `JSON.stringify(Symbol())` all return the JS value `undefined` (not a
+    // string) WITHOUT throwing, which would escape the try/catch and break both
+    // the `string` return contract and the fail-closed invariant (CLAUDE.md §4).
+    // Reject those top-level cases up front; nested undefined/function/symbol
+    // members remain valid JSON and pass through untouched.
+    if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
       throw new CacheException(CACHE_ERROR_CODES.SERIALIZATION_FAILED, {
-        error: 'Cannot serialize a top-level undefined or function value'
+        error: 'Cannot serialize a top-level undefined, function, or symbol value'
       })
     }
     try {

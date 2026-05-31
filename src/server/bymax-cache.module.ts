@@ -47,7 +47,13 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
       { provide: MODULE_OPTIONS_TOKEN, useValue: options },
       { provide: BYMAX_CACHE_OPTIONS, useValue: resolved },
       { provide: BYMAX_CACHE_EVENTS, useValue: resolved.events ?? null },
-      { provide: BYMAX_CACHE_SERIALIZER, useClass: JsonSerializer },
+      // Honor a consumer-supplied serializer on the injectable token too (not
+      // just inside CacheService), so any provider that injects
+      // BYMAX_CACHE_SERIALIZER receives the configured serializer rather than the
+      // default. Falls back to the JsonSerializer class when none is supplied.
+      resolved.serializer
+        ? { provide: BYMAX_CACHE_SERIALIZER, useValue: resolved.serializer }
+        : { provide: BYMAX_CACHE_SERIALIZER, useClass: JsonSerializer },
       ConnectionManager,
       KeyBuilder,
       { provide: BYMAX_CACHE_KEY_BUILDER, useExisting: KeyBuilder },
