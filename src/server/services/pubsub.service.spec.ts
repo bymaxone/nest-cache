@@ -209,16 +209,21 @@ describe('PubSubService', () => {
 
   // Calling the returned unsubscribe twice must be a no-op the second time, so a
   // double release can never over-decrement a channel another handler still uses.
+  // The detach (`subscriber.off`) must run exactly once across both calls: this
+  // pins the `if (released) return` short-circuit and the `released = true` flag —
+  // dropping either would re-detach on the second call.
   it('is idempotent when the returned unsubscribe is called twice', async () => {
     const subscriber = connection.createSubscriberClient() as Redis
     jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(subscriber)
     const unsubSpy = jest.spyOn(subscriber, 'unsubscribe')
+    const offSpy = jest.spyOn(subscriber, 'off')
     const off = await pubsub.subscribe('shared', () => undefined)
 
     await off()
     await off()
 
     expect(unsubSpy).toHaveBeenCalledTimes(1)
+    expect(offSpy).toHaveBeenCalledTimes(1)
   })
 
   // psubscribe must deliver messages from any matching channel with the concrete
@@ -261,6 +266,45 @@ describe('PubSubService', () => {
     await tick()
 
     expect(received).toEqual(['ok'])
+  })
+
+  // A swallowed PATTERN-handler error must be forwarded to the observability
+  // callback, mirroring the channel path — pins the psubscribe catch block, which
+  // an empty-block mutant would silence (dropping the emitHandlerError call).
+  it('forwards a pattern-handler error to the events callback', async () => {
+    const onEvent = jest.fn()
+    const observed = new PubSubService(options, connection, keyBuilder, undefined, { onEvent })
+    await observed.psubscribe('pobs:*', () => {
+      throw new Error('pattern boom')
+    })
+
+    await observed.publish('pobs:1', 'x')
+    await tick()
+
+    expect(onEvent).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({
+        role: 'subscriber',
+        reason: 'handler_error',
+        error: 'pattern boom'
+      })
+    )
+    await observed.onModuleDestroy()
+  })
+
+  // The dedicated subscriber connection must be opened once and reused across
+  // subscribes — pins the lazy `if (!this.subscriber)` guard, which an
+  // always-true mutant would defeat by recreating the connection every call.
+  it('opens the subscriber connection once and reuses it across subscribes', async () => {
+    const subscriber = connection.createSubscriberClient() as Redis
+    const createSubSpy = jest
+      .spyOn(connection, 'createSubscriberClient')
+      .mockReturnValue(subscriber)
+
+    await pubsub.subscribe('first', () => undefined)
+    await pubsub.subscribe('second', () => undefined)
+
+    expect(createSubSpy).toHaveBeenCalledTimes(1)
   })
 
   // onModuleDestroy must be a safe no-op when no subscriber was ever opened.

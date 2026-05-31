@@ -30,7 +30,8 @@ describe('KeyBuilder', () => {
   })
 
   // An empty prefix must throw INVALID_KEY — an empty segment would collapse the
-  // key structure and break namespacing.
+  // key structure and break namespacing. Asserting `details` pins the exact
+  // throw-site payload, killing the L47 ObjectLiteral→{} and reason→'' mutants.
   it('throws INVALID_KEY when the prefix is empty', () => {
     const builder = makeBuilder()
 
@@ -39,10 +40,13 @@ describe('KeyBuilder', () => {
       builder.build('', 'id')
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
+      expect((error as CacheException).details).toEqual({ reason: 'empty_prefix' })
     }
   })
 
-  // An empty id must also throw INVALID_KEY (the second guard branch).
+  // An empty id must also throw INVALID_KEY (the second guard branch). Asserting
+  // `details` pins the exact throw-site payload, killing the L50 ObjectLiteral→{}
+  // and reason→'' mutants.
   it('throws INVALID_KEY when the id is empty', () => {
     const builder = makeBuilder()
 
@@ -51,6 +55,7 @@ describe('KeyBuilder', () => {
       builder.build('p', '')
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
+      expect((error as CacheException).details).toEqual({ reason: 'empty_id' })
     }
   })
 
@@ -63,7 +68,9 @@ describe('KeyBuilder', () => {
   })
 
   // An empty key passed to applyNamespace must throw INVALID_KEY — namespacing a
-  // blank key would yield a bare namespace prefix with no target.
+  // blank key would yield a bare namespace prefix with no target. Asserting
+  // `details` pins the exact throw-site payload, killing the L65 ObjectLiteral→{}
+  // and reason→'' mutants.
   it('throws INVALID_KEY when applyNamespace receives an empty key', () => {
     const builder = makeBuilder()
 
@@ -72,6 +79,7 @@ describe('KeyBuilder', () => {
       builder.applyNamespace('')
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
+      expect((error as CacheException).details).toEqual({ reason: 'empty_key' })
     }
   })
 

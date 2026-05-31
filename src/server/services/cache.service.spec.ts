@@ -450,6 +450,8 @@ describe('CacheService', () => {
     // Cluster mode exposes no scanStream; scan must throw a structured
     // CacheException (UNSUPPORTED_IN_CLUSTER) rather than a raw Error or silently
     // returning nothing. Shadowing the method with undefined simulates Cluster.
+    // The details assertion pins `{ operation: 'scan' }` so the ObjectLiteral→{}
+    // and StringLiteral 'scan'→'' mutants on the throw site (cache.service L525) die.
     it('scan throws UNSUPPORTED_IN_CLUSTER when scanStream is unavailable (cluster mode)', async () => {
       // Simulate Cluster mode by shadowing the prototype scanStream with undefined.
       Object.defineProperty(connection.getClient(), 'scanStream', {
@@ -465,6 +467,7 @@ describe('CacheService', () => {
       await expect(drain()).rejects.toBeInstanceOf(CacheException)
       await drain().catch((error: unknown) => {
         expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+        expect((error as CacheException).details).toEqual({ operation: 'scan' })
       })
     })
   })
@@ -560,6 +563,9 @@ describe('CacheService', () => {
 
     // Cluster mode exposes no scanStream; flush must throw a structured
     // CacheException (UNSUPPORTED_IN_CLUSTER) rather than a raw Error or no-op.
+    // The details assertion pins `{ operation: 'flushNamespace' }` so the
+    // ObjectLiteral→{} and StringLiteral 'flushNamespace'→'' mutants on the throw
+    // site (cache.service L595/596) die.
     it('throws UNSUPPORTED_IN_CLUSTER when scanStream is unavailable (cluster mode)', async () => {
       jest.replaceProperty(process.env, 'NODE_ENV', 'development')
       // Simulate Cluster mode by shadowing the prototype scanStream with undefined.
@@ -571,6 +577,7 @@ describe('CacheService', () => {
       await expect(cache.flushNamespace()).rejects.toBeInstanceOf(CacheException)
       await cache.flushNamespace().catch((error: unknown) => {
         expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+        expect((error as CacheException).details).toEqual({ operation: 'flushNamespace' })
       })
     })
   })

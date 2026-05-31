@@ -71,7 +71,10 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Unit + E2E tests with coverage (100% enforced)
+      - name: Type-level API tests
+        run: pnpm test:types
+
+      - name: Unit tests with coverage (100% enforced)
         run: pnpm test:cov:all
 
       - name: Upload coverage artifact
@@ -104,3 +107,41 @@ jobs:
         # Zero-dependency brotli-size gate over the built .mjs subpaths.
         # See scripts/check-size.mjs for budgets and rationale.
         run: pnpm size
+
+  e2e:
+    name: E2E (Testcontainers · ${{ matrix.redis }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # ubuntu-latest ships a running Docker daemon, so Testcontainers boots real
+    # Redis (and a real Redis Cluster) with no extra setup. The standalone-based
+    # specs are matrixed across Redis 7 and 8 via REDIS_IMAGE; the cluster spec
+    # uses its own grokzen image regardless.
+    strategy:
+      fail-fast: false
+      matrix:
+        redis: ['redis:7-alpine', 'redis:8-alpine']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.8.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: End-to-end tests (real Redis + cluster)
+        run: pnpm test:e2e
+        env:
+          REDIS_IMAGE: ${{ matrix.redis }}

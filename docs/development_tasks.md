@@ -49,14 +49,14 @@
 
 > **Status legend:** 🔴 Not Started · 🟡 In Progress · 🟢 Done · ⚪ Blocked · 🔵 In Review
 
-> **Overall progress:** 🟡 39 / 58 tasks done (67%)
+> **Overall progress:** 🟡 48 / 58 tasks done (83%)
 
 | #   | Phase                                  | Done / Total | %    | Status |
 | --- | -------------------------------------- | ------------ | ---- | ------ |
 | 1   | Foundation + Connection Manager        | 15 / 15      | 100% | 🟢     |
 | 2   | CacheService + Typed Helpers           | 12 / 12      | 100% | 🟢     |
 | 3   | Pub/Sub + ScriptManager + Health       | 12 / 12      | 100% | 🟢     |
-| 4   | forRootAsync + E2E + Mutation Baseline | 0 / 9        | 0%   | 🔴     |
+| 4   | forRootAsync + E2E + Mutation Baseline | 9 / 9        | 100% | 🟢     |
 | 5   | Release v0.1.0                         | 0 / 10       | 0%   | 🔴     |
 
 ---
@@ -2658,7 +2658,7 @@ pnpm typecheck && pnpm test src/server/bymax-cache.module.spec.ts
 ### CACHE-040: BymaxCacheModule.forRootAsync() — async dynamic module
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-038, CACHE-039
 - **Agent:** architect
@@ -2746,7 +2746,7 @@ pnpm typecheck
 ### CACHE-041: Tests — forRootAsync (with ConfigService stub + async factory + imports)
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-040
 - **Agent:** tester
@@ -2795,7 +2795,7 @@ pnpm test src/server/bymax-cache.module.async.spec.ts
 ### CACHE-042: E2E fixtures — test-cache-app.module + helpers (Testcontainers wrapper)
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-040
 - **Agent:** tester
@@ -2858,7 +2858,7 @@ pnpm test:e2e
 ### CACHE-043: E2E specs — CacheService + PubSubService (ioredis-mock unit-fast)
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-042
 - **Agent:** tester
@@ -2915,7 +2915,7 @@ pnpm test:e2e
 ### CACHE-044: E2E specs — ScriptManager + connection lifecycle (Testcontainers — real Redis)
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-042
 - **Agent:** tester
@@ -2968,7 +2968,7 @@ pnpm test:e2e
 ### CACHE-045: 100% coverage release gate (test:cov:all)
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-041 to CACHE-044
 - **Agent:** tester
@@ -3026,7 +3026,7 @@ pnpm test:cov:all
 ### CACHE-046: Mutation testing baseline (Stryker)
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-045
 - **Agent:** code-reviewer
@@ -3084,7 +3084,7 @@ pnpm mutation
 ### CACHE-047: Final bundle size validation + budgets tuning
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-040
 - **Agent:** general-purpose
@@ -3129,7 +3129,7 @@ pnpm build && pnpm size
 ### CACHE-048: Phase 4 validation (end release gate)
 
 - **Phase:** 4
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-040 to CACHE-047
 - **Agent:** code-reviewer

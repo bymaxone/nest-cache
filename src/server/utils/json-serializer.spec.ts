@@ -66,34 +66,50 @@ describe('JsonSerializer', () => {
   // A top-level `undefined` makes JSON.stringify return the JS value `undefined`
   // (not a string) WITHOUT throwing; serialize must reject it up front so the
   // `string` return contract and the fail-closed invariant hold at write time.
+  // The exact `details` payload is asserted with `toEqual` to pin the fail-closed
+  // throw at L77-78: it kills the ObjectLiteral→`{}` mutant (empty details) AND
+  // the StringLiteral→`''` mutant (blanked message).
   it('throws SERIALIZATION_FAILED for a top-level undefined value', () => {
     expect(() => serializer.serialize(undefined)).toThrow(CacheException)
     try {
       serializer.serialize(undefined)
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
+      expect((error as CacheException).details).toEqual({
+        error: 'Cannot serialize a top-level undefined, function, or symbol value'
+      })
     }
   })
 
   // A top-level function is the other JSON.stringify→undefined case and must
-  // likewise fail closed rather than silently writing a non-string.
+  // likewise fail closed rather than silently writing a non-string. Asserting the
+  // exact `details` again guards the same L77-78 ObjectLiteral→`{}` and
+  // StringLiteral→`''` mutants from this entry path.
   it('throws SERIALIZATION_FAILED for a top-level function value', () => {
     expect(() => serializer.serialize(() => undefined)).toThrow(CacheException)
     try {
       serializer.serialize(() => undefined)
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
+      expect((error as CacheException).details).toEqual({
+        error: 'Cannot serialize a top-level undefined, function, or symbol value'
+      })
     }
   })
 
   // A top-level symbol is the third JSON.stringify→undefined case (flagged in
-  // review) and must fail closed exactly like undefined / function.
+  // review) and must fail closed exactly like undefined / function. The exact
+  // `details` assertion covers the L77-78 ObjectLiteral→`{}` and StringLiteral→`''`
+  // mutants from the symbol entry path.
   it('throws SERIALIZATION_FAILED for a top-level symbol value', () => {
     expect(() => serializer.serialize(Symbol('x'))).toThrow(CacheException)
     try {
       serializer.serialize(Symbol('x'))
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
+      expect((error as CacheException).details).toEqual({
+        error: 'Cannot serialize a top-level undefined, function, or symbol value'
+      })
     }
   })
 

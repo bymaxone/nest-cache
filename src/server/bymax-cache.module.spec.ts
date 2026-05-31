@@ -1,3 +1,12 @@
+/**
+ * Unit tests for {@link BymaxCacheModule.forRoot} (synchronous registration).
+ *
+ * Layer: server. Asserts the produced {@link DynamicModule} shape — providers,
+ * the serializer/events tokens, exports, and the `global` flag — plus DI
+ * injectability of the wired services. ioredis is mocked with a bare
+ * `EventEmitter` so constructing the providers never opens a socket. The async
+ * counterpart lives in `bymax-cache.module.async.spec.ts`.
+ */
 import { EventEmitter } from 'node:events'
 
 import { Test } from '@nestjs/testing'
@@ -156,13 +165,5 @@ describe('BymaxCacheModule.forRoot', () => {
     expect(moduleRef.get(BYMAX_CACHE_SERIALIZER)).toBeInstanceOf(JsonSerializer)
 
     await moduleRef.close()
-  })
-
-  // forRootAsync is not wired with the cache providers until Phase 4 — it must
-  // fail loud rather than build a silently-broken module.
-  it('rejects forRootAsync until Phase 4', () => {
-    expect(() =>
-      BymaxCacheModule.forRootAsync({ useFactory: () => ({ connection: { host: 'h' } }) })
-    ).toThrow(/Phase 4/)
   })
 })

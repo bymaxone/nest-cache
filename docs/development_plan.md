@@ -3937,11 +3937,11 @@ pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && p
 
 **Done criteria para fechar Phase 4:**
 
-- [ ] Coverage 100% (release gate)
-- [ ] Bundle within budgets (verifiable in §6.5)
-- [ ] Mutation score ≥ 85%
-- [ ] E2E suite passa (ioredis-mock + Testcontainers)
-- [ ] PR `phase-4` aprovado
+- [x] Coverage 100% (release gate)
+- [x] Bundle within budgets (verifiable in §6.5)
+- [x] Mutation score ≥ 85% — achieved 100% (`pnpm mutation` exits 0 ≥ break 95)
+- [x] E2E suite passa (ioredis-mock + Testcontainers)
+- [ ] PR `phase-4` aprovado — pending (implementation complete; not yet committed)
 
 ---
 

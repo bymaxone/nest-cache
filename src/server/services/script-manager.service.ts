@@ -115,20 +115,26 @@ export class ScriptManagerService implements OnApplicationBootstrap {
   }
 
   /**
-   * Executes a registered Lua script via `EVALSHA`. On `NOSCRIPT` the script is
-   * reloaded once and the call retried; any other failure (or a failed retry) is
-   * wrapped as a structured exception.
+   * Executes a registered Lua script.
+   *
+   * Standalone / sentinel use `EVALSHA`; on `NOSCRIPT` the script is reloaded once
+   * and the call retried. CLUSTER uses `EVAL` (the full body): `EVALSHA` routes to
+   * the key's slot owner while `SCRIPT LOAD` is keyless (lands on an arbitrary
+   * node), so the owner could `NOSCRIPT` and a keyless reload would not fix it —
+   * `EVAL` ships the body and routes by key, so it always runs on the owner.
    *
    * Keys must already be namespaced — {@link CacheService.eval} handles that for
-   * consumer-facing usage.
+   * consumer-facing usage. In cluster mode all keys of a single call must hash to
+   * the same slot (use a hash tag), per Redis cluster semantics.
    *
    * @param name - The registered script name.
    * @param keys - `KEYS[]` for the script (already namespaced).
    * @param args - `ARGV[]` for the script.
    * @returns The script's return value, typed `unknown` (Redis Lua is dynamic).
    * @throws {CacheException} `SCRIPT_NOT_REGISTERED` when `name` is unknown.
-   * @throws {CacheException} `SCRIPT_EXECUTION_FAILED` on a non-`NOSCRIPT` error
-   *   or a failed reload-and-retry. The Lua source is never echoed in the error.
+   * @throws {CacheException} `SCRIPT_EXECUTION_FAILED` on a non-`NOSCRIPT` error,
+   *   a failed reload-and-retry, or any cluster `EVAL` failure. The Lua source is
+   *   never echoed in the error.
    */
   async eval(
     name: string,
@@ -140,6 +146,16 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       throw new CacheException(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, { name })
     }
     const client = this.connection.getClient()
+    if (this.options.mode === 'cluster') {
+      try {
+        return await client.eval(entry.lua, keys.length, ...keys, ...args)
+      } catch (err) {
+        throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
+          name,
+          originalError: toErrorMessage(err)
+        })
+      }
+    }
     try {
       const sha = entry.sha ?? (await this.load(name))
       return await client.evalsha(sha, keys.length, ...keys, ...args)

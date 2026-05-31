@@ -15,7 +15,7 @@ import type {
   OptionalFactoryDependency,
   Type
 } from '@nestjs/common'
-import type { ClusterNode, ClusterOptions, RedisOptions, SentinelAddress } from 'ioredis'
+import type { ClusterNode, ClusterOptions, NatMap, RedisOptions, SentinelAddress } from 'ioredis'
 
 import type { ICacheEvents } from './cache-events.interface'
 import type { IScriptDefinition } from './script-definition.interface'
@@ -78,6 +78,14 @@ export interface BymaxCacheSentinelConnection {
   password?: string
   /** Connect to the master or a replica. */
   role?: 'master' | 'slave'
+  /**
+   * Rewrites the master/replica addresses the sentinels announce. Needed when the
+   * sentinels report addresses that are not reachable as-is from the client —
+   * e.g. a NAT'd Docker/Kubernetes network where the announced internal IP must
+   * be translated to a published host. Maps `'<announced-host>:<port>'` to the
+   * reachable `{ host, port }`.
+   */
+  natMap?: NatMap
 }
 
 /** Cluster-mode connection settings. Required when `mode === 'cluster'`. */
@@ -117,7 +125,14 @@ export interface BymaxCacheModuleOptions {
    * Default: false. SAFETY: leave false in real production environments.
    */
   allowFlushInProduction?: boolean
-  /** Register the module as global. Default: true. */
+  /**
+   * Register the module as global. Default: true.
+   *
+   * @remarks Read by {@link BymaxCacheModule.forRoot}. For `forRootAsync` the
+   * `global` flag is decided synchronously — before the async factory resolves —
+   * so pass `isGlobal` at the `forRootAsync({ isGlobal, ... })` call site; an
+   * `isGlobal` returned from inside the async `useFactory` has no effect.
+   */
   isGlobal?: boolean
   /** Lua scripts pre-registered at module init (Phase 3). */
   scripts?: readonly IScriptDefinition[]
@@ -126,6 +141,12 @@ export interface BymaxCacheModuleOptions {
 /**
  * Async configuration for `BymaxCacheModule.forRootAsync()` (Phase 4).
  * Standard NestJS dynamic-module async options shape.
+ *
+ * @remarks The recommended async-registration contract: a `useFactory` returning
+ * the module options. `forRootAsync`'s parameter is the builder-generated
+ * async-options type — a superset that also accepts NestJS's `useClass` /
+ * `useExisting` provider strategies — so this curated interface documents the
+ * common `useFactory` path most consumers use rather than redefining it.
  */
 export interface BymaxCacheModuleAsyncOptions {
   /** Modules to import so the factory can inject their providers. */
