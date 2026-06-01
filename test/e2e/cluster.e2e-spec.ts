@@ -83,8 +83,10 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
 
     const error = await drain().catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(CacheException)
-    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
-    expect((error as CacheException).details).toEqual({ operation: 'scan' })
+    if (!(error instanceof CacheException))
+      throw new Error(`expected CacheException, got ${String(error)}`)
+    expect(error.code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+    expect(error.details).toEqual({ operation: 'scan' })
   })
 
   // flushNamespace must fail closed in cluster mode for the same reason — it
@@ -92,8 +94,10 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
   it('rejects flushNamespace with UNSUPPORTED_IN_CLUSTER', async () => {
     const error = await cache.flushNamespace().catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(CacheException)
-    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
-    expect((error as CacheException).details).toEqual({ operation: 'flushNamespace' })
+    if (!(error instanceof CacheException))
+      throw new Error(`expected CacheException, got ${String(error)}`)
+    expect(error.code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+    expect(error.details).toEqual({ operation: 'flushNamespace' })
   })
 
   // The connection must report healthy against the cluster (PING on a node).

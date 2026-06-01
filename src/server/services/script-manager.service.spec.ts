@@ -184,14 +184,14 @@ describe('ScriptManagerService', () => {
   // A non-Error rejection must still be stringified into details (the non-Error
   // branch of the message extractor) and wrapped as SCRIPT_EXECUTION_FAILED.
   it('stringifies a non-Error rejection into the wrapped error', async () => {
+    expect.assertions(3)
     evalsha.mockRejectedValue('plain-string-failure')
 
-    await registry.eval('cas', [], []).catch((error: unknown) => {
-      const cacheError = error as CacheException
-      expect(cacheError.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
-      expect(cacheError.details?.['originalError']).toBe('plain-string-failure')
-    })
-    await expect(registry.eval('cas', [], [])).rejects.toBeInstanceOf(CacheException)
+    const caught = await registry.eval('cas', [], []).catch((e: unknown) => e)
+    expect(caught).toBeInstanceOf(CacheException)
+    if (!(caught instanceof CacheException)) throw caught
+    expect(caught.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect(caught.details?.['originalError']).toBe('plain-string-failure')
   })
 
   // In cluster mode eval must use EVAL with the full Lua body (routed by key),

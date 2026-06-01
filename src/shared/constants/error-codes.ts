@@ -28,7 +28,7 @@ export const CACHE_ERROR_CODES = {
   SENTINEL_MISCONFIGURED: 'cache.sentinel_misconfigured',
   SHUTDOWN_TIMEOUT: 'cache.shutdown_timeout',
   UNSUPPORTED_IN_CLUSTER: 'cache.unsupported_in_cluster'
-} as const
+} as const satisfies Record<string, `cache.${string}`>
 
 /** Union of every cache error code string value. */
 export type CacheErrorCode = (typeof CACHE_ERROR_CODES)[keyof typeof CACHE_ERROR_CODES]

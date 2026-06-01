@@ -10,7 +10,11 @@
 /** Resolved module options (connection, namespace, events, scripts). */
 export const BYMAX_CACHE_OPTIONS = Symbol('BYMAX_CACHE_OPTIONS')
 
-/** The singleton ioredis client managed by the connection manager. */
+/**
+ * The connection manager holding the singleton ioredis client. Consumers can
+ * call `.getClient()` on the injected value to access the raw client. Wired as
+ * `useExisting: ConnectionManager` so it resolves to the same instance.
+ */
 export const BYMAX_CACHE_CONNECTION = Symbol('BYMAX_CACHE_CONNECTION')
 
 /** Registry of preloaded Lua scripts (name → SHA). */

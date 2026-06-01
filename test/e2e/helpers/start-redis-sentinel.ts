@@ -57,7 +57,7 @@ export async function startRedisSentinel(): Promise<StartedRedisSentinel> {
     'port 26379',
     `sentinel monitor mymaster ${masterIp} 6379 1`,
     'sentinel down-after-milliseconds mymaster 5000'
-  ].join('\\n')
+  ].join('\\n') // literal \n — printf in the container shell interprets it as a newline
 
   const sentinel = await new GenericContainer(image)
     .withNetwork(network)

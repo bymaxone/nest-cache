@@ -2,9 +2,9 @@
  * Lua script definition contract.
  *
  * Layer: server. Describes a named Lua script pre-registered with the script
- * manager (Phase 3). The manager runs the register → `SCRIPT LOAD` → `EVALSHA`
- * cycle, falling back to a full `EVAL` on `NOSCRIPT` (script evicted from the
- * Redis cache).
+ * manager. The manager runs the register → `SCRIPT LOAD` → `EVALSHA` cycle,
+ * falling back to a full `EVAL` on `NOSCRIPT` (script evicted from the Redis
+ * cache).
  */
 
 /**

@@ -34,8 +34,8 @@
   },
   "scripts": {
     "build": "pnpm clean && tsup",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "eslint src scripts",
+    "lint:fix": "eslint src scripts --fix",
     "test": "jest",
     "test:cov": "jest --coverage",
     "test:watch": "jest --watch",

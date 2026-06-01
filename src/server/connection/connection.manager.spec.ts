@@ -36,7 +36,7 @@ var redisInstances: CapturedRedis[]
 var clusterInstances: CapturedCluster[]
 // Initial `status` for the next constructed FakeRedis. Most tests want 'wait'
 // (drives the readiness wait); the already-ready short-circuit test flips it.
-var nextRedisStatus: string
+var nextRedisStatus: string = 'wait'
 
 jest.mock('ioredis', () => {
   // Defined inside the factory so the classes exist before any captured import
@@ -198,6 +198,22 @@ describe('ConnectionManager', () => {
       expect(opts['password']).toBe('p')
       expect(opts['role']).toBe('master')
       expect(opts['natMap']).toBe(natMap)
+    })
+
+    // The modern 'replica' role must be normalised to 'slave' before reaching
+    // ioredis 5 (which only accepts 'slave' at the wire level).
+    it("normalises role: 'replica' to 'slave' for ioredis", () => {
+      const manager = makeManager({
+        mode: 'sentinel',
+        sentinel: {
+          name: 'mymaster',
+          sentinels: [{ host: 's', port: 26379 }],
+          role: 'replica'
+        }
+      })
+
+      manager.getClient()
+      expect(redisInstances[0]?.options['role']).toBe('slave')
     })
 
     // A sentinel block WITHOUT the optional secrets/role covers the false side of

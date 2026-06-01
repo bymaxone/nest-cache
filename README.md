@@ -31,12 +31,6 @@
 
 ---
 
-> [!NOTE]
-> **Status: under active development.** The package layout, tooling, CI/CD, and the 100% coverage
-> gate follow the Bymax lib standard and are already in place. The cache engine ships across
-> Phases 1-4 — see [`docs/development_plan.md`](./docs/development_plan.md). The API documented
-> below is the **target design** from [`docs/technical_specification.md`](./docs/technical_specification.md).
-
 ## ✨ Overview
 
 `@bymax-one/nest-cache` wraps a single, correctly-managed `ioredis` connection behind a typed
@@ -88,7 +82,61 @@ pnpm add @bymax-one/nest-cache ioredis
 
 ## 🚀 Quick Start
 
-**1. Register the module** (once, in your root module):
+```bash
+pnpm add @bymax-one/nest-cache ioredis
+```
+
+### Scenario 1 — Standalone (dev / single node)
+
+```typescript
+import { Module } from '@nestjs/common'
+import { BymaxCacheModule } from '@bymax-one/nest-cache'
+
+@Module({
+  imports: [
+    BymaxCacheModule.forRoot({
+      connection: { url: 'redis://localhost:6379' },
+      namespace: 'app'
+    })
+  ]
+})
+export class AppModule {}
+```
+
+### Scenario 2 — Sentinel (high availability)
+
+```typescript
+BymaxCacheModule.forRoot({
+  mode: 'sentinel',
+  sentinel: {
+    sentinels: [
+      { host: 'sentinel1.example.com', port: 26379 },
+      { host: 'sentinel2.example.com', port: 26379 }
+    ],
+    name: 'mymaster',
+    password: process.env.REDIS_PASSWORD
+  },
+  namespace: 'app'
+})
+```
+
+### Scenario 3 — Cluster (sharded)
+
+```typescript
+BymaxCacheModule.forRoot({
+  mode: 'cluster',
+  cluster: {
+    nodes: [
+      { host: 'cluster1.example.com', port: 7000 },
+      { host: 'cluster2.example.com', port: 7001 },
+      { host: 'cluster3.example.com', port: 7002 }
+    ]
+  },
+  namespace: 'app'
+})
+```
+
+### Scenario 4 — forRootAsync with ConfigService
 
 ```typescript
 import { Module } from '@nestjs/common'
@@ -104,7 +152,7 @@ import { BymaxCacheModule } from '@bymax-one/nest-cache'
         connection: { url: config.getOrThrow<string>('REDIS_URL') },
         namespace: 'app',
         events: {
-          // Plug @bymax-one/nest-logger or a metrics layer here
+          // Plug @bymax-one/nest-logger or a metrics sink here
           onEvent: (event, data) => console.log(`[cache] ${event}`, data)
         }
       })
@@ -114,7 +162,7 @@ import { BymaxCacheModule } from '@bymax-one/nest-cache'
 export class AppModule {}
 ```
 
-**2. Inject `CacheService`** anywhere (the module is global by default):
+**Inject `CacheService`** anywhere (the module is global by default):
 
 ```typescript
 import { Injectable } from '@nestjs/common'
@@ -135,7 +183,7 @@ export class ProfileService {
 }
 ```
 
-The keys above resolve to `app:user-profile:<userId>` — namespaced automatically.
+Keys resolve to `app:user-profile:<userId>` — namespaced automatically.
 
 ## ⚙️ Configuration
 
@@ -184,7 +232,9 @@ SHA1 and uses `EVALSHA`, transparently reloading on `NOSCRIPT`:
 // In module options:
 scripts: [{ name: 'compareAndSet', lua: '...' }]
 
-// At call site (keys are namespaced for you):
+// At call site — keys are flat strings passed directly to Lua's KEYS[] table.
+// CacheService prepends the namespace via applyNamespace(), so 'lock:job'
+// becomes 'app:lock:job' in Redis. Pass the full suffix as a single string.
 const ok = await cache.eval('compareAndSet', ['lock:job'], [expected, next])
 ```
 
@@ -233,10 +283,110 @@ DI tokens are `Symbol`s (`BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`, `BYMAX
 
 `CacheException` (extends `HttpException`) + `CACHE_ERROR_CODES` (namespaced `cache.*`).
 
+## 🪪 Default Error Codes
+
+All errors are instances of `CacheException` and carry a stable `code` string from `CACHE_ERROR_CODES`:
+
+| Code                                 | HTTP | When thrown                                                     |
+| ------------------------------------ | ---- | --------------------------------------------------------------- |
+| `cache.connection_failed`            | 500  | Cannot connect after retries                                    |
+| `cache.command_timeout`              | 504  | Command exceeded `commandTimeout`                               |
+| `cache.connection_lost`              | 503  | Connection dropped during an in-flight operation                |
+| `cache.deserialization_failed`       | 500  | Malformed payload in `get<T>`                                   |
+| `cache.serialization_failed`         | 500  | Unserializable value in `set<T>`                                |
+| `cache.invalid_key`                  | 400  | Empty prefix or id passed to `build` / `applyNamespace`         |
+| `cache.invalid_namespace`            | 500  | Empty or separator-containing namespace                         |
+| `cache.script_not_registered`        | 500  | `eval(name)` before `register(name)`                            |
+| `cache.script_execution_failed`      | 500  | Lua runtime error or NOSCRIPT retry failure                     |
+| `cache.script_registry_missing`      | 500  | `eval` called when no `ScriptManagerService` is wired           |
+| `cache.flush_disabled_in_production` | 403  | `flushNamespace()` in prod without `allowFlushInProduction`     |
+| `cache.unsupported_in_cluster`       | 500  | `scan`, `flushNamespace`, or `getClient` called in cluster mode |
+| `cache.cluster_misconfigured`        | 500  | `mode: 'cluster'` without `cluster.nodes`                       |
+| `cache.sentinel_misconfigured`       | 500  | `mode: 'sentinel'` without `sentinel.sentinels`/`name`          |
+| `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`                           |
+
+Full catalog and HTTP status mapping: [`docs/technical_specification.md §12`](./docs/technical_specification.md).
+
+## 🔁 Custom Serializer
+
+Swap the default `JsonSerializer` with any `ISerializer` implementation — MsgPack, CBOR, or your own:
+
+```typescript
+import { encode, decode } from '@msgpack/msgpack'
+import type { ISerializer } from '@bymax-one/nest-cache'
+
+class MsgPackSerializer implements ISerializer {
+  serialize<T>(value: T): string {
+    return Buffer.from(encode(value)).toString('base64')
+  }
+  deserialize<T>(raw: string): T {
+    return decode(Buffer.from(raw, 'base64')) as T
+  }
+}
+
+// In module options:
+BymaxCacheModule.forRoot({
+  connection: { url: 'redis://localhost:6379' },
+  serializer: new MsgPackSerializer()
+})
+```
+
+## 🔗 Plug with @bymax-one/nest-logger
+
+Wire connection events into your logger via the `events.onEvent` hook:
+
+```typescript
+import { BymaxOneLogger } from '@bymax-one/nest-logger'
+
+BymaxCacheModule.forRootAsync({
+  imports: [ConfigModule, LoggerModule],
+  inject: [ConfigService, BymaxOneLogger],
+  useFactory: (config: ConfigService, logger: BymaxOneLogger) => ({
+    connection: { url: config.getOrThrow('REDIS_URL') },
+    namespace: 'app',
+    events: {
+      onEvent: (event, data) => {
+        if (event === 'error') logger.error('[cache]', data)
+        else logger.log(`[cache] ${event}`, data)
+      }
+    }
+  })
+})
+```
+
+## ❤️ Health Check (terminus integration)
+
+```typescript
+import { Controller, Get } from '@nestjs/common'
+import { HealthCheck, HealthCheckService } from '@nestjs/terminus'
+import { CacheService } from '@bymax-one/nest-cache'
+
+@Controller('health')
+export class HealthController {
+  constructor(
+    private readonly health: HealthCheckService,
+    private readonly cache: CacheService
+  ) {}
+
+  @Get()
+  @HealthCheck()
+  check() {
+    return this.health.check([
+      () =>
+        this.cache
+          .isHealthy()
+          .then((ok) =>
+            ok ? { redis: { status: 'up' } } : Promise.reject(new Error('Redis not ready'))
+          )
+    ])
+  }
+}
+```
+
 ## 🧪 Testing & Quality
 
 - **100% coverage** (statements / branches / functions / lines) — enforced by `jest.coverage.config.ts` as a pre-publish gate, not a target.
-- **Mutation testing** — Stryker configured with `break: 95` and `ignoreStatic: false`; the baseline runs as a manual release gate (Phase 5). See [`docs/mutation_testing_plan.md`](./docs/mutation_testing_plan.md).
+- **Mutation testing** — Stryker with `break: 95` and `ignoreStatic: false`; **100% global score** (427 killed, 0 survived). See [`docs/mutation_testing_results.md`](./docs/mutation_testing_results.md).
 - **E2E** — `@nestjs/testing` with `ioredis-mock` and Testcontainers (real Redis) for connection lifecycle, Pub/Sub, and Lua scripts.
 - **Dogfood smoke test** — `scripts/dogfood-smoke-test.mjs` validates the published package shape (exports, tarball, consumer install) before tagging.
 

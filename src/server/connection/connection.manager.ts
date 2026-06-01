@@ -89,7 +89,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    *
    * Ownership of the returned client transfers to the caller: `onModuleDestroy`
    * quits only the main client, so a subscriber client must be quit/disconnected
-   * by its owner (the Pub/Sub service, Phase 3).
+   * by its owner (the Pub/Sub service).
    *
    * The subscriber is a control-plane connection (only SUBSCRIBE / UNSUBSCRIBE),
    * so its offline queue is enabled — a subscribe issued before the socket is
@@ -170,7 +170,11 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
           sentinelPassword: sentinel.sentinelPassword
         }),
         ...(sentinel.password !== undefined && { password: sentinel.password }),
-        ...(sentinel.role !== undefined && { role: sentinel.role }),
+        // Normalize 'replica' → 'slave' — ioredis 5 only accepts 'slave' at the
+        // wire level; our public interface accepts 'replica' per Redis 7 naming.
+        ...(sentinel.role !== undefined && {
+          role: sentinel.role === 'replica' ? 'slave' : sentinel.role
+        }),
         ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap })
       })
     }

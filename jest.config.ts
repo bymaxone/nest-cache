@@ -4,6 +4,7 @@ const config: Config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: 'src',
+  coverageDirectory: '<rootDir>/../coverage',
   testMatch: ['**/*.spec.ts', '**/*.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   // Mirror the subpath aliases declared in tsconfig.json "paths" so that tests

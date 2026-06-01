@@ -19,4 +19,6 @@ import type { ISerializer } from '../interfaces/serializer.interface'
  *   otherwise a fresh {@link JsonSerializer}.
  */
 export const resolveSerializer = (options: ResolvedOptions, injected?: ISerializer): ISerializer =>
+  // JsonSerializer has no constructor arguments; manual instantiation is intentional
+  // here so this utility has no NestJS DI dependency and stays importable anywhere.
   options.serializer ?? injected ?? new JsonSerializer()

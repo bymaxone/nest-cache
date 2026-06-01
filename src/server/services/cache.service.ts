@@ -527,6 +527,7 @@ export class CacheService {
     const stream = client.scanStream({ match: fullPattern, count })
     for await (const chunk of stream) {
       for (const key of chunk as string[]) {
+        // ScanStream pushes string[] batches — ioredis internal contract
         yield key
       }
     }
@@ -557,13 +558,18 @@ export class CacheService {
    * Returns the raw ioredis client (escape hatch).
    *
    * Keys used through the returned client are NOT auto-namespaced. Reach for
-   * this only to run a command this facade does not expose; the cast assumes a
-   * standalone / sentinel `Redis` and is unsound under Cluster.
+   * this only to run a command this facade does not expose.
    *
    * @returns The singleton ioredis client.
+   * @throws {CacheException} `UNSUPPORTED_IN_CLUSTER` when called in cluster
+   *   mode — `Cluster` does not share the full `Redis` API surface.
    */
   getClient(): Redis {
-    return this.connection.getClient() as Redis
+    const client = this.connection.getClient()
+    if (!isScannableClient(client)) {
+      throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'getClient' })
+    }
+    return client
   }
 
   // ─── Destructive maintenance ───────────────────────────────────────────────
@@ -602,7 +608,7 @@ export class CacheService {
     let total = 0
 
     for await (const chunk of stream) {
-      const keys = chunk as string[]
+      const keys = chunk as string[] // ScanStream pushes string[] batches — ioredis internal contract
       if (keys.length > 0) {
         total += await client.unlink(...keys)
       }

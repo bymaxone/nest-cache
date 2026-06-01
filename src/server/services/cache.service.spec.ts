@@ -490,6 +490,27 @@ describe('CacheService', () => {
     it('getClient returns the singleton ioredis client', () => {
       expect(cache.getClient()).toBe(connection.getClient())
     })
+
+    // In cluster mode scanStream is absent; getClient must fail closed with the
+    // UNSUPPORTED_IN_CLUSTER code and operation: 'getClient' in details — pins
+    // the throw-site mutants (ObjectLiteral→{} and StringLiteral→'').
+    it('throws UNSUPPORTED_IN_CLUSTER when scanStream is unavailable (cluster mode)', () => {
+      Object.defineProperty(connection.getClient(), 'scanStream', {
+        value: undefined,
+        configurable: true
+      })
+
+      let caught: unknown
+      try {
+        cache.getClient()
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).toBeInstanceOf(CacheException)
+      if (!(caught instanceof CacheException)) throw caught
+      expect(caught.code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+      expect(caught.details).toEqual({ operation: 'getClient' })
+    })
   })
 
   describe('flushNamespace', () => {
@@ -630,13 +651,15 @@ describe('CacheService', () => {
     // With a script manager, keys are namespaced before delegation while args
     // and the return value pass through untouched.
     it('namespaces keys and delegates to the script manager', async () => {
-      const evalMock = jest.fn().mockResolvedValue('lua-result')
+      // Type the mock to match the eval signature so the partial stub is
+      // structurally checked — avoids laundering unknown through as unknown as.
+      const evalMock: ScriptManagerService['eval'] = jest.fn().mockResolvedValue('lua-result')
       const cacheWithScripts = new CacheService(
         applyDefaults({ connection: { host: 'h' }, namespace: 'test' }),
         connection,
         keyBuilder,
         undefined,
-        { eval: evalMock } as unknown as ScriptManagerService
+        { eval: evalMock } as Pick<ScriptManagerService, 'eval'> as ScriptManagerService
       )
 
       const result = await cacheWithScripts.eval('cas', ['k1', 'k2'], [1, 'a'])
