@@ -491,15 +491,25 @@ describe('CacheService', () => {
       expect(cache.getClient()).toBe(connection.getClient())
     })
 
-    // In cluster mode scanStream is absent; getClient must fail closed rather
-    // than return a Cluster instance silently cast to Redis.
+    // In cluster mode scanStream is absent; getClient must fail closed with the
+    // UNSUPPORTED_IN_CLUSTER code and operation: 'getClient' in details — pins
+    // the throw-site mutants (ObjectLiteral→{} and StringLiteral→'').
     it('throws UNSUPPORTED_IN_CLUSTER when scanStream is unavailable (cluster mode)', () => {
       Object.defineProperty(connection.getClient(), 'scanStream', {
         value: undefined,
         configurable: true
       })
 
-      expect(() => cache.getClient()).toThrow(CacheException)
+      let caught: unknown
+      try {
+        cache.getClient()
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).toBeInstanceOf(CacheException)
+      if (!(caught instanceof CacheException)) throw caught
+      expect(caught.code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+      expect(caught.details).toEqual({ operation: 'getClient' })
     })
   })
 

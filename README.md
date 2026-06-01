@@ -287,23 +287,23 @@ DI tokens are `Symbol`s (`BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`, `BYMAX
 
 All errors are instances of `CacheException` and carry a stable `code` string from `CACHE_ERROR_CODES`:
 
-| Code                                 | HTTP | When thrown                                                 |
-| ------------------------------------ | ---- | ----------------------------------------------------------- |
-| `cache.connection_failed`            | 500  | Cannot connect after retries                                |
-| `cache.command_timeout`              | 504  | Command exceeded `commandTimeout`                           |
-| `cache.connection_lost`              | 503  | Connection dropped during an in-flight operation            |
-| `cache.deserialization_failed`       | 500  | Malformed payload in `get<T>`                               |
-| `cache.serialization_failed`         | 500  | Unserializable value in `set<T>`                            |
-| `cache.invalid_key`                  | 400  | Empty prefix or id passed to `build` / `applyNamespace`     |
-| `cache.invalid_namespace`            | 500  | Empty or separator-containing namespace                     |
-| `cache.script_not_registered`        | 500  | `eval(name)` before `register(name)`                        |
-| `cache.script_execution_failed`      | 500  | Lua runtime error or NOSCRIPT retry failure                 |
-| `cache.script_registry_missing`      | 500  | `eval` called when no `ScriptManagerService` is wired       |
-| `cache.flush_disabled_in_production` | 403  | `flushNamespace()` in prod without `allowFlushInProduction` |
-| `cache.unsupported_in_cluster`       | 500  | `scan` or `flushNamespace` called in cluster mode           |
-| `cache.cluster_misconfigured`        | 500  | `mode: 'cluster'` without `cluster.nodes`                   |
-| `cache.sentinel_misconfigured`       | 500  | `mode: 'sentinel'` without `sentinel.sentinels`/`name`      |
-| `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`                       |
+| Code                                 | HTTP | When thrown                                                     |
+| ------------------------------------ | ---- | --------------------------------------------------------------- |
+| `cache.connection_failed`            | 500  | Cannot connect after retries                                    |
+| `cache.command_timeout`              | 504  | Command exceeded `commandTimeout`                               |
+| `cache.connection_lost`              | 503  | Connection dropped during an in-flight operation                |
+| `cache.deserialization_failed`       | 500  | Malformed payload in `get<T>`                                   |
+| `cache.serialization_failed`         | 500  | Unserializable value in `set<T>`                                |
+| `cache.invalid_key`                  | 400  | Empty prefix or id passed to `build` / `applyNamespace`         |
+| `cache.invalid_namespace`            | 500  | Empty or separator-containing namespace                         |
+| `cache.script_not_registered`        | 500  | `eval(name)` before `register(name)`                            |
+| `cache.script_execution_failed`      | 500  | Lua runtime error or NOSCRIPT retry failure                     |
+| `cache.script_registry_missing`      | 500  | `eval` called when no `ScriptManagerService` is wired           |
+| `cache.flush_disabled_in_production` | 403  | `flushNamespace()` in prod without `allowFlushInProduction`     |
+| `cache.unsupported_in_cluster`       | 500  | `scan`, `flushNamespace`, or `getClient` called in cluster mode |
+| `cache.cluster_misconfigured`        | 500  | `mode: 'cluster'` without `cluster.nodes`                       |
+| `cache.sentinel_misconfigured`       | 500  | `mode: 'sentinel'` without `sentinel.sentinels`/`name`          |
+| `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`                           |
 
 Full catalog and HTTP status mapping: [`docs/technical_specification.md §12`](./docs/technical_specification.md).
 

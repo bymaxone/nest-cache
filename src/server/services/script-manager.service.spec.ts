@@ -187,12 +187,11 @@ describe('ScriptManagerService', () => {
     expect.assertions(3)
     evalsha.mockRejectedValue('plain-string-failure')
 
-    await expect(registry.eval('cas', [], [])).rejects.toBeInstanceOf(CacheException)
-    await registry.eval('cas', [], []).catch((error: unknown) => {
-      const cacheError = error as CacheException
-      expect(cacheError.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
-      expect(cacheError.details?.['originalError']).toBe('plain-string-failure')
-    })
+    const caught = await registry.eval('cas', [], []).catch((e: unknown) => e)
+    expect(caught).toBeInstanceOf(CacheException)
+    if (!(caught instanceof CacheException)) throw caught
+    expect(caught.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect(caught.details?.['originalError']).toBe('plain-string-failure')
   })
 
   // In cluster mode eval must use EVAL with the full Lua body (routed by key),
