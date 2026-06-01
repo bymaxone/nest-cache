@@ -1,7 +1,7 @@
 /**
  * Pub/Sub message handler contracts.
  *
- * Layer: server. Callback signatures the Pub/Sub service (Phase 3) invokes when
+ * Layer: server. Callback signatures the Pub/Sub service invokes when
  * a message arrives on a subscribed channel or pattern. The message is already
  * deserialized to `T` by the service.
  */

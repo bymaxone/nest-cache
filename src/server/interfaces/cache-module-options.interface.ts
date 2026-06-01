@@ -76,8 +76,14 @@ export interface BymaxCacheSentinelConnection {
   sentinelPassword?: string
   /** Password for the data nodes. */
   password?: string
-  /** Connect to the master or a replica. */
-  role?: 'master' | 'slave'
+  /**
+   * Connect to the master or a replica.
+   * @remarks `'replica'` is the current Redis 7 terminology; `'slave'` is still
+   * accepted by ioredis 5 at the wire level for backwards compatibility but
+   * should be avoided in new code. Both values are accepted here and normalised
+   * to the ioredis wire value internally.
+   */
+  role?: 'master' | 'replica' | 'slave'
   /**
    * Rewrites the master/replica addresses the sentinels announce. Needed when the
    * sentinels report addresses that are not reachable as-is from the client —
@@ -114,7 +120,7 @@ export interface BymaxCacheModuleOptions {
   namespace?: string
   /** Separator between namespace/prefix/id segments. Default: `':'`. */
   keySeparator?: string
-  /** Custom serializer. Default: `JsonSerializer` (Phase 2). */
+  /** Custom serializer. Default: `JsonSerializer`. */
   serializer?: ISerializer
   /** Connection lifecycle event hooks — plug a logger or metrics sink here. */
   events?: ICacheEvents
@@ -134,12 +140,12 @@ export interface BymaxCacheModuleOptions {
    * `isGlobal` returned from inside the async `useFactory` has no effect.
    */
   isGlobal?: boolean
-  /** Lua scripts pre-registered at module init (Phase 3). */
+  /** Lua scripts pre-registered at module init. */
   scripts?: readonly IScriptDefinition[]
 }
 
 /**
- * Async configuration for `BymaxCacheModule.forRootAsync()` (Phase 4).
+ * Async configuration for `BymaxCacheModule.forRootAsync()`.
  * Standard NestJS dynamic-module async options shape.
  *
  * @remarks The recommended async-registration contract: a `useFactory` returning

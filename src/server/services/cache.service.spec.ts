@@ -490,6 +490,17 @@ describe('CacheService', () => {
     it('getClient returns the singleton ioredis client', () => {
       expect(cache.getClient()).toBe(connection.getClient())
     })
+
+    // In cluster mode scanStream is absent; getClient must fail closed rather
+    // than return a Cluster instance silently cast to Redis.
+    it('throws UNSUPPORTED_IN_CLUSTER when scanStream is unavailable (cluster mode)', () => {
+      Object.defineProperty(connection.getClient(), 'scanStream', {
+        value: undefined,
+        configurable: true
+      })
+
+      expect(() => cache.getClient()).toThrow(CacheException)
+    })
   })
 
   describe('flushNamespace', () => {
@@ -630,13 +641,15 @@ describe('CacheService', () => {
     // With a script manager, keys are namespaced before delegation while args
     // and the return value pass through untouched.
     it('namespaces keys and delegates to the script manager', async () => {
-      const evalMock = jest.fn().mockResolvedValue('lua-result')
+      // Type the mock to match the eval signature so the partial stub is
+      // structurally checked — avoids laundering unknown through as unknown as.
+      const evalMock: ScriptManagerService['eval'] = jest.fn().mockResolvedValue('lua-result')
       const cacheWithScripts = new CacheService(
         applyDefaults({ connection: { host: 'h' }, namespace: 'test' }),
         connection,
         keyBuilder,
         undefined,
-        { eval: evalMock } as unknown as ScriptManagerService
+        { eval: evalMock } as Pick<ScriptManagerService, 'eval'> as ScriptManagerService
       )
 
       const result = await cacheWithScripts.eval('cas', ['k1', 'k2'], [1, 'a'])

@@ -20,6 +20,7 @@ import { JsonSerializer } from './utils/json-serializer'
 import { KeyBuilder } from './utils/key-builder'
 import { BymaxCacheModule } from './bymax-cache.module'
 import {
+  BYMAX_CACHE_CONNECTION,
   BYMAX_CACHE_EVENTS,
   BYMAX_CACHE_KEY_BUILDER,
   BYMAX_CACHE_OPTIONS,
@@ -29,7 +30,7 @@ import {
 import { MODULE_OPTIONS_TOKEN } from './bymax-cache.module.builder'
 
 import type { ISerializer } from './interfaces/serializer.interface'
-import type { DynamicModule, Provider } from '@nestjs/common'
+import type { DynamicModule } from '@nestjs/common'
 
 // Mock ioredis so constructing the module's ConnectionManager (during the
 // injectability test) never opens a real socket. A bare EventEmitter is enough
@@ -43,11 +44,7 @@ jest.mock('ioredis', () => {
   return { __esModule: true, Redis: FakeRedis, Cluster: FakeRedis, default: FakeRedis }
 })
 
-/** Locates a class/value provider entry by its provide token. */
-const findProvider = (providers: Provider[], token: unknown): Provider | undefined =>
-  providers.find(
-    (provider) => provider === token || (provider as { provide?: unknown }).provide === token
-  )
+import { findProvider } from '../test-helpers/provider.helpers'
 
 describe('BymaxCacheModule.forRoot', () => {
   // forRoot must return a global DynamicModule wiring every public token plus the
@@ -65,6 +62,7 @@ describe('BymaxCacheModule.forRoot', () => {
     expect(findProvider(providers, BYMAX_CACHE_KEY_BUILDER)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_SERIALIZER)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_SCRIPT_REGISTRY)).toBeDefined()
+    expect(findProvider(providers, BYMAX_CACHE_CONNECTION)).toBeDefined()
     expect(providers).toContain(ConnectionManager)
     expect(providers).toContain(KeyBuilder)
     expect(providers).toContain(CacheService)
@@ -73,6 +71,7 @@ describe('BymaxCacheModule.forRoot', () => {
 
     expect(mod.exports).toEqual([
       BYMAX_CACHE_OPTIONS,
+      BYMAX_CACHE_CONNECTION,
       BYMAX_CACHE_KEY_BUILDER,
       BYMAX_CACHE_SCRIPT_REGISTRY,
       BYMAX_CACHE_SERIALIZER,

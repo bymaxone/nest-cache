@@ -22,6 +22,7 @@ import { JsonSerializer } from './utils/json-serializer'
 import { KeyBuilder } from './utils/key-builder'
 import { BymaxCacheModule } from './bymax-cache.module'
 import {
+  BYMAX_CACHE_CONNECTION,
   BYMAX_CACHE_EVENTS,
   BYMAX_CACHE_KEY_BUILDER,
   BYMAX_CACHE_OPTIONS,
@@ -33,7 +34,7 @@ import { ConfigurableModuleClass, MODULE_OPTIONS_TOKEN } from './bymax-cache.mod
 import type { ICacheEvents } from './interfaces/cache-events.interface'
 import type { ISerializer } from './interfaces/serializer.interface'
 import type { ResolvedOptions } from './config/resolved-options'
-import type { DynamicModule, Provider } from '@nestjs/common'
+import type { DynamicModule } from '@nestjs/common'
 
 // Mock ioredis so the eagerly-instantiated ConnectionManager never opens a real
 // socket; a bare EventEmitter satisfies the listeners and lifecycle hooks.
@@ -46,11 +47,7 @@ jest.mock('ioredis', () => {
   return { __esModule: true, Redis: FakeRedis, Cluster: FakeRedis, default: FakeRedis }
 })
 
-/** Locates a class/value provider entry by its provide token. */
-const findProvider = (providers: Provider[], token: unknown): Provider | undefined =>
-  providers.find(
-    (provider) => provider === token || (provider as { provide?: unknown }).provide === token
-  )
+import { findProvider } from '../test-helpers/provider.helpers'
 
 /** A token an imported module exports, proving the async factory can `inject` it. */
 const HOST_CONFIG = Symbol('HOST_CONFIG')
@@ -91,6 +88,7 @@ describe('BymaxCacheModule.forRootAsync', () => {
     expect(findProvider(providers, BYMAX_CACHE_SERIALIZER)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_KEY_BUILDER)).toBeDefined()
     expect(findProvider(providers, BYMAX_CACHE_SCRIPT_REGISTRY)).toBeDefined()
+    expect(findProvider(providers, BYMAX_CACHE_CONNECTION)).toBeDefined()
     expect(providers).toContain(ConnectionManager)
     expect(providers).toContain(KeyBuilder)
     expect(providers).toContain(CacheService)
@@ -99,6 +97,7 @@ describe('BymaxCacheModule.forRootAsync', () => {
 
     expect(mod.exports).toEqual([
       BYMAX_CACHE_OPTIONS,
+      BYMAX_CACHE_CONNECTION,
       BYMAX_CACHE_KEY_BUILDER,
       BYMAX_CACHE_SCRIPT_REGISTRY,
       BYMAX_CACHE_SERIALIZER,
@@ -130,6 +129,7 @@ describe('BymaxCacheModule.forRootAsync', () => {
       BYMAX_CACHE_SERIALIZER,
       BYMAX_CACHE_KEY_BUILDER,
       BYMAX_CACHE_SCRIPT_REGISTRY,
+      BYMAX_CACHE_CONNECTION,
       JsonSerializer,
       ConnectionManager,
       KeyBuilder,

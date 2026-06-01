@@ -111,17 +111,18 @@ export class PubSubService implements OnModuleDestroy {
       subscriber.subscribe(fullChannel)
     )
 
-    const listener = async (incoming: string, raw: string): Promise<void> => {
+    // Synchronous void listener: the Promise chain makes the fire-and-forget
+    // intent structurally explicit — Node event emitters do not await returned
+    // Promises, so an async listener would silently drop any post-try/catch error.
+    const listener = (incoming: string, raw: string): void => {
       if (incoming !== fullChannel) {
         return
       }
-      try {
-        await handler(this.serializer.deserialize<T>(raw), incoming)
-      } catch (error) {
-        // A consumer handler (or a malformed payload) must never crash the shared
-        // subscriber connection — surface the failure to observability instead.
-        this.emitHandlerError(incoming, error)
-      }
+      Promise.resolve()
+        .then(() => handler(this.serializer.deserialize<T>(raw), incoming))
+        .catch((error: unknown) => {
+          this.emitHandlerError(incoming, error)
+        })
     }
     subscriber.on('message', listener)
 
@@ -152,20 +153,16 @@ export class PubSubService implements OnModuleDestroy {
       subscriber.psubscribe(fullPattern)
     )
 
-    const listener = async (
-      matchedPattern: string,
-      channel: string,
-      raw: string
-    ): Promise<void> => {
+    // Same synchronous-listener pattern as subscribe() — see that method for rationale.
+    const listener = (matchedPattern: string, channel: string, raw: string): void => {
       if (matchedPattern !== fullPattern) {
         return
       }
-      try {
-        await handler(this.serializer.deserialize<T>(raw), channel, matchedPattern)
-      } catch (error) {
-        // Forwarded for the same reason as subscribe() — protect the connection.
-        this.emitHandlerError(channel, error)
-      }
+      Promise.resolve()
+        .then(() => handler(this.serializer.deserialize<T>(raw), channel, matchedPattern))
+        .catch((error: unknown) => {
+          this.emitHandlerError(channel, error)
+        })
     }
     subscriber.on('pmessage', listener)
 

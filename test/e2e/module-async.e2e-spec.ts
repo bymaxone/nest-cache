@@ -42,11 +42,15 @@ describe('BymaxCacheModule.forRootAsync E2E (real Redis)', () => {
         BymaxCacheModule.forRootAsync({
           imports: [RedisConfigModule],
           inject: [REDIS_URL],
-          useFactory: (url: string) => ({
-            connection: { url },
-            namespace: 'e2e-async',
-            scripts: [{ name: 'incr-by', lua: INCREMENT_LUA }]
-          })
+          useFactory: (url: unknown) => {
+            if (typeof url !== 'string')
+              throw new TypeError(`REDIS_URL must be a string, got ${typeof url}`)
+            return {
+              connection: { url },
+              namespace: 'e2e-async',
+              scripts: [{ name: 'incr-by', lua: INCREMENT_LUA }]
+            }
+          }
         })
       ]
     })

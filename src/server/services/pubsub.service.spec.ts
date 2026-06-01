@@ -21,8 +21,8 @@ jest.mock('ioredis', () => {
   return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
 })
 
-/** Lets the async 'message'/'pmessage' listeners run before assertions. */
-const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 30))
+/** Yields to the event loop after a publish so Promise-chain listeners settle before assertions. */
+const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve))
 
 describe('PubSubService', () => {
   let options: ResolvedOptions
@@ -322,6 +322,8 @@ describe('PubSubService', () => {
       quit: jest.fn().mockRejectedValue(new Error('quit refused')),
       disconnect: jest.fn()
     }
+    // Partial stub — only the 6 methods the SUT calls are implemented; the
+    // double cast is necessary because the fake lacks Redis's 400+ other properties.
     jest
       .spyOn(connection, 'createSubscriberClient')
       .mockReturnValue(fakeSubscriber as unknown as Redis)
@@ -345,6 +347,7 @@ describe('PubSubService', () => {
       quit: jest.fn().mockResolvedValue('OK'),
       disconnect: jest.fn()
     }
+    // Partial stub — same rationale as the quit test above.
     jest
       .spyOn(connection, 'createSubscriberClient')
       .mockReturnValue(fakeSubscriber as unknown as Redis)

@@ -2,7 +2,7 @@
  * `BymaxCacheModule` — the public NestJS dynamic module.
  *
  * Layer: server. `forRoot()` (sync) and `forRootAsync()` (async factory) both
- * wire the full Phase 1–3 surface: `ConnectionManager`, `KeyBuilder`,
+ * wire the full surface: `ConnectionManager`, `KeyBuilder`,
  * `CacheService`, `PubSubService`, `ScriptManagerService`, the resolved
  * serializer, and the DI tokens. The topology-independent providers/exports are
  * factored into {@link BymaxCacheModule.buildCommonProviders} /
@@ -17,6 +17,7 @@ import { Module } from '@nestjs/common'
 import type { DynamicModule, Provider } from '@nestjs/common'
 
 import {
+  BYMAX_CACHE_CONNECTION,
   BYMAX_CACHE_EVENTS,
   BYMAX_CACHE_KEY_BUILDER,
   BYMAX_CACHE_OPTIONS,
@@ -163,7 +164,8 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
       PubSubService,
       ScriptManagerService,
       { provide: BYMAX_CACHE_KEY_BUILDER, useExisting: KeyBuilder },
-      { provide: BYMAX_CACHE_SCRIPT_REGISTRY, useExisting: ScriptManagerService }
+      { provide: BYMAX_CACHE_SCRIPT_REGISTRY, useExisting: ScriptManagerService },
+      { provide: BYMAX_CACHE_CONNECTION, useExisting: ConnectionManager }
     ]
   }
 
@@ -175,6 +177,7 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
   private static buildCommonExports(): NonNullable<DynamicModule['exports']> {
     return [
       BYMAX_CACHE_OPTIONS,
+      BYMAX_CACHE_CONNECTION,
       BYMAX_CACHE_KEY_BUILDER,
       BYMAX_CACHE_SCRIPT_REGISTRY,
       BYMAX_CACHE_SERIALIZER,

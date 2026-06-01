@@ -49,7 +49,7 @@
 
 > **Status legend:** 🔴 Not Started · 🟡 In Progress · 🟢 Done · ⚪ Blocked · 🔵 In Review
 
-> **Overall progress:** 🟡 48 / 58 tasks done (83%)
+> **Overall progress:** 🟡 56 / 58 tasks done (97%)
 
 | #   | Phase                                  | Done / Total | %    | Status |
 | --- | -------------------------------------- | ------------ | ---- | ------ |
@@ -57,7 +57,7 @@
 | 2   | CacheService + Typed Helpers           | 12 / 12      | 100% | 🟢     |
 | 3   | Pub/Sub + ScriptManager + Health       | 12 / 12      | 100% | 🟢     |
 | 4   | forRootAsync + E2E + Mutation Baseline | 9 / 9        | 100% | 🟢     |
-| 5   | Release v0.1.0                         | 0 / 10       | 0%   | 🔴     |
+| 5   | Release v0.1.0                         | 8 / 10       | 80%  | 🟡     |
 
 ---
 
@@ -3194,7 +3194,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm test:e2e && pnpm build 
 ### CACHE-049: README.md with badges + quick start + 4 scenarios
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-048
 - **Agent:** general-purpose
@@ -3251,7 +3251,7 @@ npx markdownlint-cli README.md --no-config || true
 ### CACHE-050: CHANGELOG.md + SECURITY.md
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-001
 - **Agent:** general-purpose
@@ -3317,7 +3317,7 @@ npx markdownlint-cli README.md --no-config || true
 ### CACHE-051: CLAUDE.md + AGENTS.md
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-001
 - **Agent:** general-purpose
@@ -3364,7 +3364,7 @@ npx markdownlint-cli README.md --no-config || true
 ### CACHE-052: CI workflow — ci.yml (typecheck + lint + test + e2e + build + dependency-review)
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-001
 - **Agent:** general-purpose
@@ -3403,7 +3403,7 @@ npx markdownlint-cli README.md --no-config || true
 ### CACHE-053: CI workflows — codeql.yml + scorecard.yml + release.yml
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-052
 - **Agent:** general-purpose
@@ -3441,7 +3441,7 @@ npx markdownlint-cli README.md --no-config || true
 ### CACHE-054: docs/mutation_testing_plan.md + results
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** Medium
 - **Dependencies:** CACHE-046
 - **Agent:** general-purpose
@@ -3493,7 +3493,7 @@ npx markdownlint-cli README.md --no-config || true
 ### CACHE-055: LICENSE (MIT) + .npmignore
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-001
 - **Agent:** general-purpose
@@ -3535,7 +3535,7 @@ pnpm pack --dry-run
 ### CACHE-056: Final pre-publish gate
 
 - **Phase:** 5
-- **Status:** ⬜ TODO
+- **Status:** ✅ DONE
 - **Priority:** High
 - **Dependencies:** CACHE-049 to CACHE-055
 - **Agent:** code-reviewer

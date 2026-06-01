@@ -78,9 +78,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     if (this.options.connection?.lazyConnect) {
       return
     }
-    for (const [name] of this.scripts) {
-      await this.load(name)
-    }
+    await Promise.all([...this.scripts.keys()].map((name) => this.load(name)))
   }
 
   /**
@@ -109,6 +107,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     }
     if (!entry.sha) {
       const client = this.connection.getClient()
+      // SCRIPT LOAD always returns the 40-char SHA1 per Redis protocol.
       entry.sha = (await client.script(SCRIPT_LOAD, entry.lua)) as string
     }
     return entry.sha
@@ -178,6 +177,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       // EITHER the reload (SCRIPT LOAD) or the retry, so the method's contract of
       // surfacing SCRIPT_EXECUTION_FAILED holds even if the reload itself fails.
       try {
+        // SCRIPT LOAD always returns the 40-char SHA1 per Redis protocol.
         const reloadedSha = (await client.script(SCRIPT_LOAD, entry.lua)) as string
         entry.sha = reloadedSha
         return await client.evalsha(reloadedSha, keys.length, ...keys, ...args)

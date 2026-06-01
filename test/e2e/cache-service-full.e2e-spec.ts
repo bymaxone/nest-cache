@@ -193,6 +193,7 @@ describe('CacheService full surface E2E (real Redis)', () => {
     const results = await pipe.exec()
 
     expect(results).not.toBeNull()
+    expect(results?.every(([err]) => err === null)).toBe(true)
     expect(await cache.getRaw('pipe', 'a')).toBe('1')
     expect(await cache.getRaw('pipe', 'b')).toBe('2')
   })
@@ -205,8 +206,8 @@ describe('CacheService full surface E2E (real Redis)', () => {
   })
 
   // flushNamespace must delete EVERY key under the configured namespace via
-  // SCAN + UNLINK, returning the count — and must not touch a different namespace.
-  // (Run last: it wipes the shared namespace the earlier tests populated.)
+  // SCAN + UNLINK, returning the count. The leading flush clears any leftover
+  // state so the subsequent count assertion is exact and order-independent.
   it('flushes only the configured namespace', async () => {
     await cache.flushNamespace() // clear whatever earlier tests left behind
     await cache.setRaw('flush', 'a', '1')

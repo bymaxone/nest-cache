@@ -1,8 +1,7 @@
 # Mutation Testing Plan — @bymax-one/nest-cache
 
-> **Status:** Stryker installed and configured; **not yet run** — the first
-> baseline is scheduled for **Phase 5** (release), per `docs/development_plan.md`.
-> Until then the library ships only the foundational seed.
+> **Status:** ✅ Baseline completed 2026-05-31 — **100% global score** (427 killed, 6 timeout, 0 survived).
+> Stryker exits 0 (`break: 95`). Run before every release tag.
 > **Results:** [`docs/mutation_testing_results.md`](./mutation_testing_results.md)
 
 ---
