@@ -78,7 +78,7 @@ pnpm mutation             # full run; writes reports/mutation/mutation.html
 pnpm mutation:incremental # faster re-run
 ```
 
-Do **not** add mutation testing to `prepublishOnly` or the per-PR CI — it is a manual/release gate.
+Mutation runs automatically **post-merge on `main`** via the shared reusable CI (`bymaxone/.github` → node-lib-ci) — never per-PR — and can also be run on demand with `pnpm mutation` before a release. Do **not** add it to `prepublishOnly` or the per-PR path.
 
 ---
 
