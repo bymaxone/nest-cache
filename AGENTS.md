@@ -84,7 +84,11 @@ public, MIT, zero-runtime-dependency package.
 - tsup → 2 subpaths, ESM + CJS + `.d.ts`/`.d.cts`, `sideEffects: false`, peers
   external. `minify: false` (readable backend bundle).
 - `files` allowlist publishes only `dist` + metadata. `pnpm size` gate +
-  `dogfood-smoke-test.mjs` before tagging. Release via OIDC provenance.
+  `pnpm check:exports` + `dogfood-smoke-test.mjs` before tagging. Release via
+  OIDC provenance.
+- `exports` declares `types` **per condition** — `import` → `.d.ts`, `require` →
+  `.d.cts`. A single shared `types` key makes CommonJS consumers resolve ESM
+  declarations, because `"type": "module"` marks plain `.d.ts` as ESM.
 
 ## 7. Common Pitfalls
 
@@ -101,7 +105,7 @@ public, MIT, zero-runtime-dependency package.
 1. Read the relevant section of `docs/technical_specification.md` and the matching
    `CACHE-xxx` task in `docs/development_tasks.md`.
 2. TDD: write the failing `*.spec.ts` first; keep 100% coverage.
-3. Run `pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size`.
+3. Run `pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports`.
 
 ## 9. Guidelines Reference
 

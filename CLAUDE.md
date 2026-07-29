@@ -68,7 +68,7 @@
 ## Verification — Run Before Completing Any Task
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size
+pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
 Mutation testing (before tagging a release), under Node 24:
