@@ -60,7 +60,7 @@ updates:
       # `@types/node` majors track the Node release line. `engines` declares
       # `>=24`, so typechecking against a newer major would let code compile
       # against APIs absent from the oldest runtime this package claims to
-      # support. Raise the floor in `engines` first, then this hold.
+      # support. Raise the floor in `engines` first, then lift this hold.
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]
 
