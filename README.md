@@ -512,7 +512,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 A cache is consulted on the hot path of every request that touches it, so the suite is held to a bar beyond "it runs" — every behavior is pinned so that a regression **fails a test**.
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced by `jest.coverage.config.ts` as a pre-publish gate, not a target
-- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 95` and `ignoreStatic: false`: 427 seeded faults killed, **no survivors**
+- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 95` and `ignoreStatic: false`: 433 seeded faults detected (427 killed, 6 timed out), **no survivors**
 - ✅ **Zero suppressions** — the production source carries no coverage or mutation directives; the one would-be equivalent mutant was refactored away rather than silenced, so the score is an accounting rather than a number
 - ✅ **No real Redis in unit tests** — `ioredis-mock` throughout; e2e tests exercise the wired module through `@nestjs/testing` and Testcontainers against a real Redis for connection lifecycle, Pub/Sub, and Lua scripts
 - ✅ **Published-package smoke test** — `scripts/dogfood-smoke-test.mjs` validates exports, tarball shape, and a consumer install before tagging

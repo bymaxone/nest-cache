@@ -3,7 +3,7 @@
 > **Type:** npm public library (NOT an application)
 > **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 5, with namespace strategy, Pub/Sub and Lua script management
 > **Runtime:** Node.js 24+ | Zero direct dependencies (functionality via peer deps)
-> **Status:** v0.1.0 complete — 100% coverage, 100% mutation score (427 killed, 0 survived). See `docs/mutation_testing_results.md`.
+> **Status:** v0.1.0 complete — 100% coverage, 100% mutation score (433 detected: 427 killed + 6 timeout, **0 survived**). See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
 ---
 
