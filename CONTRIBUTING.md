@@ -37,7 +37,7 @@ in [docs/development_plan.md](./docs/development_plan.md).
 ## Verification — run before every PR
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size
+pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
 All of the following must pass:
