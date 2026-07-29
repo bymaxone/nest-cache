@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-29
+
 ### Fixed
 
 - **CommonJS consumers no longer receive ESM type declarations.** Both subpaths
