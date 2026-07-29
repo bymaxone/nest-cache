@@ -88,7 +88,7 @@ pnpm add @bymax-one/nest-cache ioredis
 
 ### 🧩 Developer Experience
 
-- ✅ **Dynamic module** — `forRoot()` and `forRootAsync()` via `ConfigurableModuleBuilder`; `@Global()` by default
+- ✅ **Dynamic module** — `forRoot()` and `forRootAsync()` via `ConfigurableModuleBuilder`; registered globally by default (`isGlobal`)
 - ✅ **Lua script manager** — register scripts up front, execute by name with transparent `NOSCRIPT` reload + retry
 - ✅ **Structured errors** — every failure is a `CacheException` with a stable `cache.*` code and an HTTP status
 - ✅ **Zero runtime dependencies** — everything is a peer dependency; `dependencies: {}`
@@ -256,7 +256,7 @@ Keys resolve to `app:user-profile:<userId>` — namespaced automatically.
 | `scripts`           | `IScriptDefinition[]`                     | `[]`             | Lua scripts to preload on init                                     |
 | `shutdownTimeoutMs` | `number`                                  | `5000`           | Graceful `quit()` timeout before forced `disconnect()`             |
 
-Both `forRoot(options)` (synchronous) and `forRootAsync({ useFactory, inject, imports })` are supported. The module is `@Global()` by default.
+Both `forRoot(options)` (synchronous) and `forRootAsync({ useFactory, inject, imports })` are supported. The module registers globally by default — pass `isGlobal: false` to scope it to the importing module.
 
 ---
 
@@ -388,17 +388,31 @@ export class HealthController {
 
 ## 🏗️ Architecture
 
+The package runs **inside** your NestJS application as a dynamic module — not as a separate service:
+
 ```
-BymaxCacheModule (@Global, ConfigurableModuleBuilder)
-  ├── ConnectionManager      singleton ioredis client + lifecycle (standalone/sentinel/cluster)
-  ├── CacheService           typed, namespaced command API + eval + health
-  ├── PubSubService          publish / subscribe / psubscribe (lazy subscriber)
-  ├── ScriptManagerService   Lua register / load / EVALSHA + NOSCRIPT fallback
-  ├── KeyBuilder             {namespace}:{prefix}:{id} composition
-  └── ISerializer            JsonSerializer (default) — fail-closed
+┌─────────────────────────────────────────────────────┐
+│               Your NestJS Application               │
+│                                                     │
+│  ┌───────────────────────────────────────────────┐  │
+│  │             @bymax-one/nest-cache             │  │
+│  │                                               │  │
+│  │  CacheService ←→ ConnectionManager ←→ Redis   │  │
+│  │  PubSubService ←→ lazy subscriber conn        │  │
+│  │  ScriptManagerService ←→ EVALSHA + NOSCRIPT   │  │
+│  │  KeyBuilder → {namespace}:{prefix}:{id}       │  │
+│  └─────────────┬─────────────────┬───────────────┘  │
+│                │                 │                  │
+│        ┌───────▼──────┐  ┌───────▼──────┐           │
+│        │ ISerializer  │  │ ICacheEvents │           │
+│        │ (yours)      │  │ (yours)      │           │
+│        └──────────────┘  └──────────────┘           │
+└─────────────────────────────────────────────────────┘
 ```
 
-DI tokens are `Symbol`s (`BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`, `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`, `BYMAX_CACHE_SERIALIZER`, `BYMAX_CACHE_KEY_BUILDER`); all providers are singletons.
+Both consumer-facing contracts are optional: omit `serializer` and you get `JsonSerializer`; omit `events.onEvent` and connection events are simply not forwarded anywhere.
+
+DI tokens are `Symbol`s (`BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`, `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`, `BYMAX_CACHE_SERIALIZER`, `BYMAX_CACHE_KEY_BUILDER`); all providers are singletons. The module is built with `ConfigurableModuleBuilder` and registers globally by default via the `isGlobal` extra (which sets `DynamicModule.global`) — there is no `@Global()` decorator.
 
 ### Design Principles
 
