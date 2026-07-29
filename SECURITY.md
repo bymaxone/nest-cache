@@ -49,8 +49,8 @@ prefer to remain anonymous.
 
 ## Supported Versions
 
-While the library is pre-1.0 (`0.x`), the latest `0.x` minor receives security
-fixes. Backports to older minors are considered case by case.
+The latest `1.x` minor receives security fixes. Backports to older minors are
+considered case by case.
 
 ## Security Practices
 
