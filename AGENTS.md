@@ -89,6 +89,12 @@ public, MIT, zero-runtime-dependency package.
 - `exports` declares `types` **per condition** — `import` → `.d.ts`, `require` →
   `.d.cts`. A single shared `types` key makes CommonJS consumers resolve ESM
   declarations, because `"type": "module"` marks plain `.d.ts` as ESM.
+- Subpaths need a `typesVersions` entry on top of `exports`. The
+  `moduleResolution: node` algorithm predates `exports` and ignores it, so
+  without `typesVersions` a consumer on that setting (the Nest CLI default when
+  `module: commonjs` is set with no explicit `moduleResolution`) cannot find the
+  subpath's types. `pnpm check:exports` runs the strict `attw` profile, which
+  covers that mode — never weaken it with `--profile` to silence a row.
 
 ## 7. Common Pitfalls
 
