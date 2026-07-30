@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-cache",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Typed Redis cache for NestJS based on ioredis 5, with namespace strategy, Pub/Sub and Lua script management.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -46,6 +46,13 @@
   "main": "./dist/server/index.cjs",
   "module": "./dist/server/index.mjs",
   "types": "./dist/server/index.d.cts",
+  "typesVersions": {
+    "*": {
+      "shared": [
+        "./dist/shared/index.d.cts"
+      ]
+    }
+  },
   "scripts": {
     "build": "pnpm clean && tsup",
     "lint": "eslint src scripts",
@@ -62,7 +69,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test:types": "tsc --noEmit -p tsconfig.typetest.json",
     "size": "node scripts/check-size.mjs",
-    "check:exports": "attw --pack . --profile node16",
+    "check:exports": "attw --pack .",
     "clean": "rm -rf dist coverage",
     "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm test:cov:all && pnpm build",
     "release": "pnpm publish --provenance",

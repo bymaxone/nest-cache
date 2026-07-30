@@ -6,6 +6,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-29
+
+### Fixed
+
+- **The `./shared` subpath now resolves under `moduleResolution: node`.** A
+  `typesVersions` map points the subpath at its `.d.cts` declarations, which is
+  the only mechanism that resolution algorithm understands — it predates
+  `exports` and ignores it entirely. Without this, a consumer whose tsconfig
+  sets `module: commonjs` without an explicit `moduleResolution` (the default
+  the Nest CLI scaffolds, which falls back to `node`) got
+  `error TS2307: Cannot find module '@bymax-one/nest-cache/shared'` while the
+  root entrypoint resolved fine. Runtime was never affected: Node reads
+  `exports`, so `require('@bymax-one/nest-cache/shared')` always worked.
+
+  This supersedes the note under 1.0.1 claiming the subpath was "not fixable
+  without a directory shim" — that was wrong, `typesVersions` fixes it with no
+  extra files in the tarball.
+
+### Changed
+
+- `check:exports` now runs the **strict** `attw` profile. The `--profile node16`
+  escape hatch existed only to ignore the failing `node10` row, which no longer
+  fails, so every entrypoint is now verified in every resolution mode.
+
 ## [1.0.1] - 2026-07-29
 
 ### Fixed
