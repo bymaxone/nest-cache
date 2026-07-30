@@ -3,7 +3,7 @@
 > **Type:** npm public library (NOT an application)
 > **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 5, with namespace strategy, Pub/Sub and Lua script management
 > **Runtime:** Node.js 24+ | Zero direct dependencies (functionality via peer deps)
-> **Status:** v1.0.0 — 100% coverage, 100% mutation score (433 detected: 427 killed + 6 timeout, **0 survived**). See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
+> **Status:** v1.0.2 (published) — 100% coverage, 100% mutation score (433 detected: 427 killed + 6 timeout, **0 survived**). `src/` is unchanged since 1.0.0 — 1.0.1 and 1.0.2 were packaging-metadata releases — so those results still stand. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
 ---
 
