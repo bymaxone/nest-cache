@@ -199,7 +199,13 @@ function checkChangelog() {
   // while the changelog claims released versions, say so instead of passing:
   // a silent no-op is the failure mode this whole gate exists to prevent.
   try {
-    execFileSync('git', ['fetch', '--tags', '--quiet'], { cwd: ROOT, stdio: 'ignore' })
+    // Bounded: an unreachable remote must not hang a publish. On timeout the
+    // local tags below are all there is, and the shallow guard still fires.
+    execFileSync('git', ['fetch', '--tags', '--quiet'], {
+      cwd: ROOT,
+      stdio: 'ignore',
+      timeout: 20_000
+    })
   } catch {
     // No network or no remote — the local tags below are then all there is.
   }
@@ -330,7 +336,8 @@ function checkSnippets() {
     const m = /Property '[^']+' does not exist on type '([^']+)'/.exec(line)
     if (!m) return false
     const file = /^([^(]+)\(/.exec(line)?.[1]
-    const own = sources.get(file?.split('/').pop() ?? '') ?? ''
+    // `tsc` emits backslashes on Windows, so the basename is taken on either.
+    const own = sources.get(file?.split(/[\\/]/).pop() ?? '') ?? ''
     return new RegExp(`\\b(class|interface|type)\\s+${m[1]}\\b`).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
