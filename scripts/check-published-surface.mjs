@@ -67,6 +67,36 @@ function slug(heading) {
  * broken anchor pass. */
 const README_PROSE = README.replace(/^```[\s\S]*?^```$/gm, '')
 
+/** Hosts a documentation link must never point at. This check runs on
+ * `pull_request`, so without it a fork could put `http://169.254.169.254/…` or a
+ * loopback address in the README and have the CI runner probe it — the runner
+ * reaching an endpoint the author cannot reach themselves. Rejected before the
+ * request, not after, and reported as a finding rather than skipped: a published
+ * README has no business linking to a private address either way. */
+function unroutableReason(url) {
+  let u
+  try {
+    u = new URL(url)
+  } catch {
+    return 'is not a valid URL'
+  }
+  if (u.protocol !== 'https:') return `uses ${u.protocol.replace(':', '')}, not https`
+  const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local'))
+    return 'is a loopback name'
+  if (h === '::1' || h === '0.0.0.0') return 'is a loopback address'
+  // IPv4 literals in the ranges RFC 1918, loopback and link-local reserve.
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])]
+    if (a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+      return 'is a private address'
+    }
+    if (a === 169 && b === 254) return 'is a link-local address (cloud metadata range)'
+  }
+  return null
+}
+
 async function checkLinks() {
   const anchors = new Set(
     [...README_PROSE.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => `#${slug(m[1])}`)
@@ -93,6 +123,9 @@ async function checkLinks() {
 
   const results = await Promise.all(
     [...links].map(async (url) => {
+      const unroutable = unroutableReason(url)
+      if (unroutable) return `${url} → ${unroutable}`
+
       // npmjs.com serves 403 to any datacenter IP, browser User-Agent included,
       // so asking it whether a package page exists measures Cloudflare rather
       // than the package. The registry is the authoritative source for the same
