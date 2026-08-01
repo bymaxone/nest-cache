@@ -48,7 +48,9 @@ const failures = []
 const fail = (check, detail) => failures.push(`${check}: ${detail}`)
 
 // ---------------------------------------------------------------------------
-// 1. Every link in the README resolves.
+// 1. Every link in the README points somewhere real. A bad HTTP status fails the
+//    gate; a link the machine could not reach at all is reported as a note, since
+//    an offline runner is not a defect in the documentation.
 // ---------------------------------------------------------------------------
 
 /** Slug a Markdown heading the way GitHub does. Deliberately does NOT trim: the
