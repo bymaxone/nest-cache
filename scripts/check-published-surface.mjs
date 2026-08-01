@@ -297,7 +297,9 @@ function scaffoldConsumer() {
   rmSync(GATE_DIR, { recursive: true, force: true })
   const scope = join(GATE_DIR, 'node_modules', ...PKG.name.split('/').slice(0, -1))
   mkdirSync(scope, { recursive: true })
-  symlinkSync(ROOT, join(GATE_DIR, 'node_modules', PKG.name), 'dir')
+  // 'junction' rather than 'dir': a directory symlink needs elevation or Developer
+  // Mode on Windows, where a junction does not. Node ignores the type on POSIX.
+  symlinkSync(ROOT, join(GATE_DIR, 'node_modules', PKG.name), 'junction')
   writeFileSync(
     join(GATE_DIR, 'tsconfig.json'),
     `${JSON.stringify(
