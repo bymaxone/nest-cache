@@ -74,7 +74,13 @@ const README_PROSE = README.replace(/^```[\s\S]*?^```$/gm, '')
  * loopback address in the README and have the CI runner probe it — the runner
  * reaching an endpoint the author cannot reach themselves. Rejected before the
  * request, not after, and reported as a finding rather than skipped: a published
- * README has no business linking to a private address either way. */
+ * README has no business linking to a private address either way.
+ *
+ * Every bare IP literal is refused, not just the private ranges. Enumerating
+ * ranges means enumerating them again for IPv6, and again for whatever notation
+ * is missed next; a documentation link points at a hostname, so the whole class
+ * can go. The private ranges keep their own message because naming the range is
+ * the more useful diagnosis when a link does hit one. */
 function unroutableReason(url) {
   let u
   try {
@@ -83,18 +89,28 @@ function unroutableReason(url) {
     return 'is not a valid URL'
   }
   if (u.protocol !== 'https:') return `uses ${u.protocol.replace(':', '')}, not https`
-  const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, '')
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local'))
+  const h = u.hostname.toLowerCase()
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) {
     return 'is a loopback name'
-  if (h === '::1' || h === '0.0.0.0') return 'is a loopback address'
-  // IPv4 literals in the ranges RFC 1918, loopback and link-local reserve.
+  }
+  // A URL parser brackets every IPv6 literal, so the brackets are the test —
+  // no need to recognise the address notation itself.
+  if (h.startsWith('[')) {
+    const v6 = h.slice(1, -1)
+    if (v6 === '::1') return 'is a loopback address'
+    if (/^f[cd]/.test(v6)) return 'is a unique-local address'
+    if (/^fe[89ab]/.test(v6)) return 'is a link-local address'
+    return 'is an IPv6 literal, not a hostname'
+  }
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)
   if (v4) {
     const [a, b] = [Number(v4[1]), Number(v4[2])]
-    if (a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+    if (a === 127 || h === '0.0.0.0') return 'is a loopback address'
+    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
       return 'is a private address'
     }
     if (a === 169 && b === 254) return 'is a link-local address (cloud metadata range)'
+    return 'is an IPv4 literal, not a hostname'
   }
   return null
 }
