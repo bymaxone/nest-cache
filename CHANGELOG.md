@@ -109,3 +109,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - E2E suite: `@nestjs/testing` with `ioredis-mock` + Testcontainers (standalone, sentinel, cluster, connection resilience)
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
+
+[1.0.3]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.3
+[1.0.2]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.2
+[1.0.1]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.1
+[1.0.0]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.0
