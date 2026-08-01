@@ -6,6 +6,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-30
+
+### Security
+
+- **Peer floors raised to exclude known-vulnerable NestJS versions.** The declared
+  ranges were `@nestjs/common ^11.0.0` and `@nestjs/core ^11.0.0`, and both
+  admitted versions carrying published advisories:
+
+  | Peer             | Advisory                                                                                                                                    | Vulnerable                    | New floor  |
+  | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ---------- |
+  | `@nestjs/common` | [GHSA-cj7v-w2c7-cp7c](https://github.com/advisories/GHSA-cj7v-w2c7-cp7c) — remote code execution via the `Content-Type` header              | `>= 11.0.0-next.1, < 11.0.16` | `^11.0.16` |
+  | `@nestjs/core`   | [GHSA-36xv-jgw5-4q75](https://github.com/advisories/GHSA-36xv-jgw5-4q75) — improper neutralization of special elements in downstream output | `<= 11.1.17`                  | `^11.1.18` |
+
+  A peer range is a statement about which versions this library supports. Leaving
+  the floor below a published advisory told a consumer that a vulnerable install
+  was a supported one, and nothing in their tooling contradicted it — the install
+  resolved cleanly and silently.
+
+  Shipped as a patch, which is where a security fix belongs. A minor would have
+  bought nothing: `^1.0.2` accepts `1.1.0` just as readily as `1.0.3`, so the same
+  installs are affected either way. No runtime behaviour changed.
+
 ## [1.0.2] - 2026-07-29
 
 ### Fixed

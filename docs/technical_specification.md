@@ -713,12 +713,7 @@ BymaxCacheModule.forRoot({
 ```typescript
 // shared/types/serializable-value.types.ts
 export type SerializableValue =
-  | string
-  | number
-  | boolean
-  | null
-  | SerializableValue[]
-  | { [key: string]: SerializableValue }
+  string | number | boolean | null | SerializableValue[] | { [key: string]: SerializableValue }
 ```
 
 `get<T>`/`set<T>` does not constrain `T` to `SerializableValue` to retain flexibility with custom serializers. The constraint exists as an optional alias.
@@ -1323,8 +1318,8 @@ Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
 ```json
 {
   "peerDependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
+    "@nestjs/common": "^11.0.16",
+    "@nestjs/core": "^11.1.18",
     "ioredis": "^5.0.0",
     "reflect-metadata": "^0.2.0"
   }
