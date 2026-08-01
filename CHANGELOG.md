@@ -4,7 +4,9 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.3] — 2026-07-30
+## [Unreleased]
+
+## [1.0.3] - 2026-07-30
 
 ### Security
 
@@ -25,10 +27,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Shipped as a patch, which is where a security fix belongs. A minor would have
   bought nothing: `^1.0.2` accepts `1.1.0` just as readily as `1.0.3`, so the same
   installs are affected either way. No runtime behaviour changed.
-
----
-
-## [Unreleased]
 
 ## [1.0.2] - 2026-07-29
 
