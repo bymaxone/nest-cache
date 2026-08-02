@@ -103,6 +103,12 @@ jobs:
           node scripts/dogfood-smoke-test.mjs
 
       - name: Publish to npm with provenance
+        # `--ignore-scripts`: npm runs `prepublishOnly` on publish, and this job
+        # already ran it as its own step. Without the flag it runs twice — and the
+        # second run starts with `clean`, deleting and rebuilding the `dist/` that
+        # `size` and `check:exports` just validated, so the tarball shipped is not
+        # the artifact the gates checked. Observed in the nest-realtime 1.0.1 run.
+        #
         # `npm publish`, not `pnpm publish`: the registry's `readme` field is
         # populated from the publish request, and pnpm 11 does not send it. Every
         # package here published under pnpm 11 landed with an empty `readme` — the
@@ -115,7 +121,7 @@ jobs:
         # the GitHub OIDC token (`id-token: write` above) for a short-lived
         # publish credential. npm runs no git checks, so the detached HEAD the
         # runner sits on at the tag SHA needs no flag of its own.
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --ignore-scripts
 
       - name: Extract release notes from CHANGELOG
         # Pulls the section for the current tag out of CHANGELOG.md so the
