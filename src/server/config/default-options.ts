@@ -120,5 +120,25 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     isGlobal: options.isGlobal ?? true,
     scripts: options.scripts
   }
+  // The three connection shapes carry the Redis credentials — a `url` holds the
+  // password inline, and the discrete forms hold it as a field. This object is
+  // injected into ConnectionManager, PubSubService and CacheService, so an
+  // enumerable `connection` is emitted by anything that serializes one of them
+  // incidentally: a structured logger rendering its arguments, an error reporter
+  // capturing the scope of a throw. Attaching them as non-enumerable accessors
+  // withholds them from `JSON.stringify`, object spread and `util.inspect` —
+  // including `showHidden`, which still prints a hidden data property. Reads are
+  // unchanged.
+  for (const key of ['connection', 'sentinel', 'cluster'] as const) {
+    // Read through the descriptor rather than by bracket index: the value is the
+    // same, and the property name never becomes a dynamic lookup key.
+    const value: unknown = Object.getOwnPropertyDescriptor(resolved, key)?.value
+    Object.defineProperty(resolved, key, {
+      get: (): unknown => value,
+      enumerable: false,
+      configurable: false
+    })
+  }
+
   return Object.freeze(resolved)
 }

@@ -37,8 +37,18 @@ type ClientRole = 'main' | 'subscriber'
 
 @Injectable()
 export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
-  private client: AnyRedis | null = null
-  private readonly redisOptionsResolved: RedisOptions
+  /**
+   * The live Redis client.
+   *
+   * An ECMAScript private field rather than a TypeScript `private` one, which is
+   * erased at runtime: an ioredis instance carries `options.password` as a plain
+   * field, so leaving it enumerable puts the credentials one `JSON.stringify`
+   * away from any service that holds this manager.
+   */
+  #client: AnyRedis | null = null
+
+  /** The driver options built from the connection config; they carry the password. */
+  readonly #redisOptionsResolved: RedisOptions
 
   /** Default backoff: grow 50 ms per attempt, capped at 2 s. */
   private readonly defaultRetryStrategy = (times: number): number =>
@@ -57,15 +67,15 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
     @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
     @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
   ) {
-    this.redisOptionsResolved = this.buildRedisOptions(options)
+    this.#redisOptionsResolved = this.buildRedisOptions(options)
   }
 
   /** Opens the main client and waits for readiness unless `lazyConnect`. */
   async onModuleInit(): Promise<void> {
-    this.client = this.createClient()
-    this.registerListeners(this.client, 'main')
+    this.#client = this.createClient()
+    this.registerListeners(this.#client, 'main')
     if (!this.options.connection?.lazyConnect) {
-      await this.waitUntilReady(this.client)
+      await this.waitUntilReady(this.#client)
     }
   }
 
@@ -76,11 +86,11 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    * @returns The shared main client.
    */
   getClient(): AnyRedis {
-    if (!this.client) {
-      this.client = this.createClient()
-      this.registerListeners(this.client, 'main')
+    if (!this.#client) {
+      this.#client = this.createClient()
+      this.registerListeners(this.#client, 'main')
     }
-    return this.client
+    return this.#client
   }
 
   /**
@@ -108,7 +118,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
 
   /** Quits the main client gracefully, forcing `disconnect()` on timeout. */
   async onModuleDestroy(): Promise<void> {
-    const client = this.client
+    const client = this.#client
     if (!client) {
       return
     }
@@ -142,7 +152,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
       client.disconnect()
     } finally {
       clearTimeout(timer)
-      this.client = null
+      this.#client = null
     }
   }
 
@@ -162,7 +172,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
         throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode: 'sentinel' })
       }
       return new Redis({
-        ...this.redisOptionsResolved,
+        ...this.#redisOptionsResolved,
         ...overrides,
         sentinels: sentinel.sentinels,
         name: sentinel.name,
@@ -185,7 +195,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
       }
       return new Cluster(cluster.nodes, cluster.options ?? {})
     }
-    return new Redis({ ...this.redisOptionsResolved, ...overrides })
+    return new Redis({ ...this.#redisOptionsResolved, ...overrides })
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */
