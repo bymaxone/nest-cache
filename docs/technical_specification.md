@@ -1351,7 +1351,7 @@ Mirrors the `@bymax-one/nest-auth` template with specific additions:
 
 ```json
 {
-  "packageManager": "pnpm@10.8.1",
+  "packageManager": "pnpm@11.20.0",
   "engines": { "node": ">=24.0.0" }
 }
 ```

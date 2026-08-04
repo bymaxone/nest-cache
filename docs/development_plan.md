@@ -279,7 +279,7 @@ Copy from `/Users/maximiliano/Documents/MyApps/nest-auth/` and adapt (replace `n
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@10.8.1",
+  "packageManager": "pnpm@11.20.0",
   "engines": { "node": ">=24.0.0" },
   "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" }
 }
@@ -350,7 +350,7 @@ ls -la dist/shared/
 
 **Risks/Notes:**
 
-- ⚠️ `pnpm@10.8.1` is a requirement; using a different version can break lockfile resolution
+- ⚠️ `pnpm@11.20.0` is a requirement; using a different version can break lockfile resolution
 - ⚠️ Node 24 LTS is the minimum (aligned with the rest of the portfolio)
 - ⚠️ `ioredis` 5.x is a peer dep; pin to `^5.4.1` in devDependencies to guarantee deterministic tests
 - ⚠️ `ioredis-mock` 8.x is compatible with `ioredis` 5.x; **do not** upgrade without checking the matrix
@@ -387,12 +387,7 @@ export type CacheEventName = 'connect' | 'ready' | 'error' | 'close' | 'reconnec
  * Snapshot of the connection state. Useful for health endpoints and metrics.
  */
 export type CacheConnectionStatus =
-  | 'wait'
-  | 'connecting'
-  | 'connect'
-  | 'ready'
-  | 'reconnecting'
-  | 'end'
+  'wait' | 'connecting' | 'connect' | 'ready' | 'reconnecting' | 'end'
 ```
 
 **Skeleton — `src/shared/types/cache-config.types.ts`:**
@@ -430,12 +425,7 @@ export type CacheKeyPrefix = string
  * documentation and as an opt-in constraint for strict consumers.
  */
 export type SerializableValue =
-  | string
-  | number
-  | boolean
-  | null
-  | SerializableValue[]
-  | { [key: string]: SerializableValue }
+  string | number | boolean | null | SerializableValue[] | { [key: string]: SerializableValue }
 ```
 
 **Skeleton — `src/shared/constants/error-codes.ts`:**
