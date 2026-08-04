@@ -183,7 +183,7 @@ To reset a task (revert to TODO):
 > - `"peerDependenciesMeta"`: `@nestjs/common`, `@nestjs/core`, `reflect-metadata` marked `{ "optional": true }`
 > - `"devDependencies"`: NestJS 11.x suite, jest 30, ts-jest 29, stryker 9 + jest-runner + typescript-checker, tsup 8.5, typescript 5.9, eslint 9, prettier 3.8, ioredis 5.4, ioredis-mock 8.9, testcontainers 10.30, @testcontainers/redis 10.30
 > - `"scripts"`: build (tsup), lint, test, test:cov, test:e2e, test:cov:all, mutation, typecheck, size, clean, prepublishOnly, release
-> - `"packageManager": "pnpm@10.8.1"`, `"engines": { "node": ">=24.0.0" }`
+> - `"packageManager": "pnpm@11.20.0"`, `"engines": { "node": ">=24.0.0" }`
 > - `"publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" }`
 >
 > After creation, run `pnpm install` in the root directory. Verify that `pnpm-lock.yaml` is generated without missing peer deps warnings.
@@ -3513,7 +3513,6 @@ npx markdownlint-cli README.md --no-config || true
 >    - `*.config.ts`, `tsconfig.*.json`, `.stryker-tmp/`
 >    - `.eslintrc*`, `.prettierrc`, `eslint.config.mjs`
 >    - `pnpm-lock.yaml`
->
 >    Only `dist/`, `package.json`, `README.md`, `LICENSE`, `CHANGELOG.md` stay in the tarball.
 
 **Acceptance criteria:**
