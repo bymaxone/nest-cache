@@ -1,3 +1,5 @@
+import { inspect } from 'node:util'
+
 import { DEFAULT_KEY_SEPARATOR, DEFAULT_NAMESPACE } from '../constants/default-namespace'
 import {
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
@@ -300,5 +302,51 @@ describe('applyDefaults', () => {
     expect(resolved.allowFlushInProduction).toBe(true)
     expect(resolved.isGlobal).toBe(false)
     expect(resolved.scripts).toBe(scripts)
+  })
+})
+
+describe('applyDefaults — credential containment', () => {
+  const SECRET = 'r3d1sPassw0rd-canary'
+
+  /** Serializes the way a structured logger does: tolerant of cycles. */
+  function safeStringify(value: unknown): string {
+    const seen = new WeakSet()
+    return JSON.stringify(value, (_key: string, val: unknown): unknown => {
+      if (typeof val === 'object' && val !== null) {
+        if (seen.has(val)) return '[Circular]'
+        seen.add(val)
+      }
+      return val
+    })
+  }
+
+  it('keeps every connection shape out of the paths that serialize the options', () => {
+    // The resolved options are injected into ConnectionManager, PubSubService and
+    // CacheService, so whatever serializes one of them reaches this object: a
+    // logger rendering its arguments, an error reporter capturing the scope of a
+    // throw, an object spread. A `url` carries the password inline, which is why
+    // the connection shapes are the fields that have to be withheld. `showHidden`
+    // is asserted because it is what defeats a merely non-enumerable property.
+    const resolved = applyDefaults({
+      connection: { url: `redis://default:${SECRET}@127.0.0.1:6379` }
+    })
+
+    expect(safeStringify(resolved)).not.toContain(SECRET)
+    expect(safeStringify({ ...resolved })).not.toContain(SECRET)
+    expect(inspect(resolved, { depth: null })).not.toContain(SECRET)
+    expect(inspect(resolved, { depth: null, showHidden: true })).not.toContain(SECRET)
+    expect(Object.keys(resolved)).not.toContain('connection')
+    expect(Object.keys(resolved)).not.toContain('sentinel')
+    expect(Object.keys(resolved)).not.toContain('cluster')
+  })
+
+  it('still exposes the connection to the manager that has to dial Redis', () => {
+    // Containment must cost nothing at the supported surface: ConnectionManager
+    // reads these to build the driver options.
+    const connection = { url: 'redis://localhost:6379' }
+    const resolved = applyDefaults({ connection })
+
+    expect(resolved.connection).toBe(connection)
+    expect(resolved.mode).toBe('standalone')
   })
 })

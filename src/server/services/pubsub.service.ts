@@ -42,7 +42,13 @@ interface SubscriptionRef {
 @Injectable()
 export class PubSubService implements OnModuleDestroy {
   /** Lazily-created dedicated subscriber connection (null until first subscribe). */
-  private subscriber: Redis | Cluster | null = null
+  /**
+   * The dedicated subscriber connection.
+   *
+   * Private for the same reason as the manager's client: an ioredis instance
+   * carries `options.password` as a plain field.
+   */
+  #subscriber: Redis | Cluster | null = null
 
   /** Live-listener ref-count per namespaced channel; UNSUBSCRIBE fires on the last. */
   private readonly channelRefs = new Map<string, SubscriptionRef>()
@@ -177,11 +183,11 @@ export class PubSubService implements OnModuleDestroy {
 
   /** Closes the subscriber connection gracefully, forcing disconnect on failure. */
   async onModuleDestroy(): Promise<void> {
-    if (!this.subscriber) {
+    if (!this.#subscriber) {
       return
     }
-    const subscriber = this.subscriber
-    this.subscriber = null
+    const subscriber = this.#subscriber
+    this.#subscriber = null
     try {
       await subscriber.quit()
     } catch {
@@ -201,10 +207,10 @@ export class PubSubService implements OnModuleDestroy {
    * experimental passthrough per the spec).
    */
   private ensureSubscriber(): Redis | Cluster {
-    if (!this.subscriber) {
-      this.subscriber = this.connection.createSubscriberClient()
+    if (!this.#subscriber) {
+      this.#subscriber = this.connection.createSubscriberClient()
     }
-    return this.subscriber
+    return this.#subscriber
   }
 
   /**

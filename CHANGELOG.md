@@ -6,6 +6,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-08-04
+
+### Security
+
+- The Redis credentials are no longer disclosed when a service that holds the resolved
+  options is serialized. The three connection shapes — `connection`, `sentinel` and
+  `cluster` — move from plain fields on the resolved options to non-enumerable accessors,
+  and `ConnectionManager` keeps its client and the driver options built from them, as does
+  `PubSubService` with its subscriber, in ECMAScript private fields. A `url` carries the
+  password inline, the discrete forms carry it as a field, and an ioredis instance carries
+  `options.password` as a plain field, so `JSON.stringify`, object spread and
+  `util.inspect` on any holder emitted it in plaintext — which is what a structured logger
+  does when it renders a provider it was handed, and what an error reporter does when it
+  captures the scope of a throw.
+
+Reading on purpose is unchanged: `options.connection` resolves as before, and no public
+type or export moved.
+
 ## [1.0.3] - 2026-08-01
 
 ### Security
@@ -110,6 +128,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.0.4]: https://github.com/bymaxone/nest-cache/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.1
