@@ -150,6 +150,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.0.5]: https://github.com/bymaxone/nest-cache/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-cache/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.2
