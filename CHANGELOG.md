@@ -6,6 +6,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-06
+
+**Documentation, tests and E2E only.** `dist/` is byte-identical to `1.0.4`.
+
+### Fixed
+
+- The Redis Cluster E2E was flaky at roughly one run in three, failing with `CLUSTERDOWN` or
+  "Too many Cluster redirections". The container log line proves `redis-cli --cluster create`
+  printed its coverage message, but what the client needs is the state each node serves on the
+  port the test dials. The helper now polls `CLUSTER INFO` on every node until all six report
+  `cluster_state:ok` and full slot coverage. Six consecutive runs of the previously flaky spec
+  pass, where it failed three times in nine before.
+
+### Documentation
+
+- The mutation badge said **100%**; the measured score is **99.78%**.
+
+### Tests
+
+- `findProvider` gained a spec of its own; it had only ever been exercised through the module
+  suites, where either half of its disjunction covered for the other.
+
 ## [1.0.4] - 2026-08-04
 
 ### Security
@@ -128,6 +150,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.0.5]: https://github.com/bymaxone/nest-cache/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-cache/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.2

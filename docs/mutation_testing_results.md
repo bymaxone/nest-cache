@@ -6,7 +6,7 @@
 
 ## Final — 2026-05-31 (after hardening)
 
-**Global mutation score: 100.00%** — 427 killed, 6 timeout, **0 survived** (316 compile-error mutants excluded). `pnpm mutation` exits 0 (≥ `break: 95`). Run time ~2m53s under Node 24. Every mutated file scores 100%.
+**Global mutation score at the time of this pass: 100.00%** — 427 killed, 6 timeout, **0 survived** (316 compile-error mutants excluded). `pnpm mutation` exits 0 (≥ `break: 95`). Run time ~2m53s under Node 24. Every mutated file scores 100%.
 
 The 50 survivors found in the baseline below were all killed by strengthening the existing unit tests (no source logic changed):
 
@@ -72,3 +72,34 @@ The pre-existing suite has 100% line/branch coverage but ~50 surviving mutants �
 ## Resolution
 
 All 50 baseline survivors were killed in Phase 4 by strengthening the unit tests (see the Final section above). `pnpm mutation` now exits 0 at **100.00%**, clearing the `break: 95` gate and the §5.5 critical-path ≥95% rule (every critical path is 100%). Ten unit tests were added/strengthened, and the production source carries **zero** coverage/mutation suppressions (the would-be equivalent regex was refactored to `.slice(1)`; the optional-providers fallback is test-covered). No source behaviour was changed — only the leading-slash strip was rewritten as an equivalent `.slice(1)`.
+
+---
+
+## Re-run — 2026-08-06
+
+| Metric             | Value        |
+| ------------------ | ------------ |
+| **Mutation score** | **99.78 %**  |
+| Surviving mutants  | 1            |
+| Break threshold    | 95 % -> PASS |
+
+`findProvider` gained a spec of its own. It had only ever been exercised through the module
+suites, where every lookup succeeded through one half of its disjunction or the other, so either
+half could be dropped and those suites would still pass.
+
+The one survivor is `configurable: false` on the withheld connection accessor. It is equivalent
+HERE because the resolved options are `Object.freeze`d on the way out and freezing makes every
+property non-configurable anyway. The flag stays: it states the guarantee where the accessor is
+defined, and the storage package withholds its credentials the same way WITHOUT freezing, where
+it is the only thing enforcing it.
+
+The zero-suppressions rule above still holds. Inline directives were added during this pass and
+then removed: this package documents equivalents here rather than annotating the source, and that
+convention outranks a higher number.
+
+Every equivalence claim in this section was checked by running the mutant, not by reading it.
+Where a `// Stryker disable next-line` directive was found not to apply — above a `} catch {`, a
+`.replace()` inside a method chain, a multi-line `sort(...)` argument, or anywhere inside a
+builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
+work either, with a plain comment at the line so the reasoning is visible rather than silently
+ineffective.

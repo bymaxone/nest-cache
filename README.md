@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/@bymax-one/nest-cache"><img src="https://img.shields.io/npm/dm/@bymax-one/nest-cache?style=flat-square&colorA=000000&colorB=000000" alt="npm downloads" /></a>
   <a href="https://github.com/bymaxone/nest-cache/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/bymaxone/nest-cache/ci.yml?branch=main&style=flat-square&colorA=000000&label=CI" alt="CI status" /></a>
   <a href="https://github.com/bymaxone/nest-cache/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&colorA=000000" alt="coverage" /></a>
-  <a href="https://github.com/bymaxone/nest-cache/blob/main/docs/mutation_testing_results.md"><img src="https://img.shields.io/badge/mutation-100%25-brightgreen?style=flat-square&colorA=000000" alt="mutation score" /></a>
+  <a href="https://github.com/bymaxone/nest-cache/blob/main/docs/mutation_testing_results.md"><img src="https://img.shields.io/badge/mutation-99.78%25-brightgreen?style=flat-square&colorA=000000" alt="mutation score" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/bymaxone/nest-cache"><img src="https://api.scorecard.dev/projects/github.com/bymaxone/nest-cache/badge?style=flat-square" alt="OpenSSF Scorecard" /></a>
   <a href="https://github.com/bymaxone/nest-cache/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bymaxone/nest-cache?style=flat-square&colorA=000000&colorB=000000" alt="license" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
@@ -526,7 +526,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 A cache is consulted on the hot path of every request that touches it, so the suite is held to a bar beyond "it runs" — every behavior is pinned so that a regression **fails a test**.
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced by `jest.coverage.config.ts` as a pre-publish gate, not a target
-- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 95` and `ignoreStatic: false`: 433 seeded faults detected (427 killed, 6 timed out), **no survivors**
+- ✅ **99.78% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 95` and `ignoreStatic: false`; the single survivor is `configurable: false` on the withheld connection accessor, equivalent here because the resolved options are frozen on the way out, and [documented as such](./docs/mutation_testing_results.md)
 - ✅ **Zero suppressions** — the production source carries no coverage or mutation directives; the one would-be equivalent mutant was refactored away rather than silenced, so the score is an accounting rather than a number
 - ✅ **No real Redis in unit tests** — `ioredis-mock` throughout; e2e tests exercise the wired module through `@nestjs/testing` and Testcontainers against a real Redis for connection lifecycle, Pub/Sub, and Lua scripts
 - ✅ **Published-package smoke test** — `scripts/dogfood-smoke-test.mjs` validates exports, tarball shape, and a consumer install before tagging
