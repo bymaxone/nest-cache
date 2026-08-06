@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.0.5] — 2026-08-06
+## [1.0.5] - 2026-08-06
 
 **Documentation, tests and E2E only.** `dist/` is byte-identical to `1.0.4`.
 

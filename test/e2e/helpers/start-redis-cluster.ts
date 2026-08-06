@@ -52,7 +52,15 @@ export async function startRedisCluster(): Promise<StartedRedisCluster> {
   const natMap: NatMap = Object.fromEntries(
     CLUSTER_PORTS.map((port) => [`0.0.0.0:${port}`, { host: '127.0.0.1', port }])
   )
-  await waitForClusterConvergence()
+  try {
+    await waitForClusterConvergence()
+  } catch (cause: unknown) {
+    // Stop the container before rethrowing. Its ports are bound 1:1 on the host, so a cluster
+    // left running would make every subsequent run fail to bind — turning one timeout into a
+    // cascade across the rest of the suite and the CI job.
+    await container.stop()
+    throw cause
+  }
   return { container, nodes, natMap }
 }
 
@@ -87,7 +95,9 @@ async function waitForClusterConvergence(): Promise<void> {
     const states = await Promise.all(CLUSTER_PORTS.map(async (port) => readClusterInfo(port)))
     const converged = states.every(
       (info) =>
-        info?.includes('cluster_state:ok') === true && info.includes('cluster_slots_assigned:16384')
+        info !== null &&
+        info.includes('cluster_state:ok') &&
+        info.includes('cluster_slots_assigned:16384')
     )
     if (converged) return
     lastSeen = states.find((info) => info !== null)?.split('\r\n')[0] ?? lastSeen
