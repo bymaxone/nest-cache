@@ -70,12 +70,19 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
     this.#redisOptionsResolved = this.buildRedisOptions(options)
   }
 
-  /** Opens the main client and waits for readiness unless `lazyConnect`. */
+  /**
+   * Opens the main client and waits for readiness unless `lazyConnect`.
+   *
+   * Adopts a client {@link getClient} already opened rather than replacing it:
+   * NestJS orders `onModuleInit` by module depth, and `app.get()` works before
+   * `app.init()`, so a consumer can reach the cache first. Overwriting here
+   * would strand that socket with no reference left to close it — teardown
+   * quits only the current client.
+   */
   async onModuleInit(): Promise<void> {
-    this.#client = this.createClient()
-    this.registerListeners(this.#client, 'main')
+    const client = this.ensureClient()
     if (!this.options.connection?.lazyConnect) {
-      await this.waitUntilReady(this.#client)
+      await this.waitUntilReady(client)
     }
   }
 
@@ -86,11 +93,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    * @returns The shared main client.
    */
   getClient(): AnyRedis {
-    if (!this.#client) {
-      this.#client = this.createClient()
-      this.registerListeners(this.#client, 'main')
-    }
-    return this.#client
+    return this.ensureClient()
   }
 
   /**
@@ -157,6 +160,20 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
   }
 
   // ─── Private ──────────────────────────────────────────────────────────────
+
+  /**
+   * Returns the main client, opening and wiring it on the first call. The only
+   * place it is assigned, so no caller can replace a live one.
+   *
+   * @returns The shared main client.
+   */
+  private ensureClient(): AnyRedis {
+    if (!this.#client) {
+      this.#client = this.createClient()
+      this.registerListeners(this.#client, 'main')
+    }
+    return this.#client
+  }
 
   /**
    * Instantiates the client matching the configured mode.

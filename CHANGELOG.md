@@ -6,6 +6,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-08-06
+
+### Fixed
+
+- `ConnectionManager.onModuleInit()` assigned a freshly created client over the field
+  unconditionally. When something had already opened the main client through
+  `getClient()`, that first socket was left connected with no reference left to close it —
+  `onModuleDestroy()` quits only the current client, so the abandoned one stayed in Redis's
+  `CLIENT LIST` until its own timeout. Init now adopts an existing client instead of
+  replacing it, and the assignment lives in one private accessor so no other path can
+  strand a live connection.
+
+  Reaching it takes touching the cache before the cache module's own init hook runs, which
+  is possible in two ordinary shapes: NestJS orders `onModuleInit` by module depth, so a
+  consumer module deeper in the graph runs first, and `app.get()` works between
+  `NestFactory.create()` and `app.init()`. The ordinary boot path opened exactly one client
+  before this change and still does.
+
 ## [1.0.5] - 2026-08-06
 
 **Documentation, tests and E2E only.** `dist/` is byte-identical to `1.0.4`.
@@ -150,6 +168,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.0.6]: https://github.com/bymaxone/nest-cache/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-cache/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-cache/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-cache/releases/tag/v1.0.3

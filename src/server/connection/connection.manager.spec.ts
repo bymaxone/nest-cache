@@ -172,6 +172,28 @@ describe('ConnectionManager', () => {
       expect(offSpy).toHaveBeenCalledWith('ready', expect.any(Function))
       expect(offSpy).toHaveBeenCalledWith('error', expect.any(Function))
     })
+
+    // A consumer can reach the cache before this hook runs — NestJS orders
+    // onModuleInit by module depth, and `app.get()` works between
+    // `NestFactory.create()` and `app.init()`. Init must then ADOPT that client:
+    // assigning a fresh one would leave the first socket open with no reference
+    // left to close it, since onModuleDestroy quits only the current client.
+    it('adopts a client opened before init instead of stranding its socket', async () => {
+      nextRedisStatus = 'ready'
+      const manager = makeManager({})
+
+      const early = manager.getClient()
+      await manager.onModuleInit()
+      const client = redisInstances[0]
+
+      expect(manager.getClient()).toBe(early)
+      expect(redisInstances).toHaveLength(1)
+
+      // The single client is the one that gets quit — nothing is left behind.
+      await manager.onModuleDestroy()
+      expect(client?.quit).toHaveBeenCalledTimes(1)
+      expect(client?.disconnect).not.toHaveBeenCalled()
+    })
   })
 
   describe('createClient — modes', () => {
