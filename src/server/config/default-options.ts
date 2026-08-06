@@ -136,7 +136,6 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     Object.defineProperty(resolved, key, {
       get: (): unknown => value,
       enumerable: false,
-      // Stryker disable next-line BooleanLiteral: equivalent HERE — the resolved options are `Object.freeze`d on the way out, and freezing makes every property non-configurable regardless. The flag stays because it states the guarantee where the accessor is defined, and the storage package withholds its credentials the same way WITHOUT freezing, where it is the only thing enforcing it
       configurable: false
     })
   }

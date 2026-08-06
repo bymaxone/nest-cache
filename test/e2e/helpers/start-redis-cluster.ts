@@ -11,6 +11,7 @@
  * strategy below.
  * Ports 7200+ are used (not 7000) because macOS reserves 7000 for AirPlay.
  */
+import Redis from 'ioredis'
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers'
 
 import type { ClusterNode, NatMap } from 'ioredis'
@@ -51,5 +52,71 @@ export async function startRedisCluster(): Promise<StartedRedisCluster> {
   const natMap: NatMap = Object.fromEntries(
     CLUSTER_PORTS.map((port) => [`0.0.0.0:${port}`, { host: '127.0.0.1', port }])
   )
+  await waitForClusterConvergence()
   return { container, nodes, natMap }
+}
+
+/** How long to wait for every node to agree the cluster is formed. */
+const CONVERGENCE_TIMEOUT_MS = 60_000
+
+/** How long to wait between convergence polls. */
+const CONVERGENCE_POLL_MS = 250
+
+/**
+ * Blocks until every node answers `CLUSTER INFO` with a formed, fully-covered cluster.
+ *
+ * The log wait strategy above proves `redis-cli --cluster create` printed its coverage line, but
+ * that is the CONTAINER's view at one instant. What the client needs is the state each node
+ * serves on the port the test will actually dial, and the gap between the two is real: a run
+ * whose ports were released moments earlier by a previous container, or whose nodes have not
+ * finished gossiping, answers `CLUSTERDOWN` or bounces a request between nodes until ioredis
+ * gives up with "Too many Cluster redirections". Both were observed intermittently, on `main`
+ * as well as on a branch, at roughly one run in three.
+ *
+ * Polling `cluster_state` and `cluster_slots_assigned` on every node closes both: the first is
+ * false while slots are still being assigned, the second while any node disagrees about who owns
+ * what.
+ *
+ * @throws If the cluster has not converged before {@link CONVERGENCE_TIMEOUT_MS}.
+ */
+async function waitForClusterConvergence(): Promise<void> {
+  const deadline = Date.now() + CONVERGENCE_TIMEOUT_MS
+  let lastSeen = 'no node answered'
+
+  while (Date.now() < deadline) {
+    const states = await Promise.all(CLUSTER_PORTS.map(async (port) => readClusterInfo(port)))
+    const converged = states.every(
+      (info) =>
+        info?.includes('cluster_state:ok') === true && info.includes('cluster_slots_assigned:16384')
+    )
+    if (converged) return
+    lastSeen = states.find((info) => info !== null)?.split('\r\n')[0] ?? lastSeen
+    await new Promise((resolve) => setTimeout(resolve, CONVERGENCE_POLL_MS))
+  }
+
+  throw new Error(
+    `Redis cluster did not converge within ${CONVERGENCE_TIMEOUT_MS}ms (last seen: ${lastSeen})`
+  )
+}
+
+/** Reads `CLUSTER INFO` from one node, answering `null` while it is not reachable yet. */
+async function readClusterInfo(port: number): Promise<string | null> {
+  const client = new Redis({
+    host: '127.0.0.1',
+    port,
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null,
+    // The probe owns its failure handling; ioredis must not log or retry on its own.
+    enableOfflineQueue: false
+  })
+  client.on('error', () => undefined)
+  try {
+    await client.connect()
+    return await client.cluster('INFO')
+  } catch {
+    return null
+  } finally {
+    client.disconnect()
+  }
 }
