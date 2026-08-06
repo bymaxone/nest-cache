@@ -24,12 +24,8 @@ import {
   BYMAX_CACHE_SCRIPT_REGISTRY,
   BYMAX_CACHE_SERIALIZER
 } from './bymax-cache.constants'
-import {
-  ASYNC_OPTIONS_TYPE,
-  ConfigurableModuleClass,
-  MODULE_OPTIONS_TOKEN,
-  OPTIONS_TYPE
-} from './bymax-cache.module.builder'
+import type { ASYNC_OPTIONS_TYPE, OPTIONS_TYPE } from './bymax-cache.module.builder'
+import { ConfigurableModuleClass, MODULE_OPTIONS_TOKEN } from './bymax-cache.module.builder'
 import { applyDefaults, validateOptions } from './config/default-options'
 import type { ResolvedOptions } from './config/resolved-options'
 import { ConnectionManager } from './connection/connection.manager'
