@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   ci:
-    uses: bymaxone/.github/.github/workflows/node-lib-ci.yml@v1
+    uses: bymaxone/.github/.github/workflows/node-lib-ci.yml@bcd95609cd724e6d86168f3dd6e40eff4d2077ad # v1
     with:
       run-format-check: false # no format:check script; prettier runs via lint/pre-commit
       run-build: false # build + integrity + size verified in the `verify` job below
@@ -45,7 +45,7 @@ jobs:
           # check would find nothing and pass — the silent no-op it exists to
           # prevent.
           fetch-depth: 0
-      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@bcd95609cd724e6d86168f3dd6e40eff4d2077ad # v1
       - name: Type-level API tests
         run: pnpm test:types
       - name: Mutation directives parse and carry their reason
@@ -89,7 +89,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@bcd95609cd724e6d86168f3dd6e40eff4d2077ad # v1
       - name: End-to-end tests (real Redis + cluster)
         run: pnpm test:e2e
         env:
@@ -97,7 +97,7 @@ jobs:
 
   security:
     if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
-    uses: bymaxone/.github/.github/workflows/security.yml@v1
+    uses: bymaxone/.github/.github/workflows/security.yml@bcd95609cd724e6d86168f3dd6e40eff4d2077ad # v1
     with:
       fail-on-severity: high
 
