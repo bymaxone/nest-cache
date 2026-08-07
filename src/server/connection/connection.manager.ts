@@ -163,7 +163,8 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Returns the main client, opening and wiring it on the first call. The only
-   * place it is assigned, so no caller can replace a live one.
+   * place a live client is assigned, so no caller can replace one; teardown
+   * only clears the field back to `null`.
    *
    * @returns The shared main client.
    */
