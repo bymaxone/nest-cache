@@ -136,6 +136,7 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     Object.defineProperty(resolved, key, {
       get: (): unknown => value,
       enumerable: false,
+      // Stryker disable next-line BooleanLiteral: equivalent HERE — `resolved` is `Object.freeze`d on the way out and freezing makes every property non-configurable anyway, so flipping this flag changes nothing observable. It stays because it states the guarantee where the accessor is defined, and nest-storage withholds its credentials the same way WITHOUT freezing, where this flag is the only thing enforcing it.
       configurable: false
     })
   }

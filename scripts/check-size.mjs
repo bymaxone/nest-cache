@@ -32,14 +32,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      legitimate, raise it (and say why here); when the artifact shrinks,
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
-// Calibration: PROVISIONAL (scaffold — 2026-05-30). nest-cache currently ships
-// only the foundational seed (DI tokens, error codes, exception). These budgets
-// are an ESTIMATE for the mature lib (connection manager + cache / pubsub /
-// script services). RECALIBRATE to the real artifact + ~1.5x once Phase 1-2
-// lands the core surface — until then they are a generous ceiling, not a tight
-// tripwire.
+// Calibration: measured against the built artifact, not estimated. The server
+// budget was raised from 14.00 to 14.50 kB when the equivalent-mutant directive
+// on the withheld connection accessor moved into the source: it costs ~0.15 kB
+// brotli and left 0.04 kB of headroom, too little to absorb ordinary growth.
+// The reason for a suppression belongs next to the code it explains, and a
+// comment that lives in the source ships with it.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 14 * 1024 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 14.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 1.5 * 1024 }
 ]
 
