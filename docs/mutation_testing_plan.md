@@ -24,8 +24,8 @@ code to mutate.
 ## Running mutation tests
 
 ```bash
-pnpm mutation              # full run (~10-20 min); writes reports/mutation/mutation.html
-pnpm mutation:incremental  # faster re-run using cached results
+pnpm mutation              # incremental — re-tests only what changed (~10-20 min); writes reports/mutation/mutation.html
+pnpm mutation:full        # cold — deletes the baseline first, measures the truth
 pnpm mutation:dry-run      # validates config without running mutants
 ```
 
