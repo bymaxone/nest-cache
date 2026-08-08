@@ -74,11 +74,11 @@ pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && p
 Mutation testing (before tagging a release), under Node 24:
 
 ```bash
-pnpm mutation             # full run; writes reports/mutation/mutation.html
-pnpm mutation:incremental # faster re-run
+pnpm mutation             # incremental — re-tests only what changed; writes reports/mutation/mutation.html
+pnpm mutation:full        # cold — deletes the baseline first, measures the truth
 ```
 
-Mutation runs automatically **post-merge on `main`** via the shared reusable CI (`bymaxone/.github` → node-lib-ci) — never per-PR — and can also be run on demand with `pnpm mutation` before a release. Do **not** add it to `prepublishOnly` or the per-PR path.
+Mutation runs automatically **post-merge on `main`** via the shared reusable CI (`bymaxone/.github` → node-lib-ci) — never per-PR — and can also be run on demand with `pnpm mutation:full` before a release. Do **not** add it to `prepublishOnly` or the per-PR path.
 
 ---
 
