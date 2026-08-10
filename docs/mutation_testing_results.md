@@ -103,3 +103,19 @@ Where a `// Stryker disable next-line` directive was found not to apply — abov
 builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
 work either, with a plain comment at the line so the reasoning is visible rather than silently
 ineffective.
+
+---
+
+## Re-run — 2026-08-10 (ioredis 6 migration)
+
+| Metric             | Value         |
+| ------------------ | ------------- |
+| **Mutation score** | **100.00 %**  |
+| Surviving mutants  | 0             |
+| Break threshold    | 100 % -> PASS |
+
+Cold `pnpm mutation:full` after the `ioredis ^5 → ^6` peer bump: **100.00%**, 0 survived
+(441 killed, 6 timeout, 316 compile-error mutants excluded). The migration changed only the
+constructor option typing (`OwnedRedisOptions` / `OwnedClusterOptions`), so no mutant moved.
+The Stryker gate (`thresholds.break`/`high`/`low`) was raised from 95/99/95 to **100** in the
+same change, which this run clears.

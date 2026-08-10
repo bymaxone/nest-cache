@@ -8,13 +8,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Peer dependency `ioredis` migrated `^5` → `^6`.** A consumer must move to ioredis 6,
-  which aligns this package with `@bymax-one/nest-queue` so a single ioredis copy resolves
-  across a workspace that uses both. ioredis 6 defaults to RESP3 but keeps `'legacy'` reply
-  mapping, so every reply shape this cache relies on (GET/SET/TTL, EVALSHA, Pub/Sub message
-  events, cluster and sentinel commands) is unchanged at runtime — the migration is
-  type-only. ioredis 6 requires Node.js ≥ 20, already covered by this package's `engines`
-  (Node ≥ 24).
+- **BREAKING: peer dependency `ioredis` migrated `^5` → `^6`.** A consumer must move to
+  ioredis 6, which aligns this package with `@bymax-one/nest-queue` so a single ioredis copy
+  resolves across a workspace that uses both. ioredis 6 negotiates **RESP3** on the wire by
+  default — the protocol changes at runtime — but its `'legacy'` reply mapping preserves every
+  reply shape this cache relies on (GET/SET/TTL, EVALSHA, Pub/Sub message events, cluster and
+  sentinel commands), so observable behaviour is unchanged; the only source change is the
+  compile-time typing narrowing below. ioredis 6 requires Node.js ≥ 20, already covered by
+  this package's `engines` (Node ≥ 24).
 
 ### Internal
 
