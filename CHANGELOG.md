@@ -6,6 +6,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Peer dependency `ioredis` migrated `^5` → `^6`.** A consumer must move to ioredis 6,
+  which aligns this package with `@bymax-one/nest-queue` so a single ioredis copy resolves
+  across a workspace that uses both. ioredis 6 defaults to RESP3 but keeps `'legacy'` reply
+  mapping, so every reply shape this cache relies on (GET/SET/TTL, EVALSHA, Pub/Sub message
+  events, cluster and sentinel commands) is unchanged at runtime — the migration is
+  type-only. ioredis 6 requires Node.js ≥ 20, already covered by this package's `engines`
+  (Node ≥ 24).
+
+### Internal
+
+- `ConnectionManager` narrows the options handed to the `Redis` and `Cluster` constructors
+  to a local shape (`OwnedRedisOptions` / `OwnedClusterOptions`). ioredis 6's constructor
+  overloads intersect `replyMapping` with a non-`undefined` variant to infer the
+  reply-mapping generic, which makes a plain `RedisOptions`/`ClusterOptions` value
+  unassignable under `exactOptionalPropertyTypes`. The narrowing drops only that `undefined`;
+  the runtime object is untouched.
+- Mutation gate tightened: Stryker `break`/`high`/`low` raised to **100** (the run is at
+  100%, 0 survivors).
+
 ## [1.0.6] - 2026-08-06
 
 ### Fixed

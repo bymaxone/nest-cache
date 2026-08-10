@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Typed Redis cache for NestJS</strong><br />
-  <sub>ioredis 5 · Namespacing · Pub/Sub · Lua Scripts · Multi-Tenant · Zero Runtime Dependencies</sub>
+  <sub>ioredis 6 · Namespacing · Pub/Sub · Lua Scripts · Multi-Tenant · Zero Runtime Dependencies</sub>
 </p>
 
 <p align="center">
@@ -101,7 +101,7 @@ One package, two entry points — import only what your app needs:
 
 | Subpath    | Import                         | Purpose                                                                                                  |              Dependencies              |
 | ---------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- | :------------------------------------: |
-| **Server** | `@bymax-one/nest-cache`        | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException` | NestJS 11, ioredis 5, reflect-metadata |
+| **Server** | `@bymax-one/nest-cache`        | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException` | NestJS 11, ioredis 6, reflect-metadata |
 | **Shared** | `@bymax-one/nest-cache/shared` | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                  |                  None                  |
 
 ```
@@ -511,7 +511,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 ## 🧱 Tech Stack
 
 [![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com)
-[![ioredis](https://img.shields.io/badge/ioredis-5-DC382D?style=flat-square&logo=redis&logoColor=white)](https://github.com/redis/ioredis)
+[![ioredis](https://img.shields.io/badge/ioredis-6-DC382D?style=flat-square&logo=redis&logoColor=white)](https://github.com/redis/ioredis)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Node.js](https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Jest](https://img.shields.io/badge/Jest-30-C21325?style=flat-square&logo=jest)](https://jestjs.io)
@@ -526,8 +526,8 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 A cache is consulted on the hot path of every request that touches it, so the suite is held to a bar beyond "it runs" — every behavior is pinned so that a regression **fails a test**.
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced by `jest.coverage.config.ts` as a pre-publish gate, not a target
-- ✅ **99.78% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 95` and `ignoreStatic: false`; the single survivor is `configurable: false` on the withheld connection accessor, equivalent here because the resolved options are frozen on the way out, and [documented as such](./docs/mutation_testing_results.md)
-- ✅ **Zero suppressions** — the production source carries no coverage or mutation directives; the one would-be equivalent mutant was refactored away rather than silenced, so the score is an accounting rather than a number
+- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 100` and `ignoreStatic: false`; 441 killed, 6 timed out, **0 survived**, and [documented in full](./docs/mutation_testing_results.md)
+- ✅ **One documented equivalent** — the production source carries a single `// Stryker disable` directive, on `configurable: false` of the withheld connection accessor, genuinely equivalent because the resolved options are frozen on the way out (freezing already makes every property non-configurable); `check:mutants` proves it parses and carries its reason, so the score is an accounting rather than a number
 - ✅ **No real Redis in unit tests** — `ioredis-mock` throughout; e2e tests exercise the wired module through `@nestjs/testing` and Testcontainers against a real Redis for connection lifecycle, Pub/Sub, and Lua scripts
 - ✅ **Published-package smoke test** — `scripts/dogfood-smoke-test.mjs` validates exports, tarball shape, and a consumer install before tagging
 

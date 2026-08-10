@@ -1,7 +1,7 @@
 # Mutation Testing Plan — @bymax-one/nest-cache
 
 > **Status:** ✅ Baseline completed 2026-05-31 — **100% global score** (427 killed, 6 timeout, 0 survived).
-> Stryker exits 0 (`break: 95`). Run before every release tag.
+> Stryker exits 0 (`break: 100`). Run before every release tag.
 > **Results:** [`docs/mutation_testing_results.md`](./mutation_testing_results.md)
 
 ---
@@ -34,14 +34,14 @@ pnpm mutation:dry-run      # validates config without running mutants
 ## Thresholds (`stryker.config.json`)
 
 ```json
-"thresholds": { "high": 99, "low": 95, "break": 95 }
+"thresholds": { "high": 100, "low": 100, "break": 100 }
 ```
 
-| Threshold   | Meaning                                                       |
-| ----------- | ------------------------------------------------------------- |
-| `break: 95` | `pnpm mutation` exits 1 if score < 95 % — hard gate           |
-| `low: 95`   | Score between low and high → yellow in the HTML report        |
-| `high: 99`  | Aspirational target — score ≥ 99 % → green in the HTML report |
+| Threshold    | Meaning                                               |
+| ------------ | ----------------------------------------------------- |
+| `break: 100` | `pnpm mutation` exits 1 if score < 100 % — hard gate  |
+| `low: 100`   | Score below high → yellow in the HTML report          |
+| `high: 100`  | Full score — score ≥ 100 % → green in the HTML report |
 
 **`ignoreStatic: false`** — the rigorous setting: mutants in module-level
 constants (the error-code map, default options) are exposed to the tests instead

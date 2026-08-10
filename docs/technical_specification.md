@@ -84,7 +84,7 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 | Runtime              | Node.js 24+                                 |
 | Framework            | NestJS 11+                                  |
 | Subpaths             | `.` (server) + `./shared` (types/constants) |
-| Main peer dependency | `ioredis ^5`                                |
+| Main peer dependency | `ioredis ^6`                                |
 
 ### 1.5 Design Principles
 
@@ -1320,7 +1320,7 @@ Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
   "peerDependencies": {
     "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
-    "ioredis": "^5.0.0",
+    "ioredis": "^6.0.0",
     "reflect-metadata": "^0.2.0"
   }
 }
@@ -1334,7 +1334,7 @@ Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
 | ------------------ | ------- | ------------------------------------------------------------------------ |
 | `@nestjs/common`   | `^11`   | Decorators (`@Injectable`, `@Inject`, `@Optional`, `@Global`), lifecycle |
 | `@nestjs/core`     | `^11`   | `DynamicModule` type                                                     |
-| `ioredis`          | `^5`    | Redis client with TLS, sentinel, cluster support                         |
+| `ioredis`          | `^6`    | Redis client with TLS, sentinel, cluster support                         |
 | `reflect-metadata` | `^0.2`  | NestJS decorators                                                        |
 
 `ioredis` is the only functional dep; the rest is standard for any NestJS project.

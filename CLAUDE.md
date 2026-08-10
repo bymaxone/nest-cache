@@ -1,7 +1,7 @@
 # @bymax-one/nest-cache — AI Agent Quick Reference
 
 > **Type:** npm public library (NOT an application)
-> **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 5, with namespace strategy, Pub/Sub and Lua script management
+> **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management
 > **Runtime:** Node.js 24+ | Zero direct dependencies (functionality via peer deps)
 > **Status:** v1.0.2 (published) — 100% coverage, 100% mutation score (433 detected: 427 killed + 6 timeout, **0 survived**). `src/` is unchanged since 1.0.0 — 1.0.1 and 1.0.2 were packaging-metadata releases — so those results still stand. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
@@ -50,7 +50,7 @@
 - Co-located unit tests (`*.spec.ts`). AAA pattern. Mock Redis with `ioredis-mock` — never a real connection in unit tests.
 - E2E tests in `test/e2e/` using `@nestjs/testing`.
 - **100% statements / branches / functions / lines** enforced by `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
-- Mutation testing (Stryker `break: 95`) is the deeper gate. `ignoreStatic: false` (rigorous — exposes module-level constant mutants). Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>` — acceptable for genuine equivalents only; minimize, and never disable a mutant a test could kill.
+- Mutation testing (Stryker `break: 100`) is the deeper gate. `ignoreStatic: false` (rigorous — exposes module-level constant mutants). Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>` — acceptable for genuine equivalents only; minimize, and never disable a mutant a test could kill.
 
 **8. Build** — tsup builds 2 subpaths → ESM (.mjs) + CJS (.cjs) + .d.ts. `sideEffects: false`. Peer deps (`@nestjs/*`, `ioredis`, `reflect-metadata`) always external.
 
@@ -58,10 +58,10 @@
 
 ## Subpaths
 
-| Subpath      | Purpose                        | Peer Deps                            |
-| ------------ | ------------------------------ | ------------------------------------ |
-| `.` (server) | NestJS module + cache services | NestJS 11, ioredis, reflect-metadata |
-| `./shared`   | Types + constants (zero deps)  | None                                 |
+| Subpath      | Purpose                        | Peer Deps                              |
+| ------------ | ------------------------------ | -------------------------------------- |
+| `.` (server) | NestJS module + cache services | NestJS 11, ioredis 6, reflect-metadata |
+| `./shared`   | Types + constants (zero deps)  | None                                   |
 
 ---
 
