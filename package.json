@@ -1,7 +1,7 @@
 {
   "name": "@bymax-one/nest-cache",
   "version": "1.0.6",
-  "description": "Typed Redis cache for NestJS based on ioredis 5, with namespace strategy, Pub/Sub and Lua script management.",
+  "description": "Typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
   "homepage": "https://github.com/bymaxone/nest-cache#readme",
@@ -90,7 +90,7 @@
   "peerDependencies": {
     "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
-    "ioredis": "^5.0.0",
+    "ioredis": "^6.0.0",
     "reflect-metadata": "^0.2.0"
   },
   "devDependencies": {
@@ -116,7 +116,7 @@
     "eslint-plugin-security": "^4.0.0",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
-    "ioredis": "^5.10.1",
+    "ioredis": "^6.0.0",
     "ioredis-mock": "^8.13.1",
     "jest": "^30.4.2",
     "lint-staged": "^17.2.0",

@@ -12,7 +12,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common'
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { Cluster, Redis } from 'ioredis'
-import type { RedisOptions } from 'ioredis'
+import type { ClusterOptions, RedisOptions } from 'ioredis'
 
 import type { CacheEventName } from '../../shared/types/cache-event.types'
 import { BYMAX_CACHE_EVENTS, BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
@@ -31,6 +31,34 @@ import { parseRedisUrl } from '../utils/parse-redis-url'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
+
+/**
+ * The exact options shape ioredis 6's `Redis` constructor accepts.
+ *
+ * `RedisOptions` declares `replyMapping?: ReplyMappingMode | undefined`, but the
+ * constructor overloads intersect it with `{ replyMapping?: ReplyMappingMode }`
+ * (no `undefined`) to infer the reply-mapping generic. Under
+ * `exactOptionalPropertyTypes` a plain `RedisOptions` value is therefore not
+ * assignable to the constructor, so the options object built here is narrowed to
+ * this shape before it is handed over. `NonNullable` reconstructs the
+ * constructor's requirement from the exported type alone, without reaching for
+ * an unexported internal one.
+ */
+type OwnedRedisOptions = Omit<RedisOptions, 'replyMapping'> & {
+  replyMapping?: NonNullable<RedisOptions['replyMapping']>
+}
+
+/**
+ * The `ClusterOptions` shape ioredis 6's `Cluster` constructor accepts. The
+ * constructor narrows the nested `redisOptions.replyMapping` the same way the
+ * `Redis` constructor narrows its top-level one, so `ClusterOptions` — whose
+ * `redisOptions` carries the `| undefined` of {@link OwnedRedisOptions}'s source
+ * — is likewise unassignable under `exactOptionalPropertyTypes`. The runtime
+ * object is untouched; only the declared type of `redisOptions` is narrowed.
+ */
+type OwnedClusterOptions = Omit<ClusterOptions, 'redisOptions'> & {
+  redisOptions?: OwnedRedisOptions
+}
 
 /** The roles a managed client can play, surfaced in event payloads. */
 type ClientRole = 'main' | 'subscriber'
@@ -198,22 +226,22 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
           sentinelPassword: sentinel.sentinelPassword
         }),
         ...(sentinel.password !== undefined && { password: sentinel.password }),
-        // Normalize 'replica' → 'slave' — ioredis 5 only accepts 'slave' at the
+        // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
         // wire level; our public interface accepts 'replica' per Redis 7 naming.
         ...(sentinel.role !== undefined && {
           role: sentinel.role === 'replica' ? 'slave' : sentinel.role
         }),
         ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap })
-      })
+      } as OwnedRedisOptions)
     }
     if (this.options.mode === 'cluster') {
       const cluster = this.options.cluster
       if (!cluster) {
         throw new CacheException(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode: 'cluster' })
       }
-      return new Cluster(cluster.nodes, cluster.options ?? {})
+      return new Cluster(cluster.nodes, (cluster.options ?? {}) as OwnedClusterOptions)
     }
-    return new Redis({ ...this.#redisOptionsResolved, ...overrides })
+    return new Redis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */

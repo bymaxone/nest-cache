@@ -20,7 +20,7 @@
 
 ## 1. Project Overview
 
-`@bymax-one/nest-cache` encapsulates a singleton `ioredis` 5 connection behind a
+`@bymax-one/nest-cache` encapsulates a singleton `ioredis` 6 connection behind a
 typed NestJS module: typed `get<T>`/`set<T>`, automatic key namespacing, Pub/Sub
 on namespaced channels, and a Lua script manager (`EVALSHA` + `NOSCRIPT`
 fallback). It owns connection lifecycle, reconnection, graceful shutdown, and
@@ -74,7 +74,7 @@ public, MIT, zero-runtime-dependency package.
 - TDD; **100% coverage** in both `jest.config.ts` and `jest.coverage.config.ts`.
 - Unit tests mock Redis with `ioredis-mock`; E2E uses `@nestjs/testing` in
   `test/e2e/`.
-- Mutation testing (Stryker, `break: 95`) is a manual release gate.
+- Mutation testing (Stryker, `break: 100`) is a manual release gate.
   `ignoreStatic: false` (exposes module-level constant mutants). Equivalent
   mutants are flagged inline with `// Stryker disable next-line` and a reason —
   only for genuine equivalents.
