@@ -200,6 +200,89 @@ describe('validateOptions', () => {
     )
   })
 
+  // A namespace containing `*` must throw. Measured against Redis 8.10.0: the
+  // namespace is composed into flushNamespace's `{namespace}{sep}*` match
+  // pattern, so `ten*ant` matches every other tenant's keys and turns a scoped
+  // flush into a cross-tenant delete. Pins `metacharacter` so the reported
+  // character cannot drift from the one that was found.
+  it('rejects a namespace containing the * glob metacharacter', () => {
+    expectCode(
+      () => validateOptions({ connection: { host: 'h' }, namespace: 'ten*ant' }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      {
+        reason: 'namespace contains glob metacharacter',
+        namespace: 'ten*ant',
+        metacharacter: '*'
+      }
+    )
+  })
+
+  // A namespace containing `?` must throw — measured to widen the flush pattern
+  // exactly as `*` does, matching one character of any other namespace.
+  it('rejects a namespace containing the ? glob metacharacter', () => {
+    expectCode(
+      () => validateOptions({ connection: { host: 'h' }, namespace: 'ten?ant' }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      {
+        reason: 'namespace contains glob metacharacter',
+        namespace: 'ten?ant',
+        metacharacter: '?'
+      }
+    )
+  })
+
+  // A namespace containing `[` must throw for the opposite reason: it opens a
+  // character class that never closes, so the pattern matches NOTHING and
+  // flushNamespace deletes none of the namespace's keys while returning 0 —
+  // silent under-deletion reported as success.
+  it('rejects a namespace containing the [ glob metacharacter', () => {
+    expectCode(
+      () => validateOptions({ connection: { host: 'h' }, namespace: 'ten[ant' }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      {
+        reason: 'namespace contains glob metacharacter',
+        namespace: 'ten[ant',
+        metacharacter: '['
+      }
+    )
+  })
+
+  // A namespace containing `\` must throw — it escapes the next character, so
+  // `ten\ant` matches `tenant:*` (a DIFFERENT keyspace) while sparing its own
+  // keys. Both halves of that are wrong.
+  it('rejects a namespace containing the backslash glob metacharacter', () => {
+    expectCode(
+      () => validateOptions({ connection: { host: 'h' }, namespace: 'ten\\ant' }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      {
+        reason: 'namespace contains glob metacharacter',
+        namespace: 'ten\\ant',
+        metacharacter: '\\'
+      }
+    )
+  })
+
+  // `]` must be ACCEPTED. Measured against Redis 8.10.0: unpaired it is a
+  // literal and matches only its own keyspace, so rejecting it would be an
+  // unfounded restriction. This test exists to keep the guard as narrow as the
+  // measurement — an over-broad character set fails here.
+  it('accepts a namespace containing an unpaired ] , which Redis treats as a literal', () => {
+    expect(() => validateOptions({ connection: { host: 'h' }, namespace: 'ten]ant' })).not.toThrow()
+  })
+
+  // An empty key separator must throw with its OWN reason. It was already
+  // rejected before this guard existed, but only by coincidence: the next check
+  // is `namespace.includes(separator)` and `'anything'.includes('')` is true for
+  // every string, so it reported "namespace contains key separator" — something
+  // the consumer did not do. Pins the reason to keep the message honest.
+  it('rejects an empty key separator naming the separator, not the namespace', () => {
+    expectCode(
+      () => validateOptions({ connection: { host: 'h' }, keySeparator: '' }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      { reason: 'empty key separator', separator: '' }
+    )
+  })
+
   // A shutdown timeout below the minimum must throw CONNECTION_FAILED — too short
   // a window risks killing in-flight commands. Pins the `{ reason, value, min }`
   // details payload.
