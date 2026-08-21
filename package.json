@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-cache",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -31,6 +31,16 @@
         "default": "./dist/server/index.cjs"
       }
     },
+    "./admin": {
+      "import": {
+        "types": "./dist/admin/index.d.ts",
+        "default": "./dist/admin/index.mjs"
+      },
+      "require": {
+        "types": "./dist/admin/index.d.cts",
+        "default": "./dist/admin/index.cjs"
+      }
+    },
     "./shared": {
       "import": {
         "types": "./dist/shared/index.d.ts",
@@ -50,6 +60,9 @@
     "*": {
       "shared": [
         "./dist/shared/index.d.cts"
+      ],
+      "admin": [
+        "./dist/admin/index.d.cts"
       ]
     }
   },
@@ -57,6 +70,7 @@
     "build": "pnpm clean && tsup",
     "check:exports": "attw --pack .",
     "check:mutants": "node scripts/check-mutation-directives.mjs",
+    "check:admin-readonly": "node scripts/check-admin-readonly.mjs",
     "check:published": "node scripts/check-published-surface.mjs",
     "clean": "rm -rf dist coverage",
     "lint": "eslint src scripts",
@@ -65,7 +79,7 @@
     "mutation:full": "node -e \"require('node:fs').rmSync('reports/stryker-incremental.json',{force:true,recursive:true})\" && stryker run",
     "mutation:dry-run": "stryker run --dryRunOnly",
     "prepare": "husky",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:mutants && pnpm test:cov:all && pnpm build && pnpm check:published",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:mutants && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm check:published",
     "release": "npm publish --provenance --access public",
     "size": "node scripts/check-size.mjs",
     "test": "jest",

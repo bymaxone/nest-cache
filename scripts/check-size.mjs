@@ -38,8 +38,23 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // brotli and left 0.04 kB of headroom, too little to absorb ordinary growth.
 // The reason for a suppression belongs next to the code it explains, and a
 // comment that lives in the source ships with it.
+//
+// 1.2.0: server raised 14.50 -> 15.00 kB. The namespace glob guard and the two
+// newly exported internals put it at 14.47 kB, leaving 0.03 kB — the same
+// too-tight situation as above.
+//
+// 1.2.0: admin added at 7.25 kB against a measured 6.60 kB. It is far smaller
+// than the server bundle because it does NOT bundle one: `@bymax-one/nest-cache`
+// is external in the admin tsup entry, so the subpath imports the package rather
+// than inlining a second copy of `CacheService` and the DI tokens. That is a
+// correctness requirement, not a size trick — duplicated class objects would
+// make `@Inject(CacheService)` in an admin provider name a different class than
+// the one `BymaxCacheModule` registered. If this number ever jumps toward the
+// server's, the externalisation has broken and DI is about to fail at a
+// consumer's runtime.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 14.5 * 1024 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 15.0 * 1024 },
+  { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 7.25 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 1.5 * 1024 }
 ]
 

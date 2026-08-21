@@ -13,7 +13,8 @@ const config: Config = {
   // uses package specifiers — an easy source of drift.
   moduleNameMapper: {
     '^@bymax-one/nest-cache$': '<rootDir>/server/index.ts',
-    '^@bymax-one/nest-cache/shared$': '<rootDir>/shared/index.ts'
+    '^@bymax-one/nest-cache/shared$': '<rootDir>/shared/index.ts',
+    '^@bymax-one/nest-cache/admin$': '<rootDir>/admin/index.ts'
   },
   transform: {
     '^.+\\.ts$': [

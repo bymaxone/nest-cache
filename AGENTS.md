@@ -30,7 +30,9 @@ public, MIT, zero-runtime-dependency package.
 
 ## 2. Architecture
 
-- **Subpaths (2):** `.` (server — NestJS module + services) and `./shared`
+- **Subpaths (3):** `.` (server — NestJS module + services), `./admin` (read-only
+  administration; imports the server surface by package specifier, external in the
+  bundle) and `./shared`
   (zero-dependency types + constants).
 - **Dynamic module:** `BymaxCacheModule.forRoot()` / `forRootAsync()` built on
   `ConfigurableModuleBuilder`, global by default via `setExtras` →
@@ -81,7 +83,7 @@ public, MIT, zero-runtime-dependency package.
 
 ## 6. Build and Publish
 
-- tsup → 2 subpaths, ESM + CJS + `.d.ts`/`.d.cts`, `sideEffects: false`, peers
+- tsup → 3 subpaths, ESM + CJS + `.d.ts`/`.d.cts`, `sideEffects: false`, peers
   external. `minify: false` (readable backend bundle).
 - `files` allowlist publishes only `dist` + metadata. `pnpm size` gate +
   `pnpm check:exports` + `dogfood-smoke-test.mjs` before tagging. Release via

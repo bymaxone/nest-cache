@@ -49,6 +49,17 @@ export {
   BYMAX_CACHE_SERIALIZER
 } from './bymax-cache.constants'
 
+// Resolved options — the shape stored under `BYMAX_CACHE_OPTIONS`. Exported so a
+// consumer injecting that token (and the `./admin` subpath, which crosses the
+// package boundary rather than bundling a second copy of these modules) has a
+// type for it.
+export type { ResolvedOptions } from './config/resolved-options'
+export {
+  DEFAULT_KEY_SEPARATOR,
+  DEFAULT_NAMESPACE,
+  DEFAULT_REDIS_PORT
+} from './constants/default-namespace'
+
 // Errors
 export { CacheException } from './errors/cache.exception'
 export { CACHE_ERROR_CODES, CACHE_ERROR_MESSAGES } from './errors/cache-error-codes'

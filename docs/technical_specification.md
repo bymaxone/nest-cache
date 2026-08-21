@@ -77,14 +77,14 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 
 ### 1.4 Distribution Model
 
-| Aspect               | Detail                                      |
-| -------------------- | ------------------------------------------- |
-| Registry             | Public npm (`@bymax-one/nest-cache`)        |
-| License              | MIT                                         |
-| Runtime              | Node.js 24+                                 |
-| Framework            | NestJS 11+                                  |
-| Subpaths             | `.` (server) + `./shared` (types/constants) |
-| Main peer dependency | `ioredis ^6`                                |
+| Aspect               | Detail                                                                   |
+| -------------------- | ------------------------------------------------------------------------ |
+| Registry             | Public npm (`@bymax-one/nest-cache`)                                     |
+| License              | MIT                                                                      |
+| Runtime              | Node.js 24+                                                              |
+| Framework            | NestJS 11+                                                               |
+| Subpaths             | `.` (server) + `./admin` (administration) + `./shared` (types/constants) |
+| Main peer dependency | `ioredis ^6`                                                             |
 
 ### 1.5 Design Principles
 
@@ -225,10 +225,17 @@ The `subscriber` is created on the first call to `subscribe`/`psubscribe`, inher
 
 ### 3.2 Subpath Exports
 
-| Subpath      | Entry point             | Description                   | Peer deps                   |
-| ------------ | ----------------------- | ----------------------------- | --------------------------- |
-| `.` (server) | `dist/server/index.mjs` | Dynamic module, services      | `@nestjs/common`, `ioredis` |
-| `./shared`   | `dist/shared/index.mjs` | Types, constants, error codes | None                        |
+| Subpath      | Entry point             | Description                      | Peer deps                              |
+| ------------ | ----------------------- | -------------------------------- | -------------------------------------- |
+| `.` (server) | `dist/server/index.mjs` | Dynamic module, services         | `@nestjs/common`, `ioredis`            |
+| `./admin`    | `dist/admin/index.mjs`  | Read-only administration surface | `@nestjs/common`, `ioredis`, `.` entry |
+| `./shared`   | `dist/shared/index.mjs` | Types, constants, error codes    | None                                   |
+
+`./admin` treats `@bymax-one/nest-cache` as **external** in its tsup entry and imports it by
+package specifier. Bundling the server modules into it would give the admin bundle its own
+copies of `CacheService` and the Symbol DI tokens, so `@Inject(CacheService)` in an admin
+provider would name a different class object than `BymaxCacheModule` registered — a
+dual-package hazard that fails only in the published artifact, never in the test run.
 
 ```json
 {
