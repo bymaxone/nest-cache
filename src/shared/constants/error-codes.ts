@@ -27,7 +27,11 @@ export const CACHE_ERROR_CODES = {
   CLUSTER_MISCONFIGURED: 'cache.cluster_misconfigured',
   SENTINEL_MISCONFIGURED: 'cache.sentinel_misconfigured',
   SHUTDOWN_TIMEOUT: 'cache.shutdown_timeout',
-  UNSUPPORTED_IN_CLUSTER: 'cache.unsupported_in_cluster'
+  UNSUPPORTED_IN_CLUSTER: 'cache.unsupported_in_cluster',
+  INVALID_SCOPE: 'cache.invalid_scope',
+  SCOPE_NOT_FOUND: 'cache.scope_not_found',
+  SCOPE_NOT_READABLE: 'cache.scope_not_readable',
+  KEY_NOT_IN_SCOPE: 'cache.key_not_in_scope'
 } as const satisfies Record<string, `cache.${string}`>
 
 /** Union of every cache error code string value. */

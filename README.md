@@ -97,18 +97,21 @@ pnpm add @bymax-one/nest-cache ioredis
 
 ## 📦 Subpath Exports
 
-One package, two entry points — import only what your app needs:
+One package, three entry points — import only what your app needs:
 
 | Subpath    | Import                         | Purpose                                                                                                  |              Dependencies              |
 | ---------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- | :------------------------------------: |
 | **Server** | `@bymax-one/nest-cache`        | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException` | NestJS 11, ioredis 6, reflect-metadata |
+| **Admin**  | `@bymax-one/nest-cache/admin`  | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal     | NestJS 11, ioredis 6, the server entry |
 | **Shared** | `@bymax-one/nest-cache/shared` | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                  |                  None                  |
 
 ```
 shared (zero deps)
      ↑
-  server
+  server  ←  admin
 ```
+
+`/admin` is a **privileged** surface and is kept out of the main entry on purpose: importing it is a greppable, reviewable act, a consumer who never wires it cannot resolve a reveal service from DI by accident, and it never lands in the main bundle.
 
 The `/shared` subpath is safe to import in isomorphic code, test helpers, CLI scripts, or shared packages that must not pull in NestJS or ioredis.
 
@@ -386,6 +389,104 @@ export class HealthController {
 
 ---
 
+## 🔎 Administration surface (`/admin`)
+
+A read-only surface for an operator-facing console: is the cache answering, what is it doing, what is in it.
+
+```ts
+import { BymaxCacheModule } from '@bymax-one/nest-cache'
+import { BymaxCacheAdminModule } from '@bymax-one/nest-cache/admin'
+
+// `config` is a ConfigService reachable where the module is declared; see
+// Scenario 4 above for the forRootAsync form that injects it properly.
+@Module({
+  imports: [
+    BymaxCacheModule.forRoot({
+      connection: { url: config.getOrThrow<string>('REDIS_URL') },
+      namespace: 'my-app'
+    }),
+    BymaxCacheAdminModule.forRoot({
+      scopes: [
+        {
+          id: 'cache',
+          label: 'Application cache',
+          pattern: 'my-app:*',
+          isReadable: true,
+          origin: "the application's own namespace, written through the typed API"
+        },
+        {
+          id: 'auth',
+          label: 'Authentication',
+          pattern: 'auth:*',
+          isReadable: false,
+          origin:
+            'written by another library through the un-namespaced client, so it sits at Redis ' +
+            'root. Values are refused: this keyspace holds session records.'
+        }
+      ]
+    })
+  ]
+})
+export class AppModule {}
+```
+
+```ts
+constructor(
+  @Inject(CacheStatusService) private readonly status: CacheStatusService,
+  @Inject(CacheAdminService) private readonly admin: CacheAdminService
+) {}
+
+await this.status.health()   // { status: 'up', latencyMs: 3, mode, isScanSupported, degradedAboveMs }
+await this.status.stats()    // parsed INFO
+this.status.config()         // resolved wiring, connection URL withheld
+this.admin.listScopes()      // never touches the connection
+await this.admin.listKeys('cache', { includeSize: true })
+await this.admin.revealValue('auth', 'auth:sess:1')  // { status: 'withheld', origin }
+```
+
+### What the library owns, and what you own
+
+The library owns the **mechanism**: validating the allowlist, scanning against it, describing keys, withholding values. The application owns **which keyspaces exist**, the `origin` prose that explains them, the routes, and the guards. A cache library cannot know that another library writes at Redis root through `getClient()`, and making it depend on that library to find out would invert two packages to save an application from stating one thing about itself.
+
+### `isReadable: false` withholds the value — and nothing else
+
+Listing, types, TTLs and sizes stay available on an unreadable scope. Only the value is refused, and the refusal is returned _before_ the value is read.
+
+This is the easy thing to get wrong, because "unreadable" reads like "return nothing" — and the unreadable scope is typically the one that holds the most interesting keys. A surface that renders it as empty tells an operator the region holds nothing while it is full, which is the same defect as a blank log page during an outage: a reading meaning _"I may not tell you"_ drawn identically to one meaning _"there is nothing here"_.
+
+### Scope patterns: a literal prefix, optionally ending in `*`
+
+`auth:*`, `my-app:*` and exact keys are accepted. `app:*:v1`, `*`, `a?b` and `a[bc]` are refused at wiring.
+
+The restriction exists because a caller names a **key**, so the library must decide whether that key belongs to the named scope — otherwise a caller names the readable scope and passes a key from the credential-bearing one. Deciding that for arbitrary globs means reimplementing Redis's `stringmatchlen` — greedy `*` with backtracking, `[a-z]` classes, `^` negation, escapes, and the unterminated-class case where `ten[ant` matches nothing at all — and **a matcher even slightly more permissive than the server's is a silent cross-scope leak that no happy-path test would show.** With this shape, membership is exact by construction, and the E2E suite checks it differentially against a real server's own `KEYS`.
+
+Do not relax this to be helpful. Widening it later is compatible; a leak is not un-shippable.
+
+### Readings that would carry two meanings are unions, not nullables
+
+| Reading      | Type                                                      | Why                                                                                                                                                                                            |
+| ------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxmemory`  | `unbounded \| limited \| unreported`                      | Redis spells "no ceiling" as `maxmemory:0`; read as a literal ceiling it draws a full saturation bar on the least constrained server there is — and "unbounded" is not "the server didn't say" |
+| `TTL`        | `expiring \| persistent \| missing`                       | `-1` and `-2` are different facts, and the key that expired between the scan and the read is the one an operator is watching                                                                   |
+| `aofEnabled` | `boolean \| null`                                         | `false` for an absent field is a durability claim made without evidence                                                                                                                        |
+| health       | `{ up \| degraded, latencyMs } \| { down, reason, code }` | A latency exists if and only if the ping answered — expressed as `latencyMs: number \| null` that is a convention a future `catch` can break; as a union it does not compile                   |
+
+`mode`, `isScanSupported` and `degradedAboveMs` sit **outside** the health union: a cluster deployment that is down should still report that scanning was never going to work.
+
+### Costs the surface does not hide
+
+- **`sampledCount` / `sampledBytes`** are sums over a capped `SCAN`, not measurements of the keyspace. `isComplete` is the fact; the names are the guard.
+- **A page may carry slightly more than `scanLimit` entries.** `SCAN` returns whole batches and the cursor has already moved past them, so the limit stops the loop rather than trimming the result — trimming would drop keys no later page could reach.
+- **Sizing is opt-in** (`includeSize`), and every pipeline batch is bounded in **commands**, not keys. Redis is single-threaded, so a pipeline converts a network cost into a server-blocking one: one flush of N keys × 3 commands blocks every other client for the whole burst, on a server someone is inspecting precisely because it is unwell.
+- **`connection.url` is never on the wire.** The config payload carries host, port and a TLS flag; the URL is never read into the admin subpath at all.
+- **`mem_fragmentation_ratio` is reported raw.** On an instance holding very little, allocator and copy-on-write overhead dominate and the figure reads far above 1 without indicating a problem — 9.07 was measured on an instance holding 1.1 MiB. Turning it into a verdict is deployment policy.
+
+### Cluster
+
+Every scan-based operation throws `UNSUPPORTED_IN_CLUSTER`, inherited from `CacheService.getClient()` rather than restated. `isScanSupported` travels on the health payload so a console never has to re-derive that rule from `mode`.
+
+---
+
 ## 🏗️ Architecture
 
 The package runs **inside** your NestJS application as a dynamic module — not as a separate service:
@@ -467,6 +568,10 @@ Error `details` are built to be safe to log:
 
 Scripts are declared up front — through `options.scripts` or `ScriptManagerService.register(name, lua)` — and executed **by name**. A call site passes `eval(scriptName, keys, args)`; it has no way to pass a script body. Keys are namespaced before execution and arguments arrive as Redis `ARGV[]`, which Lua treats as data, so request input cannot become script source. Standalone and Sentinel use `EVALSHA` with a `NOSCRIPT` reload-and-retry; Cluster sends the full body via `EVAL`, because `EVALSHA` routes by key slot and a keyless reload would not reach the node that reported `NOSCRIPT`.
 
+### The namespace cannot widen a destructive pattern
+
+`validateOptions` rejects a namespace containing a Redis glob metacharacter (`*`, `?`, `[`, `\`). The namespace is composed into `flushNamespace()`'s match pattern, so a metacharacter there is not cosmetic — measured against Redis 8.10.0, `*` and `?` **widen** the pattern into other keyspaces, `\` **escapes** into a different one while sparing its own keys, and `[` opens a character class that never closes so the pattern matches **nothing** and the flush reports success having removed no keys. `]` is accepted: measured to be a literal that neither widens nor silences. This matters most when the namespace is derived from input — multi-tenant wiring using a tenant slug reads like isolation and would otherwise be one unsanitised character from a cross-tenant delete.
+
 ### Cluster mode refuses commands it cannot honor safely
 
 `scan()`, `flushNamespace()`, and `getClient()` throw `UNSUPPORTED_IN_CLUSTER` under `mode: 'cluster'` rather than silently operating on one node. A partial flush that reports success is worse than an error.
@@ -483,6 +588,8 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 - Values that must not be readable by whoever can read Redis are encrypted by the application (or a custom `ISerializer`) before they are cached — the library stores what you hand it
 - Cached entries carry a TTL sized to your data-retention policy; namespacing bounds who can read an entry, not how long it exists
 - Custom `ISerializer` implementations throw on malformed input rather than returning a fallback value
+- If `/admin` is wired, its routes are behind the application's own authorization — the library validates scopes and withholds values, it does not authenticate anyone
+- Any admin scope whose keyspace holds credentials is declared `isReadable: false`, and the deployment understands that this withholds the **value only** — listing, types, TTLs and sizes stay visible by design
 
 ---
 
@@ -491,7 +598,9 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 | Layer                 | Implementation                                                                                                              |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Tenant Isolation      | Every key and channel composed by `KeyBuilder` as `{namespace}{sep}{prefix}{sep}{id}` — no bare-key path in the API         |
-| Namespace Validation  | Empty or separator-containing namespace rejected at bootstrap (`INVALID_NAMESPACE`)                                         |
+| Namespace Validation  | Empty, separator-containing, or glob-metacharacter namespace rejected at bootstrap (`INVALID_NAMESPACE`)                    |
+| Admin Scope Allowlist | Scopes declared at wiring, validated and frozen; a caller names a scope by id and can never supply a match pattern          |
+| Admin Read-Only       | The `/admin` subpath issues no mutating command — enforced by the `check:admin-readonly` build gate, not by convention      |
 | Key Validation        | Empty `prefix` / `id` rejected before the command is issued (`INVALID_KEY`)                                                 |
 | Deserialization       | Fails closed — `DESERIALIZATION_FAILED`; never a partial or wrongly-typed value                                             |
 | Serialization         | Top-level `undefined` / function / symbol rejected; the value is never echoed into `details`                                |

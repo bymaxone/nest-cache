@@ -7,6 +7,8 @@
  */
 import type { RedisOptions } from 'ioredis'
 
+import { DEFAULT_REDIS_PORT } from '../constants/default-namespace'
+
 /**
  * Parses a Redis connection URL into ioredis `RedisOptions`.
  *
@@ -36,7 +38,7 @@ export function parseRedisUrl(url: string): Partial<RedisOptions> {
 
   const result: Partial<RedisOptions> = {
     host: parsed.hostname,
-    port: parsed.port ? Number.parseInt(parsed.port, 10) : 6379
+    port: parsed.port ? Number.parseInt(parsed.port, 10) : DEFAULT_REDIS_PORT
   }
 
   if (parsed.username) {

@@ -4,6 +4,96 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-21
+
+### Security
+
+- **`validateOptions` now rejects a namespace containing a Redis glob metacharacter
+  (`*`, `?`, `[`, `\`).** The namespace is this library's isolation boundary and it was
+  composed unvalidated into `flushNamespace`'s destructive match pattern
+  (`{namespace}{separator}*`), so a metacharacter changed which keys `UNLINK` reached.
+  Measured against Redis 8.10.0, each one broke isolation differently: `*` and `?` **widen**
+  the pattern (namespace `ten*ant` matches every other tenant's keys, turning a scoped flush
+  into a cross-tenant delete); `\` **escapes** the next character (namespace `ten\ant`
+  matches `tenant:*` — a different keyspace — while sparing its own keys); and `[` opens a
+  character class that never closes, so the pattern matches **nothing** and `flushNamespace`
+  removes none of the namespace's keys while returning `0`, which reads as a successful flush.
+  Triggering it required a misconfigured namespace, so no default configuration was exposed;
+  the case to worry about is a namespace derived from input, such as multi-tenant wiring using
+  a tenant slug. `]` is deliberately still accepted — measured to be a literal that neither
+  widens nor silences the pattern.
+- An **empty `keySeparator`** now fails with its own message. It was already rejected, but by
+  coincidence: the next guard is `namespace.includes(separator)` and `'anything'.includes('')`
+  is `true` for every string, so it reported _"namespace contains key separator"_ — something
+  the consumer had not done.
+
+### Added
+
+- **New subpath `@bymax-one/nest-cache/admin`** — a privileged, read-only administration
+  surface: health, parsed `INFO` statistics, resolved configuration, keyspace listing, key
+  inspection and value reveal. Kept out of the main entry deliberately: importing it is a
+  greppable, reviewable act; a consumer who never wires it cannot resolve a reveal service
+  from DI by accident and does not pay for it in the main bundle.
+- `BymaxCacheAdminModule.forRoot()` / `.forRootAsync()`, `CacheStatusService`,
+  `CacheAdminService`, and the scope model (`CacheScope`, `validateScopes`, `findScope`,
+  `isKeyInScope`).
+- New error codes: `cache.invalid_scope`, `cache.scope_not_found`, `cache.scope_not_readable`,
+  `cache.key_not_in_scope`.
+- `ResolvedOptions` and `DEFAULT_REDIS_PORT` are now exported from the main entry. The former
+  is the shape stored under the already-exported `BYMAX_CACHE_OPTIONS` token, which previously
+  had no public type.
+- `pnpm check:admin-readonly` — a build gate that fails if the admin subpath declares a method
+  named after a mutating Redis command, sends a non-allowlisted command through the `call`
+  escape hatch, or imports `ioredis` as a value. Wired into `prepublishOnly`.
+
+### Administration surface — shapes chosen deliberately
+
+- **The application declares which keyspaces exist; the library validates and serves them.**
+  A cache library cannot know that another library writes at Redis root through
+  `getClient()`, and must not depend on that library to learn it.
+- **`isReadable: false` withholds the value only.** Listing, types, TTLs and sizes stay
+  available. A surface that renders an unreadable keyspace as empty tells an operator the
+  region holds nothing when it is full — the same defect as a blank log page during an outage.
+- **Scope patterns are restricted to a literal prefix with at most one trailing `*`.** A
+  caller names a key, so the library must decide whether that key belongs to the named scope.
+  Deciding that for arbitrary globs means reimplementing Redis's `stringmatchlen`, and a
+  matcher even slightly _more_ permissive than the server's is a silent cross-scope leak that
+  no happy-path test would show. With this shape, membership is exact by construction — and it
+  is checked differentially against a real server in the E2E suite.
+- **Health is three states and `latencyMs` cannot exist without a measurement.** The type is
+  a union, so a handler that caught a throwing ping and returned a confident status does not
+  compile. `mode` and `isScanSupported` sit outside the union: a cluster deployment that is
+  down should still report that scanning was never going to work.
+- **Every reading that would carry two meanings under one `null` is a union.**
+  `maxmemory` is `unbounded | limited | unreported` (Redis spells "no ceiling" as
+  `maxmemory:0`, which read literally draws a full saturation bar on the least constrained
+  server there is); `TTL` is `expiring | persistent | missing` (`-1` and `-2` are different
+  facts, and the key that expired mid-listing is the one an operator is watching);
+  `aofEnabled` is nullable, because `false` for an absent field is a durability claim made
+  without evidence.
+- **`connection.url` is never on the wire.** The config payload carries host, port and a TLS
+  flag; the URL and its password are never read into this subpath at all.
+- **Sampled figures are named `sampledCount` / `sampledBytes`.** They are sums over a capped
+  `SCAN`, not measurements of the keyspace. `isComplete` is the fact; the names are the guard,
+  because a caller reaching for one does not necessarily read the other.
+- **Pipeline batches are bounded in commands, not keys.** Redis is single-threaded, so a
+  pipeline converts a network cost into a server-blocking one — describing N keys is two or
+  three commands each, and one flush blocks every other client for the whole burst, on a
+  server someone is inspecting precisely because it is unwell. Sizing is opt-in for the same
+  reason.
+
+### Internal
+
+- Bundle-size budgets recalibrated: server `14.50` → `15.00` kB, admin added at `7.25` kB
+  against a measured `6.60` kB. The admin entry marks `@bymax-one/nest-cache` **external** —
+  bundling the server modules would give it its own copies of `CacheService` and the DI
+  tokens, so `@Inject(CacheService)` in an admin provider would name a different class object
+  than the one `BymaxCacheModule` registered and DI would fail at a consumer's runtime.
+- E2E coverage for the admin subpath against a real Redis, asserting all twenty-four `INFO`
+  field names the parser reads, real `MEMORY USAGE` sizing, and the differential scope-membership
+  check. `ioredis-mock` supports none of those three (measured), so a unit suite alone could not
+  have verified them.
+
 ## [1.1.0] - 2026-08-11
 
 ### Changed
@@ -190,6 +280,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.2.0]: https://github.com/bymaxone/nest-cache/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bymaxone/nest-cache/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/bymaxone/nest-cache/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-cache/compare/v1.0.4...v1.0.5

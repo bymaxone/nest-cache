@@ -1,7 +1,7 @@
 # Mutation Testing Results — @bymax-one/nest-cache
 
 > Tool: Stryker (`@stryker-mutator/core`) · Runner: Jest · `ignoreStatic: false` ·
-> `thresholds.break = 95` · Runtime: **Node 24** (`nvm use 24`).
+> `thresholds.break = 100` · Runtime: **Node 24** (`nvm use 24`).
 > Command: `pnpm mutation` (full) · Report: `reports/mutation/mutation.html`.
 
 ## Final — 2026-05-31 (after hardening)
@@ -119,3 +119,55 @@ Cold `pnpm mutation:full` after the `ioredis ^5 → ^6` peer bump: **100.00%**, 
 constructor option typing (`OwnedRedisOptions` / `OwnedClusterOptions`), so no mutant moved.
 The Stryker gate (`thresholds.break`/`high`/`low`) was raised from 95/99/95 to **100** in the
 same change, which this run clears.
+
+## Re-run — 2026-08-21 (1.2.0 — `./admin` subpath + namespace glob fix)
+
+**Global mutation score: 100.00%** — 759 killed, 17 timeout, **0 survived** (570 compile-error
+mutants excluded). `pnpm mutation:full` exits 0 against `break: 100`. Cold run: 6m45s under Node 24.
+1346 mutants tested, up from 447 — the `./admin` subpath roughly tripled the mutated surface.
+
+It took three cold runs to get there, and the two failures are the useful part of this record.
+
+### Run 1 — 96.04%, 31 survivors (all in `src/admin`)
+
+The server scored 100.00% including the 95 mutants on the reworked `default-options.ts`, so the
+gap was entirely in code written that day. Grouped by what the survivor actually revealed:
+
+| Survivors                        | What the tests were not doing                                                                                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 5 — `parse-info` numeric regex   | No fixture used a negative value or **any** exponent form, so `[+-]?`, the exponent sign and its digit count were all unconstrained.                                                             |
+| 5 — `parse-info` header skip     | Real `INFO` headers carry no colon, so they fall out of the `indexOf` guard anyway: skipping them and not skipping them were **indistinguishable**. Fixed with a `# Commandstats: none` fixture. |
+| 1 — `?.trim()` on a value        | Nothing exercised a padded value.                                                                                                                                                                |
+| 5 — option-name literals         | One shared assertion pinned only `scanLimit`; the other five names could drift to anything.                                                                                                      |
+| 2 — module `exports: [...]`      | Every test resolved services **from** the admin module, which succeeds whether or not anything is exported. Needed a consumer module importing across the boundary.                              |
+| 2 — endpoint guards              | The cluster and malformed-URL tests carried no connection block, so guarding and not guarding produced the same empty answer. Fixed with configs that would visibly leak a host.                 |
+| 1 — `finally { clearTimeout }`   | A leaked timer is invisible in the payload. Fixed by asserting `jest.getTimerCount()` is 0 after a probe.                                                                                        |
+| 1 — latency arithmetic           | The fake clock started at **zero**, where `end - start` and `end + start` agree. Base moved to 1000.                                                                                             |
+| 1 — scan loop `<` vs `<=`        | No case landed exactly on the limit.                                                                                                                                                             |
+| 1 — pipeline slot guard          | The errored slot carried `null`, identical to the guarded result. The slot now carries a real value.                                                                                             |
+| 2 — `'ZRANGE'` / `'WITHSCORES'`  | No test asserted the command name sent through the `call` escape hatch.                                                                                                                          |
+| 2 — `TTL_MISSING` and its branch | See below — resolved in the source, not the tests.                                                                                                                                               |
+
+### Run 2 — 99.87%, 1 survivor
+
+`parse-info.ts`, the `line.length === 0` operand of the blank-line guard. An empty line has no
+separator, so the `cut <= 0` check below already skips it: the operand was a fast path **no
+behaviour depends on**, and therefore one no test could ever hold to account.
+
+### Two equivalent mutants removed rather than suppressed
+
+Both were resolved by deleting redundant source, not by a `// Stryker disable`:
+
+- `if (reply === TTL_MISSING)` in `read-replies.ts` was fully subsumed by the `reply < 0`
+  catch-all below it. The branch and its constant are gone; the protocol knowledge (`-2` means
+  "no such key") moved into the comment.
+- `line.length === 0 ||` in `parse-info.ts`, as above.
+
+This keeps the repo's standing property intact: **the production source carries no mutation
+suppression directives at all.**
+
+### Method note
+
+Eight of the run-1 fixes were verified by hand-mutating the source and confirming the suite goes
+red, then restoring byte-identical — a test written to kill a mutant is worth only as much as the
+proof that it does.

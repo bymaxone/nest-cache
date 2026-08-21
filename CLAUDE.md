@@ -3,7 +3,7 @@
 > **Type:** npm public library (NOT an application)
 > **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management
 > **Runtime:** Node.js 24+ | Zero direct dependencies (functionality via peer deps)
-> **Status:** v1.0.2 (published) — 100% coverage, 100% mutation score (433 detected: 427 killed + 6 timeout, **0 survived**). `src/` is unchanged since 1.0.0 — 1.0.1 and 1.0.2 were packaging-metadata releases — so those results still stand. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
+> **Status:** v1.2.0 — 100% coverage, 100% mutation score. Adds the `./admin` subpath (read-only administration) and a security fix: the namespace is now rejected when it carries a Redis glob metacharacter, which previously reached `flushNamespace`'s destructive match pattern. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
 ---
 
@@ -52,23 +52,34 @@
 - **100% statements / branches / functions / lines** enforced by `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
 - Mutation testing (Stryker `break: 100`) is the deeper gate. `ignoreStatic: false` (rigorous — exposes module-level constant mutants). Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>` — acceptable for genuine equivalents only; minimize, and never disable a mutant a test could kill.
 
-**8. Build** — tsup builds 2 subpaths → ESM (.mjs) + CJS (.cjs) + .d.ts. `sideEffects: false`. Peer deps (`@nestjs/*`, `ioredis`, `reflect-metadata`) always external.
+**8. Build** — tsup builds 3 subpaths → ESM (.mjs) + CJS (.cjs) + .d.ts. `sideEffects: false`. Peer deps (`@nestjs/*`, `ioredis`, `reflect-metadata`) always external.
 
 ---
 
 ## Subpaths
 
-| Subpath      | Purpose                        | Peer Deps                              |
-| ------------ | ------------------------------ | -------------------------------------- |
-| `.` (server) | NestJS module + cache services | NestJS 11, ioredis 6, reflect-metadata |
-| `./shared`   | Types + constants (zero deps)  | None                                   |
+| Subpath      | Purpose                                           | Peer Deps                              |
+| ------------ | ------------------------------------------------- | -------------------------------------- |
+| `.` (server) | NestJS module + cache services                    | NestJS 11, ioredis 6, reflect-metadata |
+| `./admin`    | Read-only administration (health, INFO, keyspace) | NestJS 11, ioredis 6, the server entry |
+| `./shared`   | Types + constants (zero deps)                     | None                                   |
+
+**`./admin` rules.** Privileged and deliberately separate — never fold it into `.`.
+Its sources import the server surface by **package specifier** (`@bymax-one/nest-cache`),
+never relatively: the tsup entry marks the package `external`, and a relative import would
+inline a second copy of `CacheService` and the DI tokens, so `@Inject(CacheService)` would
+name a different class object than `BymaxCacheModule` registered and DI would fail in the
+published package. The subpath issues **no mutating Redis command** — enforced by
+`pnpm check:admin-readonly`, not by convention. Scope patterns are restricted to a literal
+prefix with at most one trailing `*` so key-membership is exact by construction; do not
+relax this (a matcher more permissive than the server's is a silent cross-scope leak).
 
 ---
 
 ## Verification — Run Before Completing Any Task
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
+pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
 Mutation testing (before tagging a release), under Node 24:

@@ -29,7 +29,10 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
   [CACHE_ERROR_CODES.CONNECTION_LOST, 'Redis connection was lost during the operation.'],
   [CACHE_ERROR_CODES.SERIALIZATION_FAILED, 'Failed to serialize the value.'],
   [CACHE_ERROR_CODES.DESERIALIZATION_FAILED, 'Failed to deserialize the cached value.'],
-  [CACHE_ERROR_CODES.INVALID_NAMESPACE, 'Namespace is empty or contains the reserved separator.'],
+  [
+    CACHE_ERROR_CODES.INVALID_NAMESPACE,
+    'Namespace or key separator is invalid: the namespace is empty, contains the separator, or contains a Redis glob metacharacter.'
+  ],
   [CACHE_ERROR_CODES.INVALID_KEY, 'Cache key prefix or id is empty.'],
   [CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, 'Tried to execute an unregistered Lua script.'],
   [CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, 'Lua script returned a Redis error.'],
@@ -44,5 +47,18 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
   [
     CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER,
     'This operation requires standalone or sentinel mode; it is not supported in cluster mode.'
+  ],
+  [
+    CACHE_ERROR_CODES.INVALID_SCOPE,
+    'An administration scope is malformed: empty field, duplicate id, or a match pattern with no literal prefix.'
+  ],
+  [CACHE_ERROR_CODES.SCOPE_NOT_FOUND, 'No administration scope is declared under that id.'],
+  [
+    CACHE_ERROR_CODES.SCOPE_NOT_READABLE,
+    'This administration scope withholds values; listing, types, TTLs and sizes remain available.'
+  ],
+  [
+    CACHE_ERROR_CODES.KEY_NOT_IN_SCOPE,
+    'That key does not belong to the named administration scope.'
   ]
 ])

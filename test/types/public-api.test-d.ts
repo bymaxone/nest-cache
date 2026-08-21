@@ -96,3 +96,16 @@ type _ScriptLua = Expect<Equal<IScriptDefinition['lua'], string>>
 // `ICacheEvents.onEvent` is an optional observability callback — `undefined` is
 // assignable to its declared type.
 type _OnEvent = Expect<Equal<undefined extends ICacheEvents['onEvent'] ? true : false, true>>
+
+// ─── admin subpath ───────────────────────────────────────────────────────────
+
+// The administration surface reads through a narrow, read-only capability
+// interface so a unit test can supply a plain object with no cast. That is only
+// sound while the REAL ioredis client still satisfies it — if a future ioredis
+// changes one of these signatures, this assignment fails to compile here rather
+// than at a consumer's runtime.
+import type { Redis as AdminRedis } from 'ioredis'
+import type { IRedisReader } from '../../src/admin/interfaces/redis-reader.interface'
+
+declare const adminClient: AdminRedis
+export const adminReaderIsSatisfiedByTheRealClient: IRedisReader = adminClient
