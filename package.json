@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-cache",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",

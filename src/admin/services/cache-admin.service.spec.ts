@@ -502,18 +502,20 @@ describe('CacheAdminService.revealValue', () => {
 
   // A hash is revealed as named fields rather than a positional array, so a caller
   // cannot mis-pair a field with the wrong value.
-  it('reveals a hash as named fields', async () => {
+  //
+  // The entry shape is pinned with `toEqual`, not `toMatchObject`: partial
+  // matching would accept an extra alias alongside `field`, and re-introducing a
+  // second name for one concept is exactly what this shape was corrected to stop.
+  // Redis's own vocabulary is field/value (`HSET key field value`).
+  it('reveals a hash as field/value entries and nothing else', async () => {
     const reader = new FakeReader([], { type: 'hash', hgetall: { a: '1', b: '2' } })
-    expect(await build(reader).revealValue('cache', 'app:h')).toMatchObject({
-      value: {
-        kind: 'hash',
-        fields: [
-          { name: 'a', value: '1' },
-          { name: 'b', value: '2' }
-        ],
-        isComplete: true
-      }
-    })
+    const result = await build(reader).revealValue('cache', 'app:h')
+    expect(result).toMatchObject({ value: { kind: 'hash', isComplete: true } })
+    const value = result.status === 'revealed' ? result.value : null
+    expect(value?.kind === 'hash' ? value.fields : null).toEqual([
+      { field: 'a', value: '1' },
+      { field: 'b', value: '2' }
+    ])
   })
 
   // Truncation applies to hashes and SAYS so — a surface must not present a partial
@@ -523,8 +525,8 @@ describe('CacheAdminService.revealValue', () => {
     expect(await build(reader, { revealLimit: 2 }).revealValue('cache', 'app:h')).toMatchObject({
       value: {
         fields: [
-          { name: 'a', value: '1' },
-          { name: 'b', value: '2' }
+          { field: 'a', value: '1' },
+          { field: 'b', value: '2' }
         ],
         isComplete: false
       }

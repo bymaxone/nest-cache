@@ -220,7 +220,7 @@ describe('cache admin subpath E2E (real Redis)', () => {
       value: { kind: 'string', value: 'hello' }
     })
     await expect(admin.revealValue('cache', `${NAMESPACE}:hash:1`)).resolves.toMatchObject({
-      value: { kind: 'hash', fields: [{ name: 'field', value: 'value' }] }
+      value: { kind: 'hash', fields: [{ field: 'field', value: 'value' }] }
     })
     await expect(admin.revealValue('cache', `${NAMESPACE}:list:1`)).resolves.toMatchObject({
       value: { kind: 'members', members: ['i1', 'i2'] }

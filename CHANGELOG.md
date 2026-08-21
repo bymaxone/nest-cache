@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-08-21
+
+### Changed
+
+- **`RevealedValue`'s hash arm now names each entry `field`, not `name`**
+  (`{ field, value }`). Redis's own vocabulary for a hash is field/value —
+  `HSET key field value`, `HDEL key field`, and `HGETALL` returns field-value
+  pairs — so a generic `name` lost the domain term in the one place a reader
+  would check the shape against the server's documentation.
+
+  This is a **type-level breaking change** shipped as a patch, deliberately and
+  with the trade-off stated: `RevealedValue` was published in 1.2.0 roughly an
+  hour earlier, no consumer had wired it yet, and correcting a freshly published
+  name is cheaper than carrying a permanent vocabulary mismatch or maintaining
+  two names for one concept. A consumer that already destructured `name` gets a
+  compile error, not a silent behaviour change.
+
+  The library emits **one** name. Aliasing `field` and `name` together would have
+  been two names for one idea, which is the defect this corrects rather than a
+  softer way to ship it.
+
 ## [1.2.0] - 2026-08-21
 
 ### Security
@@ -280,6 +301,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-cache/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bymaxone/nest-cache/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/bymaxone/nest-cache/compare/v1.0.5...v1.0.6
