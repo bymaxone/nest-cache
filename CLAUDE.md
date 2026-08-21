@@ -3,7 +3,7 @@
 > **Type:** npm public library (NOT an application)
 > **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management
 > **Runtime:** Node.js 24+ | Zero direct dependencies (functionality via peer deps)
-> **Status:** v1.2.0 — 100% coverage, 100% mutation score. Adds the `./admin` subpath (read-only administration) and a security fix: the namespace is now rejected when it carries a Redis glob metacharacter, which previously reached `flushNamespace`'s destructive match pattern. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
+> **Status:** v1.2.1 — 100% coverage, 100% mutation score. Adds the `./admin` subpath (read-only administration) and a security fix: the namespace is now rejected when it carries a Redis glob metacharacter, which previously reached `flushNamespace`'s destructive match pattern. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
 ---
 

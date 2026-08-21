@@ -356,7 +356,11 @@ export class CacheAdminService {
         const kept = all.slice(0, limit)
         return {
           kind: 'hash',
-          fields: kept.map(([name, value]) => ({ name, value })),
+          // `field`, not `name`: Redis's own vocabulary for a hash is field/value
+          // (`HSET key field value`, `HDEL key field`). A generic `name` loses the
+          // domain term in the one place a reader would check it against the
+          // server's documentation.
+          fields: kept.map(([field, value]) => ({ field, value })),
           isComplete: kept.length === all.length
         }
       }

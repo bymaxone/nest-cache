@@ -473,6 +473,47 @@ Do not relax this to be helpful. Widening it later is compatible; a leak is not 
 
 `mode`, `isScanSupported` and `degradedAboveMs` sit **outside** the health union: a cluster deployment that is down should still report that scanning was never going to work.
 
+### Reading a value: `revealed` / `withheld` / `missing`
+
+`revealValue()` answers with a discriminated union, not a nullable value, because **"I may not tell you" and "there is nothing here" are different answers** and rendering them identically is the defect this whole surface exists to avoid.
+
+```ts
+import type { CacheAdminService } from '@bymax-one/nest-cache/admin'
+
+async function describeValue(admin: CacheAdminService, scope: string, key: string) {
+  const result = await admin.revealValue(scope, key)
+
+  switch (result.status) {
+    case 'revealed':
+      // `result.type` is the Redis type; `result.value` is shaped by it.
+      return { type: result.type, value: result.value }
+    case 'withheld':
+      // The scope declares `isReadable: false`. `origin` explains why, verbatim.
+      // Listing, types, TTLs and sizes for this key remain available.
+      return { refusedBecause: result.origin }
+    case 'missing':
+      return { gone: true }
+  }
+}
+```
+
+A withheld value is **not an authorization failure**. The caller is allowed to ask; the deployment declared the keyspace unreadable at wiring, and no credential changes that — so serving it as `403` would tell a client that some other permission would unlock it, which is false.
+
+The revealed value is shaped by the key's type:
+
+| `value.kind`  | Shape                              | Notes                                                                                    |
+| ------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `string`      | `{ value: string }`                | Truncated to `revealStringLimit`                                                         |
+| `hash`        | `{ fields: { field, value }[] }`   | `field`, matching Redis's own vocabulary (`HSET key field value`)                        |
+| `members`     | `{ members: string[] }`            | **Sets and lists both.** The enclosing `type` says which — see the ordering caveat below |
+| `scored`      | `{ members: { member, score }[] }` | Sorted sets. `score` is a **string**: parsing to a number would round large integers     |
+| `unsupported` | `{ type: RedisKeyType }`           | Streams and module types — says so, rather than returning an empty value                 |
+
+Every arm except `unsupported` carries `isComplete`. It is deliberately **positive polarity**: an absent boolean reads as `false`, and under a name like `truncated` that default would be the _reassuring_ answer — a value silently claiming nothing was cut.
+
+> [!IMPORTANT]
+> **List order is meaningful; set order is not**, and both arrive in the same `members` array. Nothing in the type stops a renderer from sorting either one. Sorting a set for display is fine; sorting a list is a lie about the data — an `LPUSH` queue shown alphabetically misreports what pops next. Gate any client-side ordering on `type === 'set'`.
+
 ### Costs the surface does not hide
 
 - **`sampledCount` / `sampledBytes`** are sums over a capped `SCAN`, not measurements of the keyspace. `isComplete` is the fact; the names are the guard.

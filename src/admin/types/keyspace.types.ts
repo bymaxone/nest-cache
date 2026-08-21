@@ -100,7 +100,7 @@ export type RevealedValue =
   | { readonly kind: 'string'; readonly value: string; readonly isComplete: boolean }
   | {
       readonly kind: 'hash'
-      readonly fields: readonly { readonly name: string; readonly value: string }[]
+      readonly fields: readonly { readonly field: string; readonly value: string }[]
       readonly isComplete: boolean
     }
   /** Sets and lists: a flat member list. The enclosing `type` says which it is. */
