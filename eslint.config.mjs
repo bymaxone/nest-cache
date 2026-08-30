@@ -40,10 +40,13 @@ export default [
       security
     },
     settings: {
-      // The resolver answers WHERE a specifier points; this answers WHAT that file
-      // exports. Without it the dependency parser silently skips every extension it
-      // cannot map, so on a TypeScript project the graph rules below see an empty
-      // graph and pass on a real cycle.
+      // The resolver answers WHERE a specifier points; this answers WHAT the
+      // resolved file exports. Only the rule that walks the graph needs it: without
+      // this mapping the dependency parser skips in silence every extension it
+      // cannot map — on a TypeScript project, all of them — so `no-cycle` below
+      // sees an empty graph and passes on a real cycle. `no-self-import` only
+      // compares a resolved path against the current file, so it fires either way
+      // and cannot stand in as evidence that this mapping is present.
       'import-x/parsers': {
         '@typescript-eslint/parser': ['.ts']
       },
