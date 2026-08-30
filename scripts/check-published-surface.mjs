@@ -407,7 +407,9 @@ function checkChangelog() {
   } catch {
     // No network or no remote — the local tags below are then all there is.
   }
-  let released = []
+  // No initialiser: the try below either assigns this or the catch returns, so
+  // any default here would be a dead store.
+  let released
   try {
     released = execFileSync('git', ['tag', '--list', 'v*.*.*'], { cwd: ROOT, encoding: 'utf8' })
       .split('\n')
