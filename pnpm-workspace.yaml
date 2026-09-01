@@ -6,10 +6,13 @@
 allowBuilds:
   # Reached through jest-haste-map 30.5.0, which lists it as a direct dependency;
   # 30.4.1 does not, which is why the entry is needed only from that bump onward.
-  # The package ships a prebuilt binary per platform as optional dependencies, so
-  # its build script is the compile-from-source fallback rather than the normal
-  # path. Denied because no pipeline job here runs watch mode at all — `test:watch`
-  # is a local convenience — so compiling a native watcher buys the pipeline nothing.
+  # Denied because the script does nothing to deny: `install` runs
+  # scripts/build-from-source.js, whose entire body is
+  # `if (process.env.npm_config_build_from_source === 'true') { build() }`, so a
+  # normal install compiles nothing and the prebuilt per-platform binary — shipped
+  # as optional dependencies — is what gets used either way. The entry exists
+  # because pnpm 11 exits on an unlisted build script rather than warning, not
+  # because allowing this one would have cost anything.
   '@parcel/watcher': false
   esbuild: true
   unrs-resolver: true
