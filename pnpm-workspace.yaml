@@ -4,6 +4,13 @@
 # this map. Without an entry, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS
 # rather than warning.
 allowBuilds:
+  # Reached through jest-haste-map 30.5.0, which lists it as a direct dependency;
+  # 30.4.1 does not, which is why the entry is needed only from that bump onward.
+  # The package ships a prebuilt binary per platform as optional dependencies, so
+  # its build script is the compile-from-source fallback rather than the normal
+  # path. Denied because no pipeline job here runs watch mode at all — `test:watch`
+  # is a local convenience — so compiling a native watcher buys the pipeline nothing.
+  '@parcel/watcher': false
   esbuild: true
   unrs-resolver: true
   # Denied on purpose: optional native builds reached transitively that
