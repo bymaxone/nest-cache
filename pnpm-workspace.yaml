@@ -4,6 +4,16 @@
 # this map. Without an entry, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS
 # rather than warning.
 allowBuilds:
+  # Reached through jest-haste-map 30.5.0, which lists it as a direct dependency;
+  # 30.4.1 does not, which is why the entry is needed only from that bump onward.
+  # Denied because the script does nothing to deny: `install` runs
+  # scripts/build-from-source.js, whose entire body is
+  # `if (process.env.npm_config_build_from_source === 'true') { build() }`, so a
+  # normal install compiles nothing and the prebuilt per-platform binary — shipped
+  # as optional dependencies — is what gets used either way. The entry exists
+  # because pnpm 11 exits on an unlisted build script rather than warning, not
+  # because allowing this one would have cost anything.
+  '@parcel/watcher': false
   esbuild: true
   unrs-resolver: true
   # Denied on purpose: optional native builds reached transitively that
