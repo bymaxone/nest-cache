@@ -17,6 +17,14 @@ allowBuilds:
 # NOT in package.json: pnpm 11 no longer reads the `pnpm` field of package.json, so
 # an override placed there does nothing — it warns, but it does nothing.
 overrides:
+  # GHSA-73wf-gq98-2v4g and GHSA-c83g-rgw3-j3cx, both CVSS 7.5, both first patched
+  # in 4.28.7: an uncaught crash reachable through a prototype write, and unbounded
+  # memory growth from a cache that never evicts. Reached dev-only, through
+  # @stryker-mutator/* -> @babel/core -> @babel/helper-compilation-targets, which
+  # asks for `^4.24.0` and so accepts the patched line unchanged. Patched rather
+  # than ignored because the fix is a floor on a transitive dev dependency that
+  # nothing here pins, which costs nothing to raise.
+  'browserslist': '^4.28.7'
   'brace-expansion@1': '^1.1.18'
   'brace-expansion@2': '^2.1.4'
   'brace-expansion@5': '^5.0.9'
