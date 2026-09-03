@@ -39,9 +39,25 @@ overrides:
   'brace-expansion@2': '^2.1.4'
   'brace-expansion@5': '^5.0.9'
   'esbuild': '^0.28.1'
-  'fast-uri': '^3.1.5'
+  # Four advisories at CVSS 7.5, all fixed in 3.1.6 and all against `>= 3.1.3 < 3.1.6`:
+  # GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp.
+  # The first is host confusion from IDN canonicalisation being skipped while parsing
+  # an authority; the scanner reports the set together.
+  #
+  # The floor was already `^3.1.5` and already admitted 3.1.6 — and protected nothing,
+  # because a caret in an override is a floor on resolution, not a standing instruction
+  # to re-resolve. The lockfile kept 3.1.5 from the day the entry was written. Read the
+  # resolved version, never the presence of an entry.
+  'fast-uri': '^3.1.6'
   'js-yaml@3': '^3.15.1'
   'js-yaml@4': '^4.3.1'
   'protobufjs': '^7.6.5'
-  'qs': '^6.15.2'
+  # GHSA-4mjr-xmp4-gh2g and GHSA-x5fp-wj9c-mxmx: denial of service through an
+  # attacker-controlled `isBuffer`. Vulnerable `>= 2.2.5 < 6.16.0` and
+  # `>= 6.14.2 <= 6.15.3`; the lockfile held 6.15.3, inside both. Scored 5.3 and 3.7
+  # by GitHub and 6.3 by OSV — named with their source because the two disagree and
+  # this repository's gate is the OSV one.
+  #
+  # Same stale-floor shape as fast-uri above: `^6.15.2` already admitted the fix.
+  'qs': '^6.16.0'
   'undici': '^7.28.0'
