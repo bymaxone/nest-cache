@@ -158,6 +158,38 @@ describe('CacheAdminService.listKeys', () => {
     expect(page.sampledCount).toBe(2)
   })
 
+  // `commandBatchLimit` caps the commands queued per Redis round-trip, and the
+  // pipeline COUNT is the only thing that observes it: the entries `listKeys`
+  // returns are identical however the keys are chunked, so a batching defect
+  // cannot be seen in the result. Mutating `Math.max` to `Math.min` in the
+  // chunk-size expression collapses the chunk to one key per pipeline — correct
+  // output, five times the round-trips, and visible only here.
+  it('caps each pipeline at the configured command batch limit', async () => {
+    const keys = ['app:a', 'app:b', 'app:c', 'app:d', 'app:e']
+    const reader = new FakeReader([['0', keys]], {
+      pipelineReplies: describeReplies(keys.map(() => ['string', -1] as const))
+    })
+    // 4 commands per round-trip over 2 commands per key is 2 keys per pipeline,
+    // so five keys need three: two full and one holding the remainder.
+    const page = await build(reader, { commandBatchLimit: 4 }).listKeys('cache')
+    expect(reader.pipelines).toHaveLength(3)
+    expect(reader.pipelines.map((pipeline) => pipeline.queued.length)).toEqual([4, 4, 2])
+    expect(page.entries.map((entry) => entry.key)).toEqual(keys)
+  })
+
+  // A limit smaller than one key's own commands cannot honour itself. The floor of
+  // one key per pipeline is deliberate: the alternative is a chunk of zero keys and
+  // a loop that never advances.
+  it('still sends one key per pipeline when the limit is below one key of commands', async () => {
+    const keys = ['app:a', 'app:b']
+    const reader = new FakeReader([['0', keys]], {
+      pipelineReplies: describeReplies(keys.map(() => ['string', -1] as const))
+    })
+    const page = await build(reader, { commandBatchLimit: 1 }).listKeys('cache')
+    expect(reader.pipelines).toHaveLength(2)
+    expect(page.entries).toHaveLength(2)
+  })
+
   // Sizing is OPT-IN. Redis is single-threaded, so the extra command per key is
   // paid by every other client waiting behind the batch.
   it('does not issue MEMORY USAGE unless sizing was requested', async () => {
