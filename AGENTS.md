@@ -313,8 +313,19 @@ each one asked for was a force-push rewriting published history.
 
 ### Where this repository narrows a shared rule
 
-The block above holds across every Bymax repository. What follows is the sharper form five of
-its rules take here — not a disagreement with the shared text.
+The block above holds across every Bymax repository. What follows is the sharper form some of
+its rules take here — not a disagreement with the shared text. Deliberately uncounted: a count
+here has to be maintained by whoever adds a rule, and is wrong the first time somebody forgets.
+
+- **Naming an AI tool as the source of a review finding is attribution, and it stays out of
+  commit messages.** "Raised by <tool> on #N" does not belong in commit text; write "raised in
+  review on #N". The shared rule above is scoped to authorship, and a finding is not authorship —
+  this repository takes the stricter line anyway, decided by the repository owner.
+
+  Naming the tool as the **subject** of the change is not attribution and is not restricted. A
+  commit explaining that `AGENTS.md` exists because Codex reads it, or citing its 32 KiB document
+  budget, is describing what the change is for. A rule that removed those would leave the file
+  unable to say why it exists.
 
 - **This repository _is_ one of the `@bymax-one/*` libraries the version rule is about.** Breaking
   changes ship in minor and patch releases by policy, and the `CHANGELOG.md` entry is the
@@ -360,15 +371,25 @@ its rules take here — not a disagreement with the shared text.
   that relaxes this set, or a new path composing a namespace into a match pattern without going
   through the key builder, is a security finding.
 
-- **Two shapes of the events contract a reviewer reliably reads wrong.** Both are in
-  `src/server/interfaces/cache-events.interface.ts`:
+- **`ICacheEvents.onEvent` carries three different failures under one event name, and a
+  reviewer who reads only `CacheEventName` will get this wrong.** The union is
+  `connect | ready | error | close | reconnecting | end`, so `'error'` is overloaded and the
+  payload is what distinguishes the causes. All three are emitted through
+  `this.events?.onEvent?.(...)`, from two files:
 
-  - `ICacheEvents.onEvent` observes **connection lifecycle only** — `CacheEventName` is
-    `connect | ready | error | close | reconnecting | end`. It carries no hit, miss or latency
-    signal, so asking for cache metrics on this callback is asking for something the surface
-    cannot give without wrapping `get()`. That is a feature request, not a review finding.
-  - A forced disconnect during graceful shutdown surfaces as an **`'error'`** event carrying
-    `{ role: 'main', reason: 'forced_disconnect', shutdownTimeoutMs }` and **no `error` field**,
-    because the event union has no shutdown member. Consumer code branching on `data.reason` is
-    reading the contract correctly; the absent `error` string is by design, not a missing null
-    check.
+  | cause                                      | emitted at              | payload                                                                             |
+  | ------------------------------------------ | ----------------------- | ----------------------------------------------------------------------------------- |
+  | ioredis socket error                       | `connection.manager.ts` | `{ role, error }` — no `reason`                                                     |
+  | forced disconnect on shutdown              | `connection.manager.ts` | `{ role: 'main', reason: 'forced_disconnect', shutdownTimeoutMs }` — **no `error`** |
+  | Pub/Sub handler or deserialization failure | `pubsub.service.ts`     | `{ role: 'subscriber', reason: 'handler_error', channel, error }`                   |
+
+  So consumer code branching on `data.reason` is reading the contract correctly, and an absent
+  `error` string on a forced disconnect is by design rather than a missing null check. The
+  Pub/Sub arm is a real observability contract with tests behind it: a change that stops
+  emitting `handler_error`, or that lets a faulty `onEvent` throw out of the subscriber, is a
+  regression, not a refactor. `emitHandlerError` swallows a throw from the callback on purpose —
+  a faulty consumer must never tear down the subscriber.
+
+  What the callback genuinely does **not** carry is a cache hit, miss or latency signal. Asking
+  for those is asking for something the surface cannot give without wrapping `get()`, and that is
+  a feature request rather than a review finding.
