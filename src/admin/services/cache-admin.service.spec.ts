@@ -163,7 +163,7 @@ describe('CacheAdminService.listKeys', () => {
   // returns are identical however the keys are chunked, so a batching defect
   // cannot be seen in the result. Mutating `Math.max` to `Math.min` in the
   // chunk-size expression collapses the chunk to one key per pipeline — correct
-  // output, five times the round-trips, and visible only here.
+  // output, five pipelines here instead of three, and visible only in that count.
   it('caps each pipeline at the configured command batch limit', async () => {
     const keys = ['app:a', 'app:b', 'app:c', 'app:d', 'app:e']
     const reader = new FakeReader([['0', keys]], {
