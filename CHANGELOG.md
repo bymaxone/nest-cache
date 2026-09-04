@@ -4,6 +4,55 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-09-04
+
+### Changed
+
+- **Nothing you execute changes.** `dist/` built from this tag is byte-for-byte
+  identical to 1.2.1 — verified by unpacking the published 1.2.1 tarball and
+  diffing it against a fresh build, not asserted. `src/` has not been touched
+  since 1.2.1.
+
+  Two files in an installed copy do differ, and neither is code: the `version`
+  field in `package.json`, and this changelog. Upgrading from 1.2.1 changes no
+  behaviour; staying on 1.2.1 costs you nothing.
+
+  The version exists because the repository moved underneath the artifact, and a
+  released tag is where that movement is recorded.
+
+### Security
+
+- **Three advisory fixes, all in development dependencies.** `browserslist` to
+  4.28.8 (GHSA-73wf-gq98-2v4g, GHSA-c83g-rgw3-j3cx), `fast-uri` to 3.1.6 (four
+  advisories at CVSS 7.5) and `qs` to 6.16.0 (GHSA-4mjr-xmp4-gh2g,
+  GHSA-x5fp-wj9c-mxmx). All three are reached through `@stryker-mutator/*`, which
+  is a devDependency, and this package publishes with `"dependencies": {}`.
+
+  **No consumer was exposed and none is protected by this release.** The fixes
+  protect the build environment. They are listed because "Security" in a changelog
+  is read as "upgrade for this", and here that reading would be wrong.
+
+  Two of the three were already pinned in `overrides` at floors that already
+  admitted the fixed versions, and protected nothing: a caret there is a floor
+  applied when resolution happens, not a standing instruction to re-resolve. The
+  check that works is the resolved version in the lockfile, never the presence of
+  an entry.
+
+### Internal
+
+- ESLint 9 to 10, with `eslint-plugin-import` replaced by the maintained fork
+  `eslint-plugin-import-x`. The 9 line is end-of-life: 9.39.5 is the last release
+  and is itself deprecated, and the `maintenance` dist-tag points at it.
+- `import-x/parsers` is now configured, which fixes a rule that had never worked.
+  `no-cycle` was declared `error` and reported as active by `--print-config` while
+  a real two-file cycle passed with exit 0, because the dependency parser skips in
+  silence every extension it cannot map. No cycles exist in `src/`; the gate was
+  simply open.
+- `@parcel/watcher`'s build script is recorded as denied, so `pnpm install` stops
+  failing on it under pnpm 11.
+- The shared Bymax code-review rules are adopted in `AGENTS.md`, kept in step by
+  the `agents-sync` workflow.
+
 ## [1.2.1] - 2026-08-21
 
 ### Changed
@@ -301,6 +350,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-cache/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bymaxone/nest-cache/compare/v1.0.6...v1.1.0
