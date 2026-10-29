@@ -4,12 +4,13 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.3] - 2026-10-29
 
 ### Changed
 
-- **Nothing you execute changes.** `src/` has no runtime change since 1.2.2: the only edit
-  under it is a unit test that pins the admin pipeline count.
+- **Nothing you execute changes.** `dist/` built from this tag is byte-for-byte identical
+  to the published 1.2.2: the unpacked tarball was diffed against a fresh build. The only edit
+  under `src/` is a unit test that pins the admin pipeline count.
 
 ### Documentation
 
@@ -380,7 +381,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...HEAD
+[1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-cache/compare/v1.1.0...v1.2.0

@@ -67,9 +67,9 @@ The `pre-commit` hook runs lint-staged (ESLint + Prettier on staged files).
 ## Pull requests
 
 - Keep PRs focused and small.
-- Record user-facing changes under the `Unreleased` section of `CHANGELOG.md`; the release
-  pull request renames it to the version. A change to a published file (`README.md`,
-  `CHANGELOG.md`, `dist/`) ships as a patch release.
+- Record user-facing changes in `CHANGELOG.md`. A change to a published file (`README.md`,
+  `CHANGELOG.md`, `dist/`) ships as a patch release: bump `package.json` and add the numbered
+  `## [x.y.z]` section in the same pull request. The tag, and with it the publish, comes later.
 - The `CI passed` check (aggregating `ci`, `verify`, `e2e` and `security`) must be green;
   CodeQL and OSV-Scanner also run on pull requests.
 - Do not add an `osv-scanner.toml` ignore without an expiry date and a reason.
