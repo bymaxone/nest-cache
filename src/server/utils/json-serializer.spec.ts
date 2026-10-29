@@ -124,44 +124,53 @@ describe('JsonSerializer', () => {
   })
 
   // Malformed JSON must throw DESERIALIZATION_FAILED rather than returning a
-  // partial value — the fail-closed security invariant for cached payloads. The
-  // details.error must carry the bare `err.message`, NOT `String(err)` (which
-  // would prepend the `SyntaxError:` constructor name) — pins the Error branch
-  // of the shared message extractor.
-  it('throws DESERIALIZATION_FAILED on malformed JSON with the bare error message', () => {
+  // partial value — the fail-closed security invariant for cached payloads.
+  it('throws DESERIALIZATION_FAILED on malformed JSON', () => {
     expect(() => serializer.deserialize('not json')).toThrow(CacheException)
+  })
+
+  // A stored value that is not JSON may hold PII or a credential, and the exception
+  // body travels to the HTTP client through a default Nest filter. No byte of it may
+  // appear anywhere in the exception: neither in the response body, nor in `message`,
+  // nor in `details` — including the engine's own parse message, which quotes the
+  // start of the input. The marker sits at the start (where V8 quotes) and far past
+  // it, and the payload is longer than any preview, so a truncating echo fails too.
+  it('never echoes any part of a non-JSON stored value into the exception', () => {
+    const secret = 'sk-live-4eC39HqLyjWDarjtT1zdp7dc'
+    const late = 'late-marker-ZZ9'
+    const raw = `${secret} not json ${'x'.repeat(200)} ${late}`
+
+    let thrown: unknown
     try {
-      serializer.deserialize('not json')
+      serializer.deserialize(raw)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CacheException)
+    const cacheError = thrown as CacheException
+    const everything = JSON.stringify(cacheError.getResponse()) + cacheError.message
+    expect(everything).not.toContain('sk-live')
+    expect(everything).not.toContain(secret.slice(0, 10))
+    expect(everything).not.toContain('late-marker')
+    expect(everything).not.toContain('x'.repeat(10))
+    expect(cacheError.details).toEqual({
+      error: 'stored value is not valid JSON',
+      length: raw.length
+    })
+  })
+
+  // The exception still carries the code and a fixed reason, so a consumer can branch
+  // on DESERIALIZATION_FAILED and tell a codec mismatch from a corrupted entry by size.
+  it('keeps the DESERIALIZATION_FAILED code and reports only the value length', () => {
+    try {
+      serializer.deserialize('{')
+      throw new Error('expected deserialize to throw')
     } catch (error) {
       const cacheError = error as CacheException
       expect(cacheError.code).toBe(CACHE_ERROR_CODES.DESERIALIZATION_FAILED)
-      expect(cacheError.details?.['error']).not.toMatch(/SyntaxError/)
-    }
-  })
-
-  // A payload longer than the preview cap must be truncated to 100 chars plus an
-  // ellipsis, so a large (possibly PII-bearing) value never lands in the error.
-  it('truncates an over-long preview to 100 chars plus an ellipsis', () => {
-    const longBad = 'x'.repeat(200)
-
-    try {
-      serializer.deserialize(longBad)
-      throw new Error('expected deserialize to throw')
-    } catch (error) {
-      expect((error as CacheException).details?.['preview']).toMatch(/^x{100}\.\.\.$/)
-    }
-  })
-
-  // A payload at exactly the preview cap is echoed verbatim with no ellipsis —
-  // pins the boundary of the truncation guard (kills the `>=` / off-by-one mutant).
-  it('keeps a preview at exactly the cap verbatim', () => {
-    const boundaryBad = 'y'.repeat(100)
-
-    try {
-      serializer.deserialize(boundaryBad)
-      throw new Error('expected deserialize to throw')
-    } catch (error) {
-      expect((error as CacheException).details?.['preview']).toBe(boundaryBad)
+      expect(cacheError.details?.['length']).toBe(1)
+      expect(cacheError.details).not.toHaveProperty('preview')
     }
   })
 })

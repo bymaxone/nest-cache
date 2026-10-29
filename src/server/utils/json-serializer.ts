@@ -16,15 +16,19 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
 
-/** Longest raw payload echoed verbatim in a {@link CacheException} preview. */
-const MAX_PREVIEW_LENGTH = 100
+/**
+ * Fixed `details.error` of a failed decode. The engine's own `JSON.parse` message is
+ * never used: it quotes the start of the input, and the exception body can reach an
+ * HTTP client.
+ */
+const DESERIALIZATION_ERROR = 'stored value is not valid JSON'
 
 /**
  * Extracts a human-readable message from an unknown throw value.
  *
  * `JSON.stringify`/`JSON.parse` reject with `Error` subclasses, but a value's
  * `toJSON` hook can throw anything, so the non-`Error` branch is real and must
- * stay. Shared by both directions so the message-shaping logic lives once.
+ * stay.
  *
  * @param err - The caught throw value (`Error`, string, or anything else).
  * @returns The error message, or `String(err)` when it is not an `Error`.
@@ -98,18 +102,17 @@ export class JsonSerializer implements ISerializer {
    * @param raw - The JSON string to decode.
    * @returns The decoded value, typed as `T`.
    * @throws {CacheException} `DESERIALIZATION_FAILED` when `raw` is not valid
-   *   JSON. `details.preview` carries at most {@link MAX_PREVIEW_LENGTH}
-   *   characters of `raw` (truncated with an ellipsis) to aid debugging without
-   *   leaking a large payload that may contain PII.
+   *   JSON. `details` holds a fixed `error` text and the `length` of `raw`; no
+   *   part of the stored value is echoed, as it may carry PII or a credential
+   *   (CLAUDE.md §4).
    */
   deserialize<T>(raw: string): T {
     try {
       return JSON.parse(raw) as T
-    } catch (err) {
+    } catch {
       throw new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED, {
-        error: extractErrorMessage(err),
-        preview:
-          raw.length > MAX_PREVIEW_LENGTH ? `${raw.substring(0, MAX_PREVIEW_LENGTH)}...` : raw
+        error: DESERIALIZATION_ERROR,
+        length: raw.length
       })
     }
   }
