@@ -1247,7 +1247,7 @@ export class CacheException extends HttpException {
 
 `details` is serialized verbatim into the response body: throw sites put only fixed texts, configuration names and sizes in it, never any part of a stored value (`DESERIALIZATION_FAILED` carries a fixed text and the length). A few sites also name the caller's own key or a scope id, and `SERIALIZATION_FAILED`, `CONNECTION_FAILED` and `SCRIPT_EXECUTION_FAILED` carry the underlying error's message. When `statusCode` is omitted the status comes from §12.2.
 
-`KEY_NOT_IN_SCOPE` keeps the `key` in `details`: it is the key the caller itself sent to `./admin`, not stored content. RFC 9457 §3.1.4 says a problem detail ought to focus on helping the client correct the problem (<https://www.rfc-editor.org/rfc/rfc9457.html>), and the OWASP Error Handling Cheat Sheet is about implementation details (<https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html>), which a caller's own key is not. Its status is 500, like every code outside the four listed in §12.2.
+`KEY_NOT_IN_SCOPE` keeps the `key` in `details`: it is the key the caller itself sent to `./admin`, not stored content. RFC 9457 §3.1.4 says a problem detail ought to focus on helping the client correct the problem (<https://www.rfc-editor.org/rfc/rfc9457.html>), and the OWASP Error Handling Cheat Sheet is about implementation details (<https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html>), which a caller's own key is not. Its status is 500, like every code §12.2 gives no other status.
 
 ### 12.2 Code Table
 
