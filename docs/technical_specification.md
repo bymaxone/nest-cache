@@ -1241,6 +1241,8 @@ export class CacheException extends HttpException {
       },
       statusCode ?? CACHE_ERROR_STATUS.get(code) ?? HttpStatus.INTERNAL_SERVER_ERROR
     )
+    this.code = code
+    this.details = details ?? null
   }
 }
 ```
@@ -1700,12 +1702,12 @@ interface CacheScope {
 
 **`CacheAdminService`**
 
-| Method                                         | Returns                                                                                                                                                                                                                                |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listScopes()`                                 | The declared scopes                                                                                                                                                                                                                    |
-| `listKeys(scopeId, { cursor?, includeSize? })` | `KeyspacePage`: entries (key, type, TTL, optional size), `sampledCount`, `isComplete`, `scanLimit`, `cursor`. The scan stops after `scanLimit` keys; the final batch may overshoot by up to one batch. Size (`MEMORY USAGE`) is opt-in |
-| `describeKey(scopeId, key)`                    | `KeyDetail`: type, TTL and `isReadable`                                                                                                                                                                                                |
-| `revealValue(scopeId, key)`                    | `RevealResult`: `revealed`, `withheld` or `missing`                                                                                                                                                                                    |
+| Method                                         | Returns                                                                                                                                                                                                                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listScopes()`                                 | The declared scopes                                                                                                                                                                                                                                               |
+| `listKeys(scopeId, { cursor?, includeSize? })` | `KeyspacePage`: `scopeId`, entries (key, type, TTL, optional size), `sampledCount`, `sampledBytes`, `isComplete`, `scanLimit`, `cursor`. The scan stops after `scanLimit` keys; the final batch may overshoot by up to one batch. Size (`MEMORY USAGE`) is opt-in |
+| `describeKey(scopeId, key)`                    | `KeyDetail`: type, TTL and `isReadable`                                                                                                                                                                                                                           |
+| `revealValue(scopeId, key)`                    | `RevealResult`: `revealed`, `withheld` or `missing`                                                                                                                                                                                                               |
 
 A scope with `isReadable: false` is refused **before** any read, so the value never enters the process; the result carries the scope's `origin` instead. A revealed value is `string` (truncated to `revealStringLimit`), `hash` (`{ field, value }` entries), `members` (set or list), `scored` (sorted set) or `unsupported`; collections are truncated to `revealLimit` and `isComplete` reports whether truncation happened.
 
@@ -1713,9 +1715,11 @@ A scope with `isReadable: false` is refused **before** any read, so the value ne
 
 The subpath issues no mutating Redis command. `pnpm check:admin-readonly` (`scripts/check-admin-readonly.mjs`, part of `prepublishOnly`) enforces it:
 
-1. The reader contracts (`IRedisReader`, `IRedisPipeline`), through which every Redis access goes, must not declare a method named after a mutating command.
+1. No file under `src/admin` may declare a method named after a mutating command. The reader contracts (`IRedisReader`, `IRedisPipeline`), through which `CacheAdminService` reads, are where such a declaration would appear.
 2. Every command name passed to the `call(...)` escape hatch must be on a read-only allowlist.
 3. The subpath must not import `ioredis` as a value, so it cannot construct its own client.
+
+`CacheStatusService` reaches Redis through the server's `CacheService.ping()` and `info()`, which are read-only.
 
 ---
 
