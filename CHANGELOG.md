@@ -11,8 +11,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `JsonSerializer.deserialize` throws `DESERIALIZATION_FAILED` with `details` of a fixed `error` text and the
   `length` of the stored value. `details.preview` and the parser's own message, which quoted the start of the
   input, are gone. The error code is unchanged; a consumer that read `details.preview` must stop.
-- Apart from that, nothing you execute changes. The only other edit under `src/` is a unit test that pins
-  the admin pipeline count.
+- Apart from that, nothing you execute changes.
 
 ### Documentation
 
