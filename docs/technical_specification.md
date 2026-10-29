@@ -51,7 +51,6 @@
 15. [Implementation Phases](#15-implementation-phases)
 16. [Known Limitations](#16-known-limitations)
 17. [Example Integration](#17-example-integration)
-18. [The `./admin` Subpath](#18-the-admin-subpath)
 
 ---
 
@@ -140,7 +139,7 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 ### 2.2 Connection Lifecycle
 
 1. **`forRoot` / `forRootAsync`** — the consumer passes `BymaxCacheModuleOptions`; the module registers providers.
-2. **`OnModuleInit`** (if `lazyConnect = false`) — `ConnectionManager` creates `Redis()` and waits for `'ready'`. Registered Lua scripts are preloaded at `OnApplicationBootstrap` (skipped when `lazyConnect` is set).
+2. **`OnModuleInit`** — `ConnectionManager` creates `Redis()` and, unless `lazyConnect` is set, waits for `'ready'`. Registered Lua scripts are preloaded at `OnApplicationBootstrap` (skipped when `lazyConnect` is set).
 3. **Normal operation** — `CacheService` delegates to `ConnectionManager.getClient()`.
 4. **Events** (`connect`, `ready`, `error`, `close`, `reconnecting`, `end`) propagated to the `events.onEvent` callback.
 5. **`OnModuleDestroy`** — `quit()` with `shutdownTimeoutMs`; if it exceeds, force `disconnect()`.
@@ -345,9 +344,7 @@ export type { CacheErrorCode } from './constants/error-codes'
 export { CACHE_EVENT_NAMES } from './constants/event-names'
 ```
 
-**Admin (`@bymax-one/nest-cache/admin`):** see §18.
-
-> **Public vs internal.** Only what appears in `src/server/index.ts`, `src/shared/index.ts` and `src/admin/index.ts` is public. `parse-redis-url.ts` and `resolve-serializer.ts` are not re-exported.
+> **Public vs internal.** Only what appears in `src/server/index.ts`, `src/shared/index.ts` and `src/admin/index.ts` is public.
 
 ---
 
