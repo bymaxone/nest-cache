@@ -51,6 +51,7 @@
 15. [Implementation Phases](#15-implementation-phases)
 16. [Known Limitations](#16-known-limitations)
 17. [Example Integration](#17-example-integration)
+18. [The `./admin` Subpath](#18-the-admin-subpath)
 
 ---
 
@@ -344,7 +345,7 @@ export type { CacheErrorCode } from './constants/error-codes'
 export { CACHE_EVENT_NAMES } from './constants/event-names'
 ```
 
-> **Public vs internal.** Only what appears in `src/server/index.ts`, `src/shared/index.ts` and `src/admin/index.ts` is public.
+> **Public vs internal.** Only what appears in `src/server/index.ts`, `src/shared/index.ts` and `src/admin/index.ts` is public. The `./admin` surface is described in §18.
 
 ---
 
@@ -1212,43 +1213,53 @@ Parses `redis://`, `rediss://` (TLS) URLs with user, password, port, and databas
 
 ```typescript
 export class CacheException extends HttpException {
-  constructor(
-    code: string,
-    details?: Record<string, unknown>,
-    statusCode: HttpStatus = HttpStatus.INTERNAL_SERVER_ERROR
-  ) {
+  readonly code: CacheErrorCode
+  readonly details: Record<string, unknown> | null
+
+  constructor(code: CacheErrorCode, details?: Record<string, unknown>, statusCode?: HttpStatus) {
     super(
       {
         error: {
           code,
-          message: CACHE_ERROR_MESSAGES[code] ?? 'Cache error',
+          message: CACHE_ERROR_MESSAGES.get(code) ?? 'Cache error',
           details: details ?? null
         }
       },
-      statusCode
+      statusCode ?? CACHE_ERROR_STATUS.get(code) ?? HttpStatus.INTERNAL_SERVER_ERROR
     )
+    this.code = code
+    this.details = details ?? null
   }
 }
 ```
 
+`details` is serialized verbatim into the response body, so it never carries any part of a stored value. When `statusCode` is omitted the status comes from §12.2.
+
+`KEY_NOT_IN_SCOPE` keeps the `key` in `details`: it is the key the caller itself sent to `./admin`, not stored content. RFC 9457 §3.1.4 says a problem detail ought to focus on helping the client correct the problem (<https://www.rfc-editor.org/rfc/rfc9457.html>), and the OWASP Error Handling Cheat Sheet is about implementation details (<https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html>), which a caller's own key is not. Its status is 500, like every code §12.2 gives no other status.
+
 ### 12.2 Code Table
 
-| Code                                 | HTTP | When                                         |
-| ------------------------------------ | ---- | -------------------------------------------- |
-| `cache.connection_failed`            | 500  | Could not connect after retries              |
-| `cache.command_timeout`              | 504  | `commandTimeout` exceeded                    |
-| `cache.connection_lost`              | 503  | `'close'` during operation                   |
-| `cache.serialization_failed`         | 500  | `serializer.serialize` threw                 |
-| `cache.deserialization_failed`       | 500  | `serializer.deserialize` threw               |
-| `cache.invalid_namespace`            | 500  | Namespace empty or contains separator        |
-| `cache.invalid_key`                  | 400  | `prefix` or `id` empty                       |
-| `cache.script_not_registered`        | 500  | Tried to execute unknown script              |
-| `cache.script_execution_failed`      | 500  | Script returned Redis error                  |
-| `cache.script_registry_missing`      | 500  | `eval` called without registering scripts    |
-| `cache.flush_disabled_in_production` | 403  | `flushNamespace` in prod without flag        |
-| `cache.cluster_misconfigured`        | 500  | `mode === 'cluster'` without `cluster.nodes` |
-| `cache.sentinel_misconfigured`       | 500  | `mode === 'sentinel'` misconfigured          |
-| `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`        |
+| Code                                 | HTTP | When                                                                                                                                |
+| ------------------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `cache.connection_failed`            | 500  | Invalid or missing `connection.url` / `connection.host`; `shutdownTimeoutMs` or `connectTimeout` below 100; an error before `ready` |
+| `cache.command_timeout`              | 504  | Reserved: the status is mapped, the library does not throw it (ioredis reports `commandTimeout` itself)                             |
+| `cache.connection_lost`              | 503  | Reserved: the status is mapped, the library does not throw it                                                                       |
+| `cache.serialization_failed`         | 500  | `JsonSerializer.serialize` threw (also a top-level `undefined`, function or symbol); a custom `ISerializer` must throw it itself    |
+| `cache.deserialization_failed`       | 500  | `JsonSerializer.deserialize` threw; a custom `ISerializer` must throw it itself                                                     |
+| `cache.invalid_namespace`            | 500  | Namespace empty or whitespace-only, contains the separator or a glob metacharacter (`* ? [ \`), or the separator is empty           |
+| `cache.invalid_key`                  | 400  | `prefix` or `id` empty (`applyNamespace`: key empty)                                                                                |
+| `cache.script_not_registered`        | 500  | Tried to execute unknown script                                                                                                     |
+| `cache.script_execution_failed`      | 500  | Script returned a Redis error; cluster `eval` without a key                                                                         |
+| `cache.script_registry_missing`      | 500  | `CacheService.eval` called without a `ScriptManagerService`                                                                         |
+| `cache.flush_disabled_in_production` | 403  | `flushNamespace` in prod without `allowFlushInProduction`                                                                           |
+| `cache.cluster_misconfigured`        | 500  | `mode === 'cluster'` without `cluster.nodes`                                                                                        |
+| `cache.sentinel_misconfigured`       | 500  | `mode === 'sentinel'` without `sentinel.sentinels` or `sentinel.name`                                                               |
+| `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`; handled internally by forcing `disconnect()`                                                 |
+| `cache.unsupported_in_cluster`       | 500  | `scan`, `getClient` or `flushNamespace` called in cluster mode                                                                      |
+| `cache.invalid_scope`                | 500  | `./admin`: a scope or threshold is malformed (§18)                                                                                  |
+| `cache.scope_not_found`              | 500  | `./admin`: no scope is declared under the given id                                                                                  |
+| `cache.scope_not_readable`           | 500  | Reserved: the library does not throw it; `revealValue` returns `status: 'withheld'` instead                                         |
+| `cache.key_not_in_scope`             | 500  | `./admin`: the key does not belong to the named scope                                                                               |
 
 ### 12.3 Exported Constants
 
@@ -1267,11 +1278,18 @@ export const CACHE_ERROR_CODES = {
   FLUSH_DISABLED_IN_PRODUCTION: 'cache.flush_disabled_in_production',
   CLUSTER_MISCONFIGURED: 'cache.cluster_misconfigured',
   SENTINEL_MISCONFIGURED: 'cache.sentinel_misconfigured',
-  SHUTDOWN_TIMEOUT: 'cache.shutdown_timeout'
-} as const
+  SHUTDOWN_TIMEOUT: 'cache.shutdown_timeout',
+  UNSUPPORTED_IN_CLUSTER: 'cache.unsupported_in_cluster',
+  INVALID_SCOPE: 'cache.invalid_scope',
+  SCOPE_NOT_FOUND: 'cache.scope_not_found',
+  SCOPE_NOT_READABLE: 'cache.scope_not_readable',
+  KEY_NOT_IN_SCOPE: 'cache.key_not_in_scope'
+} as const satisfies Record<string, `cache.${string}`>
 
 export type CacheErrorCode = (typeof CACHE_ERROR_CODES)[keyof typeof CACHE_ERROR_CODES]
 ```
+
+The server entry also exports `CACHE_ERROR_MESSAGES`, a `ReadonlyMap<CacheErrorCode, string>` of default English messages.
 
 ---
 
@@ -1303,7 +1321,7 @@ export type CacheErrorCode = (typeof CACHE_ERROR_CODES)[keyof typeof CACHE_ERROR
 { "dependencies": {} }
 ```
 
-Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
+Zero transitive deps; everything is peer.
 
 ### 14.2 `peerDependencies`
 
@@ -1322,22 +1340,19 @@ Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
 > `peerDependenciesMeta.optional` block was removed. Marking the NestJS peers optional
 > broke server-subpath resolution in consumers (proven by the dogfood smoke test).
 
-| Peer               | Version | Why                                                                      |
-| ------------------ | ------- | ------------------------------------------------------------------------ |
-| `@nestjs/common`   | `^11`   | Decorators (`@Injectable`, `@Inject`, `@Optional`, `@Global`), lifecycle |
-| `@nestjs/core`     | `^11`   | `DynamicModule` type                                                     |
-| `ioredis`          | `^6`    | Redis client with TLS, sentinel, cluster support                         |
-| `reflect-metadata` | `^0.2`  | NestJS decorators                                                        |
+| Peer               | Version    | Why                                                                      |
+| ------------------ | ---------- | ------------------------------------------------------------------------ |
+| `@nestjs/common`   | `^11.0.16` | Decorators (`@Injectable`, `@Inject`, `@Optional`, `@Global`), lifecycle |
+| `@nestjs/core`     | `^11.1.18` | NestJS runtime peer; not imported directly by library sources            |
+| `ioredis`          | `^6.0.0`   | Redis client with TLS, sentinel, cluster support                         |
+| `reflect-metadata` | `^0.2.0`   | NestJS decorators                                                        |
 
 `ioredis` is the only functional dep; the rest is standard for any NestJS project.
 
 ### 14.3 `devDependencies`
 
-Mirrors the `@bymax-one/nest-auth` template with specific additions:
-
 - `ioredis-mock ^8` — unit tests without real Redis
-- `@testcontainers/redis ^10` — e2e tests with real Redis
-- Removes `@nestjs/jwt`, `@nestjs/throttler`, `@nestjs/websockets`, `class-validator`, `react`, `next` (not used here)
+- `testcontainers ^12` — e2e tests with real Redis
 
 ### 14.4 `engines` and `packageManager`
 
@@ -1440,13 +1455,13 @@ Strategic pause after Phase 2 — validate the API with a real consumer before a
 ## 16. Known Limitations
 
 1. **No Redis Streams in this version.** `XADD`/`XREAD`/`XGROUP` are deferred to a future `nest-stream`. Access via `cache.getClient().xadd(...)` remains available.
-2. **Cluster mode is experimental.** Works via `ioredis.Cluster` passthrough, but multi-key commands require all keys to be in the same slot — `KeyBuilder` does not enforce this.
+2. **Cluster mode is experimental.** Works via `ioredis.Cluster` passthrough, but multi-key commands require all keys to be in the same slot — `KeyBuilder` does not enforce this. `scan`, `getClient` and `flushNamespace` throw `UNSUPPORTED_IN_CLUSTER`.
 3. **No hot-reload of configuration.** Changing `namespace`, `serializer`, or `connection.url` requires a restart.
 4. **Pub/Sub does not persist messages.** Limitation of Redis Pub/Sub, not of the lib.
 5. **`KEYS` may block the server.** `cache.keys()` exists but JSDoc discourages it in production.
 6. **No smart retry per command.** After `maxRetriesPerRequest`, the error propagates; the consumer implements a circuit breaker at a higher layer if needed.
 7. **JSON loses types.** `Date`, `Map`, `Set`, `BigInt`, `undefined` do not roundtrip — use a custom serializer.
-8. **No value size limit.** Redis accepts up to 512MB; the lib imposes in the limit. Values > 1MB should be rethought (chunking, external storage).
+8. **No value size limit.** Redis accepts up to 512MB; the lib imposes no limit. Values > 1MB should be rethought (chunking, external storage).
 
 ---
 
@@ -1624,6 +1639,76 @@ export class HealthController {
 
 ---
 
+## 18. The `./admin` Subpath
+
+`@bymax-one/nest-cache/admin` is a privileged, **read-only** administration surface over an already configured `BymaxCacheModule`. It is kept out of the main entry on purpose (see §3.2 for the import rule). The application declares which keyspaces exist; the library validates the declaration and reads only inside it.
+
+### 18.1 `BymaxCacheAdminModule`
+
+`BymaxCacheAdminModule.forRoot(options)` / `forRootAsync({ imports, inject, useFactory, isGlobal })` provide `CacheStatusService`, `CacheAdminService` and the `BYMAX_CACHE_ADMIN_OPTIONS` token. It is **not global by default** (`isGlobal: false`; for `forRootAsync` the flag is a top-level field, decided before the factory resolves). `BymaxCacheModule` must be resolvable from the importing module. Options are validated at wiring and throw `INVALID_SCOPE` when malformed.
+
+| Option              | Type                    | Default | Meaning                                                                                                           |
+| ------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `scopes`            | `readonly CacheScope[]` | —       | Required, non-empty. The keyspaces this deployment exposes                                                        |
+| `degradedAboveMs`   | `number`                | `250`   | Round trip above which health reports `degraded`                                                                  |
+| `probeTimeoutMs`    | `number`                | `2000`  | How long a health probe waits before reporting `down`                                                             |
+| `scanLimit`         | `number`                | `500`   | Most keys one listing reads before reporting the page incomplete                                                  |
+| `commandBatchLimit` | `number`                | `100`   | Most commands one pipeline flush sends; a flush always carries at least one key, so a lower limit may be exceeded |
+| `revealLimit`       | `number`                | `200`   | Most members or hash fields one reveal returns                                                                    |
+| `revealStringLimit` | `number`                | `4096`  | Most characters one revealed string carries                                                                       |
+| `isGlobal`          | `boolean`               | `false` | Register the module globally                                                                                      |
+
+Each threshold must be a positive integer.
+
+### 18.2 Scopes
+
+```typescript
+interface CacheScope {
+  readonly id: string // unique; a caller names a scope by id and never supplies a pattern
+  readonly label: string
+  readonly pattern: string // SCAN match: a literal prefix, optionally followed by one trailing '*'
+  readonly isReadable: boolean // false: values are withheld; listing, types, TTLs and sizes stay available
+  readonly origin: string // why the keyspace exists, rendered verbatim as plain text
+}
+```
+
+- `pattern` must match `^[^*?[\\]+\*?$`: at least one literal character, no glob metacharacter (`* ? [ \`) except a single trailing `*`. Key membership is therefore exact by construction (`isKeyInScope`); do not relax it, because a matcher more permissive than the server's is a silent cross-scope leak.
+- An empty scope list, an empty field, a duplicate `id` or a malformed `pattern` throws `INVALID_SCOPE`. An unknown id throws `SCOPE_NOT_FOUND`; a key outside the named scope throws `KEY_NOT_IN_SCOPE`.
+- Scopes are frozen at wiring.
+
+### 18.3 Services
+
+**`CacheStatusService`**
+
+| Method     | Returns                                                                                                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `health()` | `PING` probe: `up`, `degraded` (latency above `degradedAboveMs`) or `down` (error, timeout or a reply other than `PONG`), plus `mode`, `isScanSupported` (false in cluster mode) and `degradedAboveMs` |
+| `stats()`  | Parsed Redis `INFO` (`RedisStats`)                                                                                                                                                                     |
+| `config()` | Resolved configuration with credentials withheld; script **names** only (never Lua bodies)                                                                                                             |
+
+**`CacheAdminService`**
+
+| Method                                         | Returns                                                                                                                                                                                                                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listScopes()`                                 | The declared scopes                                                                                                                                                                                                                                               |
+| `listKeys(scopeId, { cursor?, includeSize? })` | `KeyspacePage`: `scopeId`, entries (key, type, TTL, optional size), `sampledCount`, `sampledBytes`, `isComplete`, `scanLimit`, `cursor`. The scan stops after `scanLimit` keys; the final batch may overshoot by up to one batch. Size (`MEMORY USAGE`) is opt-in |
+| `describeKey(scopeId, key)`                    | `KeyDetail`: type, TTL and `isReadable`                                                                                                                                                                                                                           |
+| `revealValue(scopeId, key)`                    | `RevealResult`: `revealed`, `withheld` or `missing`                                                                                                                                                                                                               |
+
+A scope with `isReadable: false` is refused **before** any read, so the value never enters the process; the result carries the scope's `origin` instead. A revealed value is `string` (truncated to `revealStringLimit`), `hash` (`{ field, value }` entries), `members` (set or list), `scored` (sorted set) or `unsupported`; collections are truncated to `revealLimit` and `isComplete` reports whether truncation happened.
+
+### 18.4 Read-only guarantee
+
+The subpath issues no mutating Redis command. `pnpm check:admin-readonly` (`scripts/check-admin-readonly.mjs`, part of `prepublishOnly`) enforces it:
+
+1. No file under `src/admin` may declare a method named after a mutating command. The reader contracts (`IRedisReader`, `IRedisPipeline`), through which `CacheAdminService` reads, are where such a declaration would appear.
+2. Every command name passed to the `call(...)` escape hatch must be on a read-only allowlist.
+3. The subpath must not import `ioredis` as a value, so it cannot construct its own client.
+
+`CacheStatusService` reaches Redis through the server's `CacheService.ping()` and `info()`, which are read-only.
+
+---
+
 ## Appendix A — Glossary
 
 | Term                   | Meaning                                                            |
@@ -1644,15 +1729,15 @@ export class HealthController {
 
 ## Appendix B — Architectural Decisions (ADRs)
 
-| ADR | Decision                                                   | Justification                                                              |
-| --- | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| 001 | `ioredis` as the only functional peer, in the `node-redis` | Native support for sentinel/cluster/pipelines and better performance       |
-| 002 | Mandatory namespace (default `'app'`)                      | Isolation on shared Redis instances                                        |
-| 003 | Default JSON serializer, open interface                    | JSON covers 90% of cases; those who need msgpack plug their own            |
-| 004 | In the BullMQ client                                       | Conflicting configuration; `nest-queue` creates its own connection         |
-| 005 | Pub/Sub in the same package                                | Pub/Sub is Redis 101; separating would create friction with in the benefit |
-| 006 | `EVALSHA` + `EVAL` fallback on `NOSCRIPT`                  | Standard production optimization, transparent                              |
-| 007 | `flushNamespace` blocked in prod by default                | Destructive operation; better to fail visibly                              |
-| 008 | Events callback instead of embedded logger                 | Keeps zero deps; consumer plugs the logger                                 |
-| 009 | Lazy subscriber                                            | Apps that only use cache do not pay the cost of a 2nd TCP connection       |
-| 010 | Graceful shutdown with configurable timeout                | `quit` can hang; timeout guarantees deterministic shutdown                 |
+| ADR | Decision                                                       | Justification                                                          |
+| --- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 001 | `ioredis` as the only functional peer, instead of `node-redis` | Native support for sentinel/cluster/pipelines and better performance   |
+| 002 | Mandatory namespace (default `'app'`)                          | Isolation on shared Redis instances                                    |
+| 003 | Default JSON serializer, open interface                        | JSON covers 90% of cases; those who need msgpack plug their own        |
+| 004 | No BullMQ client                                               | Conflicting configuration; `nest-queue` creates its own connection     |
+| 005 | Pub/Sub in the same package                                    | Pub/Sub is Redis 101; separating would create friction with no benefit |
+| 006 | `EVALSHA` + reload and retry on `NOSCRIPT` (`EVAL` in cluster) | Standard production optimization, transparent                          |
+| 007 | `flushNamespace` blocked in prod by default                    | Destructive operation; better to fail visibly                          |
+| 008 | Events callback instead of embedded logger                     | Keeps zero deps; consumer plugs the logger                             |
+| 009 | Lazy subscriber                                                | Apps that only use cache do not pay the cost of a 2nd TCP connection   |
+| 010 | Graceful shutdown with configurable timeout                    | `quit` can hang; timeout guarantees deterministic shutdown             |
