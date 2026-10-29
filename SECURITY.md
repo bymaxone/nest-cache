@@ -49,8 +49,8 @@ prefer to remain anonymous.
 
 ## Supported Versions
 
-The latest `1.x` minor (currently `1.2.x`) receives security fixes. Backports to older
-minors are considered case by case.
+Only the latest minor (currently `1.2.x`) receives security fixes. Earlier versions are not
+supported: upgrade to the latest minor.
 
 ## Security Practices
 

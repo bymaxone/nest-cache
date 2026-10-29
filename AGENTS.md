@@ -47,10 +47,6 @@ public, MIT, zero-runtime-dependency package.
 - **Core units:** `ConnectionManager` (singleton + lifecycle, standalone /
   sentinel / cluster), `CacheService` (typed API + namespacing), `PubSubService`,
   `ScriptManagerService`, plus `KeyBuilder` / `parseRedisUrl` / serializer utils.
-- **Folder layout:**
-  `src/server/{connection,services,config,interfaces,utils,errors,constants}`,
-  `src/admin/{config,services,types,utils}` (read-only administration),
-  `src/shared/{types,constants}` and `src/test-helpers/` (shared spec helpers).
 
 ## 3. Backend Patterns
 
