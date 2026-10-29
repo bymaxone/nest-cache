@@ -291,11 +291,12 @@ consequences follow:
 
 This is documentation only; behavior is unchanged. When a `prefix` or `id` comes from untrusted
 input, encode each field, for example `cache.get(encodeURIComponent(prefix), encodeURIComponent(id))`.
-Per-field encoding separates the fields only when the separator is a character that `encodeURIComponent`
-escapes and never emits: the default `':'` qualifies. It does not for `%` (its escape prefix) or for the
-characters it leaves as they are (letters, digits and `- _ . ! ~ * ' ( )`); with such a `keySeparator`,
-reject the separator in `prefix` and `id` instead. A `prefix` used with `keys()` / `scan()` must also
-avoid glob characters (`*`, `?`, `[`, `\`).
+Keys are unambiguous only when `keySeparator` is a single character that appears in neither `prefix`
+nor `id`. Per-field encoding guarantees that for a separator `encodeURIComponent` escapes and never
+emits: the default `':'` qualifies; `%` and `- _ . ! ~ * ' ( )` do not, so for them reject the
+separator in the fields. A multi-character separator can straddle a field boundary (with `'aa'`,
+`('ba', 'c')` and `('b', 'ac')` build the same key), so keep a single character. A `prefix` used with
+`keys()` / `scan()` must also avoid glob characters (`*`, `?`, `[`, `\`).
 
 ---
 
@@ -615,7 +616,7 @@ The namespace itself is validated at module bootstrap, not at call time:
 
 A namespace containing the separator is rejected because `namespace: 'a:b'` and `namespace: 'a'` with prefix `b` would resolve to the same keyspace — a tenant boundary that reads as isolated but is not.
 
-The same collision exists below the namespace and is **not** enforced by the library: `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Behavior is unchanged; encode untrusted `prefix` / `id` values per field with `encodeURIComponent` only when the separator is a character it escapes and never emits (the default `':'` is; `%` and `- _ . ! ~ * ' ( )` are not), and reject the separator otherwise; reject glob characters in `prefix`.
+The same collision exists below the namespace and is **not** enforced by the library: `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Behavior is unchanged; keys are unambiguous only for a single-character `keySeparator` that appears in neither `prefix` nor `id`: encode untrusted values per field with `encodeURIComponent` only when the separator is one it escapes and never emits (the default `':'` is; `%` and `- _ . ! ~ * ' ( )` are not), otherwise reject the separator in them; a multi-character separator can straddle a field boundary, so keep a single character; reject glob characters in `prefix`.
 
 ### Deserialization fails closed
 
@@ -654,7 +655,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 - `namespace` is distinct per tenant or per application — it is the isolation boundary, and a shared value makes every other guarantee moot
 - `allowFlushInProduction` stays unset; if it is on, the reason belongs in a security review
 - `getClient()` and `pipeline()` call sites are audited — they are the only paths that bypass namespacing
-- `prefix` and `id` that derive from untrusted input are encoded per field (`encodeURIComponent`) — the library checks them only for emptiness, so a separator inside either collides keys and a glob character in `prefix` widens `keys()` / `scan()`; per-field `encodeURIComponent` separates the fields only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), otherwise the separator must be rejected; glob characters in `prefix` must be rejected
+- `prefix` and `id` that derive from untrusted input are encoded per field (`encodeURIComponent`) — the library checks them only for emptiness, so a separator inside either collides keys and a glob character in `prefix` widens `keys()` / `scan()`; keys are unambiguous only for a single-character `keySeparator` absent from both fields; per-field `encodeURIComponent` provides that only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), otherwise the separator must be rejected, and a multi-character separator cannot be made safe that way; glob characters in `prefix` must be rejected
 - Connection credentials come from the environment (`config.getOrThrow('REDIS_URL')`), never from a URL literal in module options in source control
 - `rediss://` (or an explicit `connection.tls`) is used for any Redis reachable off-host
 - Values that must not be readable by whoever can read Redis are encrypted by the application (or a custom `ISerializer`) before they are cached — the library stores what you hand it

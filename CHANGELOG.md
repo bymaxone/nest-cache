@@ -17,7 +17,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `KeyBuilder` validates `prefix` and `id` only for emptiness. A separator inside either
   collides (`build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`), and a glob
   metacharacter in `prefix` widens `keys()` and `scan()` within the namespace. Behaviour is
-  unchanged. Encoding each field with `encodeURIComponent` separates them only for a separator it escapes and never emits, such as the default `':'`.
+  unchanged. Keys are unambiguous only for a single-character separator that appears in neither field; encoding each field with `encodeURIComponent` provides that for a separator it escapes and never emits, such as the default `':'`.
 - Contributor and security documents match the current tooling: pnpm 11, the admin
   read-only check in the verification chain, mutation testing after merge and weekly, and
   how dependency advisories are handled.
