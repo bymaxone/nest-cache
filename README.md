@@ -47,7 +47,7 @@ so you control exact versions and the supply-chain surface stays minimal.
 - **🧬 Typed get/set** — `get<T>` / `set<T>` go through a pluggable `ISerializer` (JSON by default). Deserialization **fails closed** — a malformed payload throws `CacheException`, never a half-decoded value.
 - **📡 Batteries included** — Pub/Sub on namespaced channels and a Lua script manager (`EVALSHA` + `NOSCRIPT` fallback) ship in the box, on top of the full string/hash/set/numeric command surface.
 - **♻️ Lifecycle done right** — singleton connection with `OnModuleInit` / `OnModuleDestroy`, bounded retry strategy, `READONLY`-failover reconnect, and a graceful `quit()` with shutdown timeout.
-- **🔌 Bring your own observability** — connection events surface through an `events.onEvent` callback; plug in [`@bymax-one/nest-logger`](https://github.com/bymaxone/nest-logger) or your metrics layer. No observability peer deps forced on you.
+- **🔌 Bring your own observability** — connection events and Pub/Sub handler failures surface through an `events.onEvent` callback; plug in [`@bymax-one/nest-logger`](https://github.com/bymaxone/nest-logger) or your metrics layer. No observability peer deps forced on you.
 
 ```
 pnpm add @bymax-one/nest-cache ioredis
@@ -69,14 +69,14 @@ pnpm add @bymax-one/nest-cache ioredis
 - ✅ **Automatic namespacing** — the key builder enforces tenant/feature isolation; no manual string concatenation
 - ✅ **Namespaced channels** — Pub/Sub channels are composed through the same builder as keys
 - ✅ **Surgical flush** — `flushNamespace()` scans only `{namespace}:*`, never another namespace's keys
-- ✅ **Validated at bootstrap** — an empty namespace, or one containing the key separator, fails module initialization
+- ✅ **Validated at bootstrap** — an empty namespace, an empty key separator, or a namespace containing the key separator or a Redis glob metacharacter (`*`, `?`, `[`, `\`) fails module initialization
 
 ### ⚙️ Reliability & Topology
 
 - ✅ **Multi-topology** — standalone, Sentinel, and Cluster modes from the same options shape
 - ✅ **Managed lifecycle** — singleton connection via `OnModuleInit` / `OnModuleDestroy`, graceful `quit()` with a shutdown timeout
 - ✅ **Bounded retries** — `maxRetriesPerRequest` and a reconnect policy that triggers on `READONLY` replica failover
-- ✅ **Connection events** — `connect` / `ready` / `error` / `close` / `reconnecting` / `end` surfaced via `events.onEvent`
+- ✅ **Connection events** — `connect` / `ready` / `error` / `close` / `reconnecting` / `end` surfaced via `events.onEvent`, which also receives Pub/Sub handler and deserialization failures as `'error'` with `reason: 'handler_error'`
 - ✅ **Health checks** — `isHealthy()` / `ping()` / `info()` for readiness and liveness endpoints
 
 ### 🛡️ Safety
@@ -248,18 +248,25 @@ Keys resolve to `app:user-profile:<userId>` — namespaced automatically.
 
 ## ⚙️ Configuration
 
-| Option              | Type                                      | Default          | Description                                                        |
-| ------------------- | ----------------------------------------- | ---------------- | ------------------------------------------------------------------ |
-| `mode`              | `'standalone' \| 'sentinel' \| 'cluster'` | `'standalone'`   | Redis topology                                                     |
-| `connection.url`    | `string`                                  | —                | `redis://` / `rediss://` URL (overrides discrete host/port fields) |
-| `connection.tls`    | `tls.ConnectionOptions`                   | —                | TLS options for `rediss://`                                        |
-| `namespace`         | `string`                                  | `'app'`          | Key prefix for tenant/feature isolation                            |
-| `serializer`        | `ISerializer`                             | `JsonSerializer` | Value encoding/decoding (plug MsgPack, CBOR, etc.)                 |
-| `events.onEvent`    | `(event, data) => void`                   | —                | Connection-event hook (plug a logger or metrics)                   |
-| `scripts`           | `IScriptDefinition[]`                     | `[]`             | Lua scripts to preload on init                                     |
-| `shutdownTimeoutMs` | `number`                                  | `5000`           | Graceful `quit()` timeout before forced `disconnect()`             |
+| Option                   | Type                                      | Default          | Description                                                                                                                                                                                |
+| ------------------------ | ----------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`                   | `'standalone' \| 'sentinel' \| 'cluster'` | `'standalone'`   | Redis topology                                                                                                                                                                             |
+| `connection.url`         | `string`                                  | —                | `redis://` / `rediss://` URL (overrides discrete host/port fields)                                                                                                                         |
+| `connection.tls`         | `tls.ConnectionOptions`                   | —                | TLS options for `rediss://`                                                                                                                                                                |
+| `namespace`              | `string`                                  | `'app'`          | Key prefix for tenant/feature isolation                                                                                                                                                    |
+| `serializer`             | `ISerializer`                             | `JsonSerializer` | Value encoding/decoding (plug MsgPack, CBOR, etc.)                                                                                                                                         |
+| `events.onEvent`         | `(event, data) => void`                   | —                | Lifecycle and Pub/Sub failure hook (plug a logger or metrics); receives connection events, and `'error'` with `reason: 'handler_error'` when a subscriber handler or deserialization fails |
+| `scripts`                | `IScriptDefinition[]`                     | —                | Lua scripts to preload on init                                                                                                                                                             |
+| `shutdownTimeoutMs`      | `number`                                  | `5000`           | Graceful `quit()` timeout before forced `disconnect()` (minimum `100`)                                                                                                                     |
+| `keySeparator`           | `string`                                  | `':'`            | Separator between namespace, prefix and id segments                                                                                                                                        |
+| `allowFlushInProduction` | `boolean`                                 | `false`          | Allows `flushNamespace()` when `NODE_ENV=production`                                                                                                                                       |
+| `isGlobal`               | `boolean`                                 | `true`           | Register the module globally                                                                                                                                                               |
+| `sentinel`               | `{ sentinels, name, ... }`                | —                | Sentinel connection block; required when `mode: 'sentinel'`                                                                                                                                |
+| `cluster`                | `{ nodes, options? }`                     | —                | Cluster connection block; required when `mode: 'cluster'`                                                                                                                                  |
 
-Both `forRoot(options)` (synchronous) and `forRootAsync({ useFactory, inject, imports })` are supported. The module registers globally by default — pass `isGlobal: false` to scope it to the importing module.
+`connection` also accepts `host`, `port`, `password`, `db`, `username`, `lazyConnect`, `connectTimeout` (minimum `100`), `commandTimeout`, `maxRetriesPerRequest`, `enableReadyCheck`, `enableOfflineQueue`, `retryStrategy`, `reconnectOnError`, `keepAlive`, `noDelay` and `family`; `url` takes precedence over the discrete fields.
+
+Both `forRoot(options)` (synchronous) and `forRootAsync({ useFactory, inject, imports })` are supported. The module registers globally by default — pass `isGlobal: false` to scope it to the importing module. With `forRootAsync`, `isGlobal` is read at the call site (`forRootAsync({ isGlobal, ... })`); a value returned from `useFactory` has no effect.
 
 ---
 
@@ -270,6 +277,26 @@ Calling `cache.get('user-profile', '42')` under namespace `app` reads `app:user-
 keeps tenants and features isolated and makes `flushNamespace()` surgical. Reaching for
 `getClient()` to set raw, un-namespaced keys is supported as an escape hatch but documented as an
 anti-pattern.
+
+`prefix` and `id` are supplied by the caller and the library validates them only for emptiness
+(`INVALID_KEY`); it does **not** reject the separator or glob characters inside them. Two
+consequences follow:
+
+- **Separator collision.** `build('a', 'b:c')` and `build('a:b', 'c')` both produce `app:a:b:c`, so
+  two different `(prefix, id)` pairs address the same key.
+- **Glob widening.** `keys(prefix, pattern)` and `scan(prefix, pattern)` pass the composed key to
+  Redis as a match pattern, so a glob metacharacter (`*`, `?`, `[`, `\`) in `prefix` can match keys
+  outside that prefix, still within the namespace. Single-key commands (`get`, `set`, `del`, ...)
+  treat the key literally and are not affected; `flushNamespace()` uses only the validated namespace.
+
+This is documentation only; behavior is unchanged. When a `prefix` or `id` comes from untrusted
+input, encode each field, for example `cache.get(encodeURIComponent(prefix), encodeURIComponent(id))`.
+Keys are unambiguous only when `keySeparator` is a single character that appears in neither `prefix`
+nor `id`. Per-field encoding guarantees that for a separator `encodeURIComponent` escapes and never
+emits: the default `':'` qualifies; `%` and `- _ . ! ~ * ' ( )` do not, so for them reject the
+separator in the fields. A multi-character separator can straddle a field boundary (with `'aa'`,
+`('ba', 'c')` and `('b', 'ac')` build the same key), so keep a single character. A `prefix` used with
+`keys()` / `scan()` must also avoid glob characters (`*`, `?`, `[`, `\`).
 
 ---
 
@@ -575,7 +602,7 @@ A cache sits between your application and every value it has ever computed, so t
 
 ### Namespace isolation is structural
 
-Every key and every Pub/Sub channel is composed through `KeyBuilder`, which prepends `{namespace}{separator}` before the command reaches Redis. `CacheService.get('user-profile', '42')` can only ever read `app:user-profile:42` — there is no code path through the typed API that emits a bare key.
+Every key and every Pub/Sub channel is composed through `KeyBuilder`, which prepends `{namespace}{separator}` before the command reaches Redis. With fixed literals, `CacheService.get('user-profile', '42')` reads `app:user-profile:42` — there is no code path through the typed API that emits a bare key. The namespace is the isolation boundary; the library does not constrain `prefix` and `id` beyond non-emptiness.
 
 The namespace itself is validated at module bootstrap, not at call time:
 
@@ -583,9 +610,13 @@ The namespace itself is validated at module bootstrap, not at call time:
 | --------------------------------------- | ---------------------------------------------------------------- |
 | Empty or whitespace-only namespace      | `CacheException(INVALID_NAMESPACE)` — the module fails to start  |
 | Namespace containing the key separator  | `CacheException(INVALID_NAMESPACE)` — prevents prefix collisions |
+| Empty key separator                     | `CacheException(INVALID_NAMESPACE)` — the module fails to start  |
+| Namespace containing `*`, `?`, `[`, `\` | `CacheException(INVALID_NAMESPACE)` — see the glob section below |
 | Empty `prefix` or `id` at the call site | `CacheException(INVALID_KEY)` — no key is sent to Redis          |
 
 A namespace containing the separator is rejected because `namespace: 'a:b'` and `namespace: 'a'` with prefix `b` would resolve to the same keyspace — a tenant boundary that reads as isolated but is not.
+
+The same collision exists below the namespace and is **not** enforced by the library: `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Behavior is unchanged; keys are unambiguous only for a single-character `keySeparator` that appears in neither `prefix` nor `id`: encode untrusted values per field with `encodeURIComponent` only when the separator is one it escapes and never emits (the default `':'` is; `%` and `- _ . ! ~ * ' ( )` are not), otherwise reject the separator in them; a multi-character separator can straddle a field boundary, so keep a single character; reject glob characters in `prefix`.
 
 ### Deserialization fails closed
 
@@ -624,6 +655,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 - `namespace` is distinct per tenant or per application — it is the isolation boundary, and a shared value makes every other guarantee moot
 - `allowFlushInProduction` stays unset; if it is on, the reason belongs in a security review
 - `getClient()` and `pipeline()` call sites are audited — they are the only paths that bypass namespacing
+- `prefix` and `id` that derive from untrusted input are encoded per field (`encodeURIComponent`) — the library checks them only for emptiness, so a separator inside either collides keys and a glob character in `prefix` widens `keys()` / `scan()`; keys are unambiguous only for a single-character `keySeparator` absent from both fields; per-field `encodeURIComponent` provides that only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), otherwise the separator must be rejected, and a multi-character separator cannot be made safe that way; glob characters in `prefix` must be rejected
 - Connection credentials come from the environment (`config.getOrThrow('REDIS_URL')`), never from a URL literal in module options in source control
 - `rediss://` (or an explicit `connection.tls`) is used for any Redis reachable off-host
 - Values that must not be readable by whoever can read Redis are encrypted by the application (or a custom `ISerializer`) before they are cached — the library stores what you hand it
@@ -636,22 +668,22 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 
 ## 🛡️ Security Table
 
-| Layer                 | Implementation                                                                                                              |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Tenant Isolation      | Every key and channel composed by `KeyBuilder` as `{namespace}{sep}{prefix}{sep}{id}` — no bare-key path in the API         |
-| Namespace Validation  | Empty, separator-containing, or glob-metacharacter namespace rejected at bootstrap (`INVALID_NAMESPACE`)                    |
-| Admin Scope Allowlist | Scopes declared at wiring, validated and frozen; a caller names a scope by id and can never supply a match pattern          |
-| Admin Read-Only       | The `/admin` subpath issues no mutating command — enforced by the `check:admin-readonly` build gate, not by convention      |
-| Key Validation        | Empty `prefix` / `id` rejected before the command is issued (`INVALID_KEY`)                                                 |
-| Deserialization       | Fails closed — `DESERIALIZATION_FAILED`; never a partial or wrongly-typed value                                             |
-| Serialization         | Top-level `undefined` / function / symbol rejected; the value is never echoed into `details`                                |
-| Error Payloads        | Connection URLs omitted (may embed credentials); raw payload previews truncated to 100 characters                           |
-| Destructive Ops       | `flushNamespace()` blocked under `NODE_ENV=production` unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped |
-| Lua Execution         | Scripts registered by name; call sites pass keys/args only — request input never reaches a script body                      |
-| Cluster Safety        | `scan` / `flushNamespace` / `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on a single node                   |
-| Transport             | `rediss://` sets TLS on the client; explicit `connection.tls` supported for custom CA / mTLS                                |
-| Connection Resilience | Bounded `maxRetriesPerRequest`, `READONLY`-failover reconnect, graceful `quit()` with a shutdown timeout                    |
-| Supply Chain          | `"dependencies": {}` — no transitive runtime packages of the library's own choosing; published with npm provenance          |
+| Layer                 | Implementation                                                                                                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tenant Isolation      | Every key and channel composed by `KeyBuilder` as `{namespace}{sep}{prefix}{sep}{id}` — no bare-key path in the API                                              |
+| Namespace Validation  | Empty, separator-containing, or glob-metacharacter namespace rejected at bootstrap (`INVALID_NAMESPACE`)                                                         |
+| Admin Scope Allowlist | Scopes declared at wiring, validated and frozen; a caller names a scope by id and can never supply a match pattern                                               |
+| Admin Read-Only       | The `/admin` subpath issues no mutating command — enforced by the `check:admin-readonly` build gate, not by convention                                           |
+| Key Validation        | Empty `prefix` / `id` rejected before the command is issued (`INVALID_KEY`); emptiness only — separators and glob characters in `prefix` / `id` are not rejected |
+| Deserialization       | Fails closed — `DESERIALIZATION_FAILED`; never a partial or wrongly-typed value                                                                                  |
+| Serialization         | Top-level `undefined` / function / symbol rejected; the value is never echoed into `details`                                                                     |
+| Error Payloads        | Connection URLs omitted (may embed credentials); raw payload previews truncated to 100 characters                                                                |
+| Destructive Ops       | `flushNamespace()` blocked under `NODE_ENV=production` unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped                                      |
+| Lua Execution         | Scripts registered by name; call sites pass keys/args only — request input never reaches a script body                                                           |
+| Cluster Safety        | `scan` / `flushNamespace` / `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on a single node                                                        |
+| Transport             | `rediss://` sets TLS on the client; explicit `connection.tls` supported for custom CA / mTLS                                                                     |
+| Connection Resilience | Bounded `maxRetriesPerRequest`, `READONLY`-failover reconnect, graceful `quit()` with a shutdown timeout                                                         |
+| Supply Chain          | `"dependencies": {}` — no transitive runtime packages of the library's own choosing; published with npm provenance                                               |
 
 > [!IMPORTANT]
 > The namespace is the isolation boundary. Anything reached through `getClient()` or `pipeline()` sits outside it — those call sites are where cross-tenant reads get introduced.
@@ -666,7 +698,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 [![Node.js](https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Jest](https://img.shields.io/badge/Jest-30-C21325?style=flat-square&logo=jest)](https://jestjs.io)
 [![Stryker](https://img.shields.io/badge/Stryker-Mutation_Testing-red?style=flat-square)](https://stryker-mutator.io)
-[![pnpm](https://img.shields.io/badge/pnpm-10-F69220?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io)
+[![pnpm](https://img.shields.io/badge/pnpm-11-F69220?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io)
 [![tsup](https://img.shields.io/badge/tsup-8-orange?style=flat-square)](https://tsup.egoist.dev)
 
 ---
@@ -676,7 +708,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 A cache is consulted on the hot path of every request that touches it, so the suite is held to a bar beyond "it runs" — every behavior is pinned so that a regression **fails a test**.
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced by `jest.coverage.config.ts` as a pre-publish gate, not a target
-- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 100` and `ignoreStatic: false`; 441 killed, 6 timed out, **0 survived**, and [documented in full](./docs/mutation_testing_results.md)
+- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 100` and `ignoreStatic: false`, **0 survived**, and [documented in full](./docs/mutation_testing_results.md)
 - ✅ **One documented equivalent** — the production source carries a single `// Stryker disable` directive, on `configurable: false` of the withheld connection accessor, genuinely equivalent because the resolved options are frozen on the way out (freezing already makes every property non-configurable); `check:mutants` proves it parses and carries its reason, so the score is an accounting rather than a number
 - ✅ **No real Redis in unit tests** — `ioredis-mock` throughout; e2e tests exercise the wired module through `@nestjs/testing` and Testcontainers against a real Redis for connection lifecycle, Pub/Sub, and Lua scripts
 - ✅ **Published-package smoke test** — `scripts/dogfood-smoke-test.mjs` validates exports, tarball shape, and a consumer install before tagging
@@ -685,7 +717,7 @@ A cache is consulted on the hot path of every request that touches it, so the su
 pnpm test          # unit tests (Jest)
 pnpm test:e2e      # end-to-end tests (@nestjs/testing + Testcontainers)
 pnpm test:cov:all  # full coverage gate (100% statements/branches/functions/lines)
-pnpm mutation      # Stryker mutation testing (95% break gate)
+pnpm mutation      # Stryker mutation testing (100% break gate)
 pnpm typecheck     # tsc strict check
 pnpm lint          # ESLint
 ```
@@ -732,23 +764,27 @@ pnpm lint          # ESLint
 
 All errors are instances of `CacheException` and carry a stable `code` string from `CACHE_ERROR_CODES`:
 
-| Code                                 | HTTP | When thrown                                                     |
-| ------------------------------------ | ---- | --------------------------------------------------------------- |
-| `cache.connection_failed`            | 500  | Cannot connect after retries                                    |
-| `cache.command_timeout`              | 504  | Command exceeded `commandTimeout`                               |
-| `cache.connection_lost`              | 503  | Connection dropped during an in-flight operation                |
-| `cache.deserialization_failed`       | 500  | Malformed payload in `get<T>`                                   |
-| `cache.serialization_failed`         | 500  | Unserializable value in `set<T>`                                |
-| `cache.invalid_key`                  | 400  | Empty prefix or id passed to `build` / `applyNamespace`         |
-| `cache.invalid_namespace`            | 500  | Empty or separator-containing namespace                         |
-| `cache.script_not_registered`        | 500  | `eval(name)` before `register(name)`                            |
-| `cache.script_execution_failed`      | 500  | Lua runtime error or NOSCRIPT retry failure                     |
-| `cache.script_registry_missing`      | 500  | `eval` called when no `ScriptManagerService` is wired           |
-| `cache.flush_disabled_in_production` | 403  | `flushNamespace()` in prod without `allowFlushInProduction`     |
-| `cache.unsupported_in_cluster`       | 500  | `scan`, `flushNamespace`, or `getClient` called in cluster mode |
-| `cache.cluster_misconfigured`        | 500  | `mode: 'cluster'` without `cluster.nodes`                       |
-| `cache.sentinel_misconfigured`       | 500  | `mode: 'sentinel'` without `sentinel.sentinels`/`name`          |
-| `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`                           |
+| Code                                 | HTTP | When thrown                                                                                                                               |
+| ------------------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `cache.connection_failed`            | 500  | Cannot connect after retries; also bootstrap validation of `connection` and timeouts                                                      |
+| `cache.command_timeout`              | 504  | Reserved; not currently thrown by the library                                                                                             |
+| `cache.connection_lost`              | 503  | Reserved; not currently thrown by the library                                                                                             |
+| `cache.deserialization_failed`       | 500  | Malformed payload in `get<T>`                                                                                                             |
+| `cache.serialization_failed`         | 500  | Unserializable value in `set<T>`                                                                                                          |
+| `cache.invalid_key`                  | 400  | Empty prefix or id (`build`), or empty key (`applyNamespace`)                                                                             |
+| `cache.invalid_namespace`            | 500  | Empty or whitespace-only namespace, empty `keySeparator`, namespace containing the separator or a glob metacharacter (`*`, `?`, `[`, `\`) |
+| `cache.script_not_registered`        | 500  | `eval(name)` before `register(name)`                                                                                                      |
+| `cache.script_execution_failed`      | 500  | Lua runtime error or NOSCRIPT retry failure                                                                                               |
+| `cache.script_registry_missing`      | 500  | `eval` called when no `ScriptManagerService` is wired                                                                                     |
+| `cache.flush_disabled_in_production` | 403  | `flushNamespace()` in prod without `allowFlushInProduction`                                                                               |
+| `cache.unsupported_in_cluster`       | 500  | `scan`, `flushNamespace`, or `getClient` called in cluster mode                                                                           |
+| `cache.cluster_misconfigured`        | 500  | `mode: 'cluster'` without `cluster.nodes`                                                                                                 |
+| `cache.sentinel_misconfigured`       | 500  | `mode: 'sentinel'` without `sentinel.sentinels`/`name`                                                                                    |
+| `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`                                                                                                     |
+| `cache.invalid_scope`                | 500  | `/admin` scope allowlist invalid at wiring                                                                                                |
+| `cache.scope_not_found`              | 500  | `/admin` call named an undeclared scope id                                                                                                |
+| `cache.scope_not_readable`           | 500  | Reserved; not currently thrown (unreadable scopes return `withheld`)                                                                      |
+| `cache.key_not_in_scope`             | 500  | `/admin` call named a key outside the named scope                                                                                         |
 
 Full catalog and HTTP status mapping: [`docs/technical_specification.md §12`](./docs/technical_specification.md).
 
@@ -775,7 +811,7 @@ See §13 of the [technical specification](./docs/technical_specification.md) for
 Contributions are welcome. Development follows the Bymax coding standards:
 
 - TypeScript strict (`noImplicitAny`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`)
-- TDD with a 100% coverage gate and a 95% mutation break threshold
+- TDD with a 100% coverage gate and a 100% mutation break threshold
 - Conventional Commits enforced by commitlint + husky
 - No direct dependencies — peer deps only
 - All boolean identifiers prefixed with `is / has / should / can`
@@ -801,7 +837,7 @@ pnpm typecheck
 Run the full gate before opening a PR:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size
+pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) for the full process.

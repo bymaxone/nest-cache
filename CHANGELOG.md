@@ -4,6 +4,37 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-10-29
+
+### Changed
+
+- **Nothing you execute changes.** `dist/` built from this tag is byte-for-byte identical
+  to the published 1.2.2: the unpacked tarball was diffed against a fresh build. The only edit
+  under `src/` is a unit test that pins the admin pipeline count.
+
+### Documentation
+
+- `README.md`, `docs/technical_specification.md` and the contributor documents state that
+  `KeyBuilder` validates `prefix` and `id` only for emptiness. A separator inside either
+  collides (`build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`), and a glob
+  metacharacter in `prefix` widens `keys()` and `scan()` within the namespace. Behaviour is
+  unchanged. Keys are unambiguous only for a single-character separator that appears in neither field; encoding each field with `encodeURIComponent` provides that for a separator it escapes and never emits, such as the default `':'`.
+- Contributor and security documents match the current tooling: pnpm 11, the admin
+  read-only check in the verification chain, mutation testing after merge and weekly, and
+  how dependency advisories are handled.
+
+### Security
+
+- Dependency advisories in development-only transitive dependencies are fixed by raising the
+  `overrides` floors in `pnpm-workspace.yaml`. None of them ships: the package
+  publishes with `"dependencies": {}`.
+- `GHSA-gcqx-w48m-w2h4` (`deepmerge`, reached only through `jest-config`) has no patched
+  release. It is suppressed in `osv-scanner.toml` until 2027-01-27 and nowhere else.
+
+### Internal
+
+- Development dependencies updated within their ranges; GitHub Actions bumped.
+
 ## [1.2.2] - 2026-09-04
 
 ### Changed
@@ -350,6 +381,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-cache/compare/v1.1.0...v1.2.0
