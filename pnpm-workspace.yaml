@@ -82,3 +82,7 @@ overrides:
   # GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm and nine more (up to 7.4): all fixed by 7.30.1.
   # Dev-only, via testcontainers.
   'undici': '^7.30.1'
+  # GHSA-mrhx-c7xc-m3w5 (8.2): memory exhaustion while validating oversized input; fixed
+  # in 4.6.6. Dev-only, via @stryker-mutator/core -> mutation-server-protocol, which asks
+  # for `^4.1.12` and so accepts the patched line unchanged.
+  'zod': '^4.6.6'
