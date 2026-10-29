@@ -291,10 +291,11 @@ consequences follow:
 
 This is documentation only; behavior is unchanged. When a `prefix` or `id` comes from untrusted
 input, encode each field, for example `cache.get(encodeURIComponent(prefix), encodeURIComponent(id))`.
-With the default `':'` separator this removes the collision (`encodeURIComponent` escapes `:`). It
-leaves `- _ . ! ~ * ' ( )` unescaped, so with a `keySeparator` from that set (for example `-` or `.`) the
-collision remains and `prefix` / `id` must not contain the separator; a `prefix` used with `keys()` /
-`scan()` must also avoid glob characters (`*`, `?`, `[`, `\`).
+Per-field encoding separates the fields only when the separator is a character that `encodeURIComponent`
+escapes and never emits: the default `':'` qualifies. It does not for `%` (its escape prefix) or for the
+characters it leaves as they are (letters, digits and `- _ . ! ~ * ' ( )`); with such a `keySeparator`,
+reject the separator in `prefix` and `id` instead. A `prefix` used with `keys()` / `scan()` must also
+avoid glob characters (`*`, `?`, `[`, `\`).
 
 ---
 
@@ -614,7 +615,7 @@ The namespace itself is validated at module bootstrap, not at call time:
 
 A namespace containing the separator is rejected because `namespace: 'a:b'` and `namespace: 'a'` with prefix `b` would resolve to the same keyspace — a tenant boundary that reads as isolated but is not.
 
-The same collision exists below the namespace and is **not** enforced by the library: `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Behavior is unchanged; encode untrusted `prefix` / `id` values per field with `encodeURIComponent` when the separator is one it escapes (the default `':'` is); it leaves `- _ . ! ~ * ' ( )` unescaped, so for those separators and for glob characters in `prefix`, reject the character instead.
+The same collision exists below the namespace and is **not** enforced by the library: `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Behavior is unchanged; encode untrusted `prefix` / `id` values per field with `encodeURIComponent` only when the separator is a character it escapes and never emits (the default `':'` is; `%` and `- _ . ! ~ * ' ( )` are not), and reject the separator otherwise; reject glob characters in `prefix`.
 
 ### Deserialization fails closed
 
@@ -653,7 +654,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 - `namespace` is distinct per tenant or per application — it is the isolation boundary, and a shared value makes every other guarantee moot
 - `allowFlushInProduction` stays unset; if it is on, the reason belongs in a security review
 - `getClient()` and `pipeline()` call sites are audited — they are the only paths that bypass namespacing
-- `prefix` and `id` that derive from untrusted input are encoded per field (`encodeURIComponent`) — the library checks them only for emptiness, so a separator inside either collides keys and a glob character in `prefix` widens `keys()` / `scan()`; `encodeURIComponent` escapes the default `':'` separator but leaves `- _ . ! ~ * ' ( )` unescaped, so with such a separator, and for glob characters in `prefix`, the character must be rejected instead
+- `prefix` and `id` that derive from untrusted input are encoded per field (`encodeURIComponent`) — the library checks them only for emptiness, so a separator inside either collides keys and a glob character in `prefix` widens `keys()` / `scan()`; per-field `encodeURIComponent` separates the fields only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), otherwise the separator must be rejected; glob characters in `prefix` must be rejected
 - Connection credentials come from the environment (`config.getOrThrow('REDIS_URL')`), never from a URL literal in module options in source control
 - `rediss://` (or an explicit `connection.tls`) is used for any Redis reachable off-host
 - Values that must not be readable by whoever can read Redis are encrypted by the application (or a custom `ISerializer`) before they are cached — the library stores what you hand it
