@@ -1245,7 +1245,7 @@ export class CacheException extends HttpException {
 }
 ```
 
-`details` is serialized verbatim into the response body: throw sites put only fixed texts, configuration names and sizes in it, never any part of a stored value (`DESERIALIZATION_FAILED` carries a fixed text and the length). A few sites also name the caller's own key or a scope id, and `SERIALIZATION_FAILED`, `CONNECTION_FAILED` and `SCRIPT_EXECUTION_FAILED` carry the underlying error's message. When `statusCode` is omitted the status comes from §12.2.
+`details` is serialized verbatim into the response body, so it never carries any part of a stored value. When `statusCode` is omitted the status comes from §12.2.
 
 `KEY_NOT_IN_SCOPE` keeps the `key` in `details`: it is the key the caller itself sent to `./admin`, not stored content. RFC 9457 §3.1.4 says a problem detail ought to focus on helping the client correct the problem (<https://www.rfc-editor.org/rfc/rfc9457.html>), and the OWASP Error Handling Cheat Sheet is about implementation details (<https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html>), which a caller's own key is not. Its status is 500, like every code §12.2 gives no other status.
 
@@ -1333,7 +1333,7 @@ The server entry also exports `CACHE_ERROR_MESSAGES`, a `ReadonlyMap<CacheErrorC
 { "dependencies": {} }
 ```
 
-Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
+Zero transitive deps; everything is peer.
 
 ### 14.2 `peerDependencies`
 
@@ -1357,17 +1357,14 @@ Same as `@bymax-one/nest-auth`. Zero transitive deps; everything is peer.
 | `@nestjs/common`   | `^11.0.16` | Decorators (`@Injectable`, `@Inject`, `@Optional`, `@Global`), lifecycle |
 | `@nestjs/core`     | `^11.1.18` | NestJS runtime peer; not imported directly by library sources            |
 | `ioredis`          | `^6.0.0`   | Redis client with TLS, sentinel, cluster support                         |
-| `reflect-metadata` | `^0.2`     | NestJS decorators                                                        |
+| `reflect-metadata` | `^0.2.0`   | NestJS decorators                                                        |
 
 `ioredis` is the only functional dep; the rest is standard for any NestJS project.
 
 ### 14.3 `devDependencies`
 
-Mirrors the `@bymax-one/nest-auth` template with specific additions:
-
 - `ioredis-mock ^8` — unit tests without real Redis
 - `testcontainers ^12` — e2e tests with real Redis
-- Removes `@nestjs/jwt`, `@nestjs/throttler`, `@nestjs/websockets`, `class-validator`, `react`, `next` (not used here)
 
 ### 14.4 `engines` and `packageManager`
 
@@ -1699,7 +1696,7 @@ interface CacheScope {
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `health()` | `PING` probe: `up`, `degraded` (latency above `degradedAboveMs`) or `down` (error, timeout or a reply other than `PONG`), plus `mode`, `isScanSupported` (false in cluster mode) and `degradedAboveMs` |
 | `stats()`  | Parsed Redis `INFO` (`RedisStats`)                                                                                                                                                                     |
-| `config()` | Resolved configuration: mode, namespace, separator, shutdown timeout, flush flag, serializer name, script **names** only (never Lua bodies), connection endpoint                                       |
+| `config()` | Resolved configuration with credentials withheld; script **names** only (never Lua bodies)                                                                                                             |
 
 **`CacheAdminService`**
 
