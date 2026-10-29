@@ -3,8 +3,8 @@
 > Architecture and working agreement for AI agents and human contributors. The
 > dense quick rules live in [CLAUDE.md](./CLAUDE.md); the authoritative design
 > lives in [docs/technical_specification.md](./docs/technical_specification.md).
-> This library is under active scaffolding — the engine is delivered across the
-> phases in [docs/development_plan.md](./docs/development_plan.md).
+> The engine is complete as of v1.x; [docs/development_plan.md](./docs/development_plan.md)
+> records how it was phased.
 
 ## Table of Contents
 
@@ -48,8 +48,9 @@ public, MIT, zero-runtime-dependency package.
   sentinel / cluster), `CacheService` (typed API + namespacing), `PubSubService`,
   `ScriptManagerService`, plus `KeyBuilder` / `parseRedisUrl` / serializer utils.
 - **Folder layout:**
-  `src/server/{connection,services,config,interfaces,utils,errors,constants}` and
-  `src/shared/{types,constants}`.
+  `src/server/{connection,services,config,interfaces,utils,errors,constants}`,
+  `src/admin/{config,services,types,utils}` (read-only administration),
+  `src/shared/{types,constants}` and `src/test-helpers/` (shared spec helpers).
 
 ## 3. Backend Patterns
 
@@ -80,8 +81,8 @@ public, MIT, zero-runtime-dependency package.
 - TDD; **100% coverage** in both `jest.config.ts` and `jest.coverage.config.ts`.
 - Unit tests mock Redis with `ioredis-mock`; E2E uses `@nestjs/testing` in
   `test/e2e/`.
-- Mutation testing (Stryker, `break: 100`) is a manual release gate.
-  `ignoreStatic: false` (exposes module-level constant mutants). Equivalent
+- Mutation testing (Stryker, `break: 100`) runs after merge on `main` and weekly cold,
+  never per PR; run `pnpm mutation:full` before a release. `ignoreStatic: false` (exposes module-level constant mutants). Equivalent
   mutants are flagged inline with `// Stryker disable next-line` and a reason —
   only for genuine equivalents.
 
@@ -117,7 +118,7 @@ public, MIT, zero-runtime-dependency package.
 1. Read the relevant section of `docs/technical_specification.md` and the matching
    `CACHE-xxx` task in `docs/development_tasks.md`.
 2. TDD: write the failing `*.spec.ts` first; keep 100% coverage.
-3. Run `pnpm typecheck && pnpm lint && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports`.
+3. Run `pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports`.
 
 ## 9. Guidelines Reference
 
@@ -399,3 +400,7 @@ here has to be maintained by whoever adds a rule, and is wrong the first time so
   What the callback genuinely does **not** carry is a cache hit, miss or latency signal. Asking
   for those is asking for something the surface cannot give without wrapping `get()`, and that is
   a feature request rather than a review finding.
+
+## Session memory (Obsidian vault)
+
+Lessons from earlier sessions live outside the repository, in the owner's Obsidian vault at `~/Documents/MyApps/obsidian/Brain/`, when it is present on this machine. Before a task, find this repository's hub under `02 - Areas/`: the table in `02 - Areas/Bymax/Bymax.md` maps each Bymax repository to its folder; for any other repository, search `02 - Areas/` for the repository name. Read the hub with its `Learnings.md` and `Decisions.md`, and the relevant stack notes under `03 - Resources/`. When the vault and the code disagree, the code wins. Record each non-obvious gotcha, root cause or decision in the hub as the vault's `_meta/conventions.md` describes; a repository without a hub gets one from `_meta/templates/project-hub.md`.

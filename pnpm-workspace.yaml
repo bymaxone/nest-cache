@@ -1,11 +1,9 @@
 # Build scripts are denied by default; an unlisted package counts as unreviewed.
-# `allowBuilds` is the only spelling pnpm 11 reads: onlyBuiltDependencies,
-# neverBuiltDependencies and their siblings were removed in v11 and replaced by
-# this map. Without an entry, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS
-# rather than warning.
+# `allowBuilds` is the only spelling pnpm 11 reads; onlyBuiltDependencies,
+# neverBuiltDependencies and their siblings have no effect. Without an entry,
+# `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS rather than warning.
 allowBuilds:
-  # Reached through jest-haste-map 30.5.0, which lists it as a direct dependency;
-  # 30.4.1 does not, which is why the entry is needed only from that bump onward.
+  # Reached through jest-haste-map, which lists it as a direct dependency.
   # Denied because the script does nothing to deny: `install` runs
   # scripts/build-from-source.js, whose entire body is
   # `if (process.env.npm_config_build_from_source === 'true') { build() }`, so a
@@ -24,8 +22,8 @@ allowBuilds:
   ssh2: false
 
 # Forced versions for vulnerable transitive dev dependencies. These live here and
-# NOT in package.json: pnpm 11 no longer reads the `pnpm` field of package.json, so
-# an override placed there does nothing — it warns, but it does nothing.
+# NOT in package.json: pnpm 11 does not read the `pnpm` field of package.json, so an
+# override placed there warns and has no effect.
 overrides:
   # GHSA-73wf-gq98-2v4g and GHSA-c83g-rgw3-j3cx, both CVSS 7.5, both first patched
   # in 4.28.7: an uncaught crash reachable through a prototype write, and unbounded
@@ -54,10 +52,9 @@ overrides:
   # The first is host confusion from IDN canonicalisation being skipped while parsing
   # an authority; the scanner reports the set together.
   #
-  # The floor was already `^3.1.5` and already admitted 3.1.6 — and protected nothing,
-  # because a caret in an override is a floor on resolution, not a standing instruction
-  # to re-resolve. The lockfile kept 3.1.5 from the day the entry was written. Read the
-  # resolved version, never the presence of an entry.
+  # A caret in an override is a floor on resolution, not a standing instruction to
+  # re-resolve an existing lockfile entry. Read the resolved version, never the presence
+  # of an entry.
   #
   # The floor must stay at 3.1.9 or above: GHSA-58mr-gqgx-xq4g and GHSA-qw65-cvwx-89v3 (7.5),
   # GHSA-hrr3-gc8f-f4qj (4.8), GHSA-w74x-v6f9-j3xg (6.1), GHSA-wjr9-j795-jxcr (4.8),
@@ -71,13 +68,9 @@ overrides:
   'protobufjs': '^7.6.5'
   # GHSA-4mjr-xmp4-gh2g and GHSA-x5fp-wj9c-mxmx: denial of service through an
   # attacker-controlled `isBuffer`. Vulnerable `>= 2.2.5 < 6.16.0` and
-  # `>= 6.14.2 <= 6.15.3`; the lockfile held 6.15.3, inside both. Scored 5.3 and 3.7
-  # by GitHub and 6.3 by OSV — named with their source because the two disagree and
-  # this repository's gate is the OSV one.
-  #
-  # Same stale-floor shape as fast-uri above: `^6.15.2` already admitted the fix.
-  #
-  # GHSA-6pq8-jhm2-2vcw (6.3): fixed in 6.16.1.
+  # `>= 6.14.2 <= 6.15.3`, both fixed in 6.16.0. Scored 5.3 and 3.7 by GitHub and 6.3 by
+  # OSV — named with their source because the two disagree and this repository's gate is
+  # the OSV one. GHSA-6pq8-jhm2-2vcw (6.3) is fixed in 6.16.1, which is the floor.
   'qs': '^6.16.1'
   # GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm and nine more (up to 7.4): all fixed by 7.30.1.
   # Dev-only, via testcontainers.

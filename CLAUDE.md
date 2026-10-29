@@ -3,7 +3,7 @@
 > **Type:** npm public library (NOT an application)
 > **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management
 > **Runtime:** Node.js 24+ | Zero direct dependencies (functionality via peer deps)
-> **Status:** v1.2.1 — 100% coverage, 100% mutation score. Adds the `./admin` subpath (read-only administration) and a security fix: the namespace is now rejected when it carries a Redis glob metacharacter, which previously reached `flushNamespace`'s destructive match pattern. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
+> **Status:** v1.2.2 — 100% coverage, 100% mutation score. Ships the `./admin` subpath (read-only administration); the namespace is rejected when it carries a Redis glob metacharacter, because `flushNamespace` builds a destructive match pattern from it. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
 ---
 
@@ -28,6 +28,7 @@
 **4. Security — Non-Negotiable**
 
 - **Namespace every key** via the key builder — never expose raw `getClient()` keys that bypass namespacing (tenant isolation).
+- **`prefix` and `id` are caller-owned:** `KeyBuilder` rejects only empty values. A separator inside either collides (`build('a','b:c') === build('a:b','c')`), and a glob metacharacter in `prefix` widens `keys()`/`scan()` within the namespace. Document it, never rely on it; `encodeURIComponent` per field is safe only for a separator it escapes (the default `':'` is), so reject the separator in `prefix` and `id` for any other.
 - **Deserialization fails closed** — malformed input throws `CacheException(DESERIALIZATION_FAILED)`, never returns a partial / wrongly-typed value.
 - **Never log or echo secret values** — error `details` previews are truncated.
 - `flushNamespace` is disabled in production unless an explicit flag is set (`FLUSH_DISABLED_IN_PRODUCTION`).
