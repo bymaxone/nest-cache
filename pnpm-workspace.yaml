@@ -59,10 +59,10 @@ overrides:
   # to re-resolve. The lockfile kept 3.1.5 from the day the entry was written. Read the
   # resolved version, never the presence of an entry.
   #
-  # Raised again for GHSA-58mr-gqgx-xq4g and GHSA-qw65-cvwx-89v3 (7.5), GHSA-hrr3-gc8f-f4qj
-  # (4.8), GHSA-w74x-v6f9-j3xg (6.1), GHSA-wjr9-j795-jxcr (4.8), GHSA-333x-w4r6-6crp and
-  # GHSA-xhq7-xmqj-769h (3.7): the last of them is fixed in 3.1.9. Dev-only, via ajv in
-  # the eslint toolchain.
+  # The floor must stay at 3.1.9 or above: GHSA-58mr-gqgx-xq4g and GHSA-qw65-cvwx-89v3 (7.5),
+  # GHSA-hrr3-gc8f-f4qj (4.8), GHSA-w74x-v6f9-j3xg (6.1), GHSA-wjr9-j795-jxcr (4.8),
+  # GHSA-333x-w4r6-6crp and GHSA-xhq7-xmqj-769h (3.7) are all fixed by 3.1.9. Dev-only, via
+  # ajv in the eslint toolchain.
   'fast-uri': '^3.1.9'
   # GHSA-2883-xcg3-v3hh (7.5): maxTotalMergeKeys does not bound CPU use for empty merge
   # sources; fixed in 3.15.2 and 4.3.2. Dev-only, via the istanbul/jest and eslint chains.
