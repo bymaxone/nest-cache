@@ -1245,7 +1245,9 @@ export class CacheException extends HttpException {
 }
 ```
 
-`details` is serialized verbatim into the response body: throw sites put only fixed texts, configuration names and sizes in it, never any part of a stored value (`DESERIALIZATION_FAILED` carries a fixed text and the length). A few sites also name the caller's own key or a scope id, and `SCRIPT_EXECUTION_FAILED` carries Redis's error text. When `statusCode` is omitted the status comes from §12.2.
+`details` is serialized verbatim into the response body: throw sites put only fixed texts, configuration names and sizes in it, never any part of a stored value (`DESERIALIZATION_FAILED` carries a fixed text and the length). A few sites also name the caller's own key or a scope id, and `SERIALIZATION_FAILED`, `CONNECTION_FAILED` and `SCRIPT_EXECUTION_FAILED` carry the underlying error's message. When `statusCode` is omitted the status comes from §12.2.
+
+`KEY_NOT_IN_SCOPE` keeps the `key` in `details`: it is the key the caller itself sent to `./admin`, not stored content. RFC 9457 §3.1.4 says a problem detail ought to focus on helping the client correct the problem (<https://www.rfc-editor.org/rfc/rfc9457.html>), and the OWASP Error Handling Cheat Sheet is about implementation details (<https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html>), which a caller's own key is not. Its status is 500, like every code outside the four listed in §12.2.
 
 ### 12.2 Code Table
 
@@ -1660,16 +1662,16 @@ export class HealthController {
 
 `BymaxCacheAdminModule.forRoot(options)` / `forRootAsync({ imports, inject, useFactory, isGlobal })` provide `CacheStatusService`, `CacheAdminService` and the `BYMAX_CACHE_ADMIN_OPTIONS` token. It is **not global by default** (`isGlobal: false`; for `forRootAsync` the flag is a top-level field, decided before the factory resolves). `BymaxCacheModule` must be resolvable from the importing module. Options are validated at wiring and throw `INVALID_SCOPE` when malformed.
 
-| Option              | Type                    | Default | Meaning                                                                                                                                            |
-| ------------------- | ----------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scopes`            | `readonly CacheScope[]` | —       | Required, non-empty. The keyspaces this deployment exposes                                                                                         |
-| `degradedAboveMs`   | `number`                | `250`   | Round trip above which health reports `degraded`                                                                                                   |
-| `probeTimeoutMs`    | `number`                | `2000`  | How long a health probe waits before reporting `down`                                                                                              |
-| `scanLimit`         | `number`                | `500`   | Most keys one listing reads before reporting the page incomplete                                                                                   |
-| `commandBatchLimit` | `number`                | `100`   | Most commands one pipeline flush sends; a flush always carries at least one key, so that key's 2 commands (3 when sizing) may exceed a lower limit |
-| `revealLimit`       | `number`                | `200`   | Most members or hash fields one reveal returns                                                                                                     |
-| `revealStringLimit` | `number`                | `4096`  | Most characters one revealed string carries                                                                                                        |
-| `isGlobal`          | `boolean`               | `false` | Register the module globally                                                                                                                       |
+| Option              | Type                    | Default | Meaning                                                                                                           |
+| ------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `scopes`            | `readonly CacheScope[]` | —       | Required, non-empty. The keyspaces this deployment exposes                                                        |
+| `degradedAboveMs`   | `number`                | `250`   | Round trip above which health reports `degraded`                                                                  |
+| `probeTimeoutMs`    | `number`                | `2000`  | How long a health probe waits before reporting `down`                                                             |
+| `scanLimit`         | `number`                | `500`   | Most keys one listing reads before reporting the page incomplete                                                  |
+| `commandBatchLimit` | `number`                | `100`   | Most commands one pipeline flush sends; a flush always carries at least one key, so a lower limit may be exceeded |
+| `revealLimit`       | `number`                | `200`   | Most members or hash fields one reveal returns                                                                    |
+| `revealStringLimit` | `number`                | `4096`  | Most characters one revealed string carries                                                                       |
+| `isGlobal`          | `boolean`               | `false` | Register the module globally                                                                                      |
 
 Each threshold must be a positive integer.
 
