@@ -51,6 +51,7 @@
 15. [Implementation Phases](#15-implementation-phases)
 16. [Known Limitations](#16-known-limitations)
 17. [Example Integration](#17-example-integration)
+18. [The `./admin` Subpath](#18-the-admin-subpath)
 
 ---
 
@@ -344,7 +345,7 @@ export type { CacheErrorCode } from './constants/error-codes'
 export { CACHE_EVENT_NAMES } from './constants/event-names'
 ```
 
-> **Public vs internal.** Only what appears in `src/server/index.ts`, `src/shared/index.ts` and `src/admin/index.ts` is public.
+> **Public vs internal.** Only what appears in `src/server/index.ts`, `src/shared/index.ts` and `src/admin/index.ts` is public. The `./admin` surface is described in §18.
 
 ---
 
