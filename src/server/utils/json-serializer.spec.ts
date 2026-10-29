@@ -3,8 +3,8 @@
  *
  * Layer: server. Covers the round-trip happy paths and every fail-closed branch —
  * circular reference, a non-Error throw from a `toJSON` hook, malformed JSON, and
- * a top-level `undefined` / function value — plus the PII-safe preview truncation
- * and its exact-cap boundary.
+ * a top-level `undefined` / function value — plus the guarantee that no part of a stored
+ * value reaches the exception.
  */
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
@@ -134,7 +134,7 @@ describe('JsonSerializer', () => {
   // appear anywhere in the exception: neither in the response body, nor in `message`,
   // nor in `details` — including the engine's own parse message, which quotes the
   // start of the input. The marker sits at the start (where V8 quotes) and far past
-  // it, and the payload is longer than any preview, so a truncating echo fails too.
+  // it, and the payload is long, so a truncating echo fails too.
   it('never echoes any part of a non-JSON stored value into the exception', () => {
     const secret = 'sk-live-4eC39HqLyjWDarjtT1zdp7dc'
     const late = 'late-marker-ZZ9'

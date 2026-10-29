@@ -53,6 +53,6 @@ applyTo: 'src/**/*.ts'
 ## Security
 
 - Deserialization must fail closed — malformed input throws `CacheException(DESERIALIZATION_FAILED)`, never returns a partial or wrongly-typed value.
-- Never put secret values in `CacheException` `details` or event payloads; truncate previews.
+- Never put secret values in `CacheException` `details` or event payloads; never echo any part of a stored value.
 - Any secret/hash comparison must use `node:crypto` `timingSafeEqual` — never `===`.
 - `flushNamespace` must be guarded against accidental production use.

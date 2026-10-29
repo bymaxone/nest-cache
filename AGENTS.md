@@ -67,7 +67,7 @@ public, MIT, zero-runtime-dependency package.
   builder.
 - **Fail-closed deserialization** — malformed payloads throw, never return a
   partial value.
-- **No secrets in `details` or events** — previews truncated.
+- **No secrets in `details` or events** — a stored value is never echoed, not even truncated.
 - **Production flush guard** — `flushNamespace` disabled in prod without an
   explicit flag.
 - **No untrusted input in Lua bodies.**

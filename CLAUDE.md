@@ -30,7 +30,7 @@
 - **Namespace every key** via the key builder — never expose raw `getClient()` keys that bypass namespacing (tenant isolation).
 - **`prefix` and `id` are caller-owned:** `KeyBuilder` rejects only empty values. A separator inside either collides (`build('a','b:c') === build('a:b','c')`), and a glob metacharacter in `prefix` widens `keys()`/`scan()` within the namespace. Document it, never rely on it; keys are unambiguous only for a single-character separator absent from both fields; `encodeURIComponent` per field provides that only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), so reject the separator in `prefix` and `id` for any other, and keep the separator a single character (a multi-character one can straddle a field boundary).
 - **Deserialization fails closed** — malformed input throws `CacheException(DESERIALIZATION_FAILED)`, never returns a partial / wrongly-typed value.
-- **Never log or echo secret values** — error `details` previews are truncated.
+- **Never log or echo secret values** — no part of a stored value appears in an error `details` (fixed text and length only).
 - `flushNamespace` is disabled in production unless an explicit flag is set (`FLUSH_DISABLED_IN_PRODUCTION`).
 - Untrusted input must never reach Lua script bodies.
 
