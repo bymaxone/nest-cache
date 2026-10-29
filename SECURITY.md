@@ -49,8 +49,8 @@ prefer to remain anonymous.
 
 ## Supported Versions
 
-The latest `1.x` minor receives security fixes. Backports to older minors are
-considered case by case.
+Only the latest minor (currently `1.2.x`) receives security fixes. Earlier versions are not
+supported: upgrade to the latest minor.
 
 ## Security Practices
 
@@ -60,4 +60,11 @@ considered case by case.
   tokens.
 - Error `details` must never include secret values; serialized previews are
   truncated to avoid leaking whole payloads.
-- Continuous scanning via CodeQL and OpenSSF Scorecard on every push.
+- CodeQL, OpenSSF Scorecard and OSV-Scanner on the full lockfile run on `main` and on a
+  weekly schedule. Pull requests are also checked by CodeQL, OSV-Scanner and a
+  dependency-review job that fails on high severity. A weekly job audits the declared
+  peer ranges against published advisories.
+- Dependency advisories: a vulnerable transitive development dependency is fixed by a
+  version floor in the `overrides` of `pnpm-workspace.yaml`. An advisory with no patched
+  release is suppressed only through a dated, reasoned entry in `osv-scanner.toml`, which
+  expires. None of these dependencies ships: the package publishes with `dependencies: {}`.
