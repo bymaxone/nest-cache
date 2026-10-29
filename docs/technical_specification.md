@@ -1,8 +1,8 @@
 # @bymax-one/nest-cache — Complete Technical Specification
 
-> **Version:** 1.0.0
-> **Last updated:** 2026-05-30 (aligned to the Bymax lib standard — see §0)
-> **Status:** Draft for implementation
+> **Version:** 1.2.3
+> **Last updated:** 2026-10-29 (reflects v1.2.3; the §0 overrides remain normative)
+> **Status:** Implemented (v1.2.3)
 > **Type:** Public npm package (`@bymax-one/nest-cache`)
 
 ---
@@ -89,13 +89,13 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 ### 1.5 Design Principles
 
 1. **Configuration over convention.** Everything goes through `forRoot`/`forRootAsync`. Sensible defaults when applicable.
-2. **Zero opinion on environment.** The lib does not read `process.env` — the app injects the options.
+2. **Zero opinion on environment.** The lib reads no configuration from `process.env` — the app injects the options. The single read is `NODE_ENV` in `flushNamespace`, the production guard (§5.5).
 3. **Singleton by default.** One command connection, plus an on-demand subscriber.
 4. **Correct lifecycle.** `OnModuleInit` to connect, `OnModuleDestroy` for graceful `quit()` with timeout.
 5. **Typed helpers.** Generic `<T>` API with default JSON serialization and a hook for custom serializers.
 6. **Strict namespace.** Every key passes through `KeyBuilder(prefix, id)` — raw strings are discouraged.
 7. **Lua-first for atomicity.** Other libs register scripts via `ScriptManager.register(name, lua)` and invoke them by name.
-8. **Explicit observability.** Connection events exposed via the `events.onEvent` callback — in the embedded logger.
+8. **Explicit observability.** Connection events exposed via the `events.onEvent` callback — no embedded logger.
 9. **Zero external deps.** Only `ioredis` as a peer.
 
 ### 1.6 Differences vs `_commons_/cache/`
@@ -139,7 +139,7 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 ### 2.2 Connection Lifecycle
 
 1. **`forRoot` / `forRootAsync`** — the consumer passes `BymaxCacheModuleOptions`; the module registers providers.
-2. **`OnModuleInit`** (if `lazyConnect = false`) — `ConnectionManager` creates `Redis()` and waits for `'ready'`.
+2. **`OnModuleInit`** — `ConnectionManager` creates `Redis()` and, unless `lazyConnect` is set, waits for `'ready'`. Registered Lua scripts are preloaded at `OnApplicationBootstrap` (skipped when `lazyConnect` is set).
 3. **Normal operation** — `CacheService` delegates to `ConnectionManager.getClient()`.
 4. **Events** (`connect`, `ready`, `error`, `close`, `reconnecting`, `end`) propagated to the `events.onEvent` callback.
 5. **`OnModuleDestroy`** — `quit()` with `shutdownTimeoutMs`; if it exceeds, force `disconnect()`.
@@ -155,7 +155,7 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 | Publisher (`publish`)                        | `client` (singleton) | `publish` is a normal command                                                  |
 | BullMQ                                       | **NOT exposed**      | Requires `maxRetriesPerRequest: null`; `nest-queue` creates its own connection |
 
-The `subscriber` is created on the first call to `subscribe`/`psubscribe`, inheriting the same `RedisOptions` as the main client.
+The `subscriber` is created on the first call to `subscribe`/`psubscribe`, built from the same options as the main client, except that its offline queue is enabled, so a subscribe issued before the socket is ready is queued instead of failing. In cluster mode the override is ignored and the subscriber uses the configured cluster options.
 
 ---
 
@@ -206,10 +206,20 @@ The `subscriber` is created on the first call to `subscribe`/`psubscribe`, inher
 │   │   │   └── parse-redis-url.ts
 │   │   ├── errors/
 │   │   │   ├── cache-error-codes.ts
-│   │   │   └── cache-exception.ts
+│   │   │   └── cache.exception.ts
 │   │   └── constants/
 │   │       ├── default-namespace.ts
 │   │       └── default-timeouts.ts
+│   ├── admin/                              # Subpath './admin' (read-only administration)
+│   │   ├── index.ts
+│   │   ├── bymax-cache-admin.module.ts     # BymaxCacheAdminModule
+│   │   ├── bymax-cache-admin.constants.ts  # BYMAX_CACHE_ADMIN_OPTIONS
+│   │   ├── config/                         # validate-scopes, resolved-admin-options
+│   │   ├── constants/                      # admin-defaults
+│   │   ├── interfaces/                     # options, scope, redis-reader contracts
+│   │   ├── services/                       # cache-status.service, cache-admin.service
+│   │   ├── types/                          # health, stats, keyspace types
+│   │   └── utils/                          # parse-info, read-replies
 │   └── shared/                             # Subpath './shared' (zero deps)
 │       ├── index.ts
 │       ├── types/
@@ -220,7 +230,7 @@ The `subscriber` is created on the first call to `subscribe`/`psubscribe`, inher
 │           ├── error-codes.ts
 │           └── event-names.ts
 └── test/                                   # E2E tests (Testcontainers)
-    └── cache.service.e2e.spec.ts
+    └── e2e/                                # *.e2e-spec.ts suites
 ```
 
 ### 3.2 Subpath Exports
@@ -241,14 +251,26 @@ dual-package hazard that fails only in the published artifact, never in the test
 {
   "exports": {
     ".": {
-      "types": "./dist/server/index.d.ts",
-      "import": "./dist/server/index.mjs",
-      "require": "./dist/server/index.cjs"
+      "import": { "types": "./dist/server/index.d.ts", "default": "./dist/server/index.mjs" },
+      "require": { "types": "./dist/server/index.d.cts", "default": "./dist/server/index.cjs" }
+    },
+    "./admin": {
+      "import": { "types": "./dist/admin/index.d.ts", "default": "./dist/admin/index.mjs" },
+      "require": { "types": "./dist/admin/index.d.cts", "default": "./dist/admin/index.cjs" }
     },
     "./shared": {
-      "types": "./dist/shared/index.d.ts",
-      "import": "./dist/shared/index.mjs",
-      "require": "./dist/shared/index.cjs"
+      "import": { "types": "./dist/shared/index.d.ts", "default": "./dist/shared/index.mjs" },
+      "require": { "types": "./dist/shared/index.d.cts", "default": "./dist/shared/index.cjs" }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/server/index.cjs",
+  "module": "./dist/server/index.mjs",
+  "types": "./dist/server/index.d.cts",
+  "typesVersions": {
+    "*": {
+      "shared": ["./dist/shared/index.d.cts"],
+      "admin": ["./dist/admin/index.d.cts"]
     }
   }
 }
@@ -260,38 +282,69 @@ dual-package hazard that fails only in the published artifact, never in the test
 
 ```typescript
 export { BymaxCacheModule } from './bymax-cache.module'
-export {
-  BYMAX_CACHE_OPTIONS,
-  BYMAX_CACHE_CONNECTION,
-  BYMAX_CACHE_SCRIPT_REGISTRY,
-  BYMAX_CACHE_EVENTS
-} from './bymax-cache.constants'
+export { ConnectionManager } from './connection/connection.manager'
+export { KeyBuilder } from './utils/key-builder'
 export { CacheService } from './services/cache.service'
+export { JsonSerializer } from './utils/json-serializer'
 export { PubSubService } from './services/pubsub.service'
+export type { Unsubscribe } from './services/pubsub.service'
 export { ScriptManagerService } from './services/script-manager.service'
 export type {
-  BymaxCacheModuleOptions,
+  BymaxCacheClusterConnection,
   BymaxCacheModuleAsyncOptions,
-  ICacheEvents,
-  ISerializer,
-  IScriptDefinition,
-  IPubSubHandler
-} from './interfaces'
-export { CacheException, CACHE_ERROR_CODES } from './errors/cache-error-codes'
-export type { Redis, RedisOptions, RedisKey } from 'ioredis'
+  BymaxCacheModuleOptions,
+  BymaxCacheSentinelConnection,
+  BymaxCacheStandaloneConnection,
+  ClusterNode,
+  ClusterOptions,
+  RedisOptions,
+  SentinelAddress
+} from './interfaces/cache-module-options.interface'
+export type { ICacheEvents } from './interfaces/cache-events.interface'
+export type { ISerializer } from './interfaces/serializer.interface'
+export type { IScriptDefinition } from './interfaces/script-definition.interface'
+export type { IPubSubHandler, IPubSubPatternHandler } from './interfaces/pubsub-handler.interface'
+export {
+  BYMAX_CACHE_CONNECTION,
+  BYMAX_CACHE_EVENTS,
+  BYMAX_CACHE_KEY_BUILDER,
+  BYMAX_CACHE_OPTIONS,
+  BYMAX_CACHE_SCRIPT_REGISTRY,
+  BYMAX_CACHE_SERIALIZER
+} from './bymax-cache.constants'
+export type { ResolvedOptions } from './config/resolved-options'
+export {
+  DEFAULT_KEY_SEPARATOR,
+  DEFAULT_NAMESPACE,
+  DEFAULT_REDIS_PORT
+} from './constants/default-namespace'
+export { CacheException } from './errors/cache.exception'
+export { CACHE_ERROR_CODES, CACHE_ERROR_MESSAGES } from './errors/cache-error-codes'
+export type { CacheErrorCode } from './errors/cache-error-codes'
+export type { Redis, RedisKey } from 'ioredis'
+// Re-exported from the shared subpath for convenience:
+export { CACHE_EVENT_NAMES } from '../shared'
+export type {
+  CacheConnectionStatus,
+  CacheEventName,
+  CacheKeyPrefix,
+  CacheNamespace,
+  SerializableValue
+} from '../shared'
 ```
 
 **Shared (`@bymax-one/nest-cache/shared`):**
 
 ```typescript
-export type { CacheEventName, CacheConnectionStatus } from './types/cache-event.types'
+export type { CacheConnectionStatus, CacheEventName } from './types/cache-event.types'
+export type { CacheKeyPrefix, CacheNamespace } from './types/cache-config.types'
 export type { SerializableValue } from './types/serializable-value.types'
-export type { CacheNamespace, CacheKeyPrefix } from './types/cache-config.types'
 export { CACHE_ERROR_CODES } from './constants/error-codes'
+export type { CacheErrorCode } from './constants/error-codes'
 export { CACHE_EVENT_NAMES } from './constants/event-names'
 ```
 
-> **Public vs internal.** Only what appears in `src/server/index.ts` and `src/shared/index.ts` is public. Internal utilities (`key-builder.ts`, `json-serializer.ts`, `parse-redis-url.ts`) are not re-exported.
+> **Public vs internal.** Only what appears in `src/server/index.ts`, `src/shared/index.ts` and `src/admin/index.ts` is public.
 
 ---
 
@@ -300,60 +353,63 @@ export { CACHE_EVENT_NAMES } from './constants/event-names'
 ### 4.1 `BymaxCacheModuleOptions` interface
 
 ```typescript
-import type { RedisOptions, SentinelAddress, ClusterNode, ClusterOptions } from 'ioredis'
+import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls'
+import type { ClusterNode, ClusterOptions, NatMap, SentinelAddress } from 'ioredis'
+
+/** Either `url` OR `host` is required (standalone). When both are present, `url` wins. */
+export interface BymaxCacheStandaloneConnection {
+  url?: string // redis:// or rediss://
+  host?: string
+  port?: number
+  password?: string
+  db?: number
+  username?: string
+  tls?: TlsConnectionOptions
+  /** Default: false (connects on OnModuleInit) */
+  lazyConnect?: boolean
+  /** Default: 10000 ms */
+  connectTimeout?: number
+  /** Default: 5000 ms */
+  commandTimeout?: number
+  /** Default: 3. DO NOT use null here — that value is specific to BullMQ */
+  maxRetriesPerRequest?: number
+  /** Default: true */
+  enableReadyCheck?: boolean
+  /** Default: false — we prefer to fail fast rather than accumulate commands */
+  enableOfflineQueue?: boolean
+  /** Default: exponential backoff `Math.min(times * 50, 2000)` */
+  retryStrategy?: (times: number) => number | null | void
+  /** Default: reconnects only on 'READONLY' (replica failover) */
+  reconnectOnError?: (err: Error) => boolean | 1 | 2
+  keepAlive?: number // Default: 0
+  noDelay?: boolean // Default: true
+  family?: 4 | 6 // Default: 4
+}
+
+/** Required when mode === 'sentinel'. */
+export interface BymaxCacheSentinelConnection {
+  sentinels: SentinelAddress[]
+  name: string
+  sentinelPassword?: string
+  password?: string
+  /** 'replica' is normalised to the ioredis wire value 'slave' internally. */
+  role?: 'master' | 'replica' | 'slave'
+  /** Rewrites the addresses the sentinels announce (NAT'd networks). */
+  natMap?: NatMap
+}
+
+/** Required when mode === 'cluster'. */
+export interface BymaxCacheClusterConnection {
+  nodes: ClusterNode[]
+  options?: ClusterOptions
+}
 
 export interface BymaxCacheModuleOptions {
   /** Connection mode. Default: 'standalone' */
   mode?: 'standalone' | 'sentinel' | 'cluster'
-
-  /**
-   * Connection options (standalone mode).
-   * Accepts URL (`redis://`/`rediss://`) or discrete properties.
-   * When both are provided, URL takes priority — discrete properties serve as fallback.
-   */
-  connection?: {
-    url?: string
-    host?: string
-    port?: number
-    password?: string
-    db?: number
-    username?: string
-    tls?: import('tls').ConnectionOptions
-    /** Default: false (connects on OnModuleInit) */
-    lazyConnect?: boolean
-    /** Default: 10000 ms */
-    connectTimeout?: number
-    /** Default: 5000 ms */
-    commandTimeout?: number
-    /** Default: 3. DO NOT use null here — that value is specific to BullMQ */
-    maxRetriesPerRequest?: number
-    /** Default: true */
-    enableReadyCheck?: boolean
-    /** Default: false — we prefer to fail fast rather than accumulate commands */
-    enableOfflineQueue?: boolean
-    /** Default: exponential backoff `Math.min(times * 50, 2000)` */
-    retryStrategy?: (times: number) => number | null | void
-    /** Default: reconnects only on 'READONLY' (replica failover) */
-    reconnectOnError?: (err: Error) => boolean | 1 | 2
-    keepAlive?: number
-    noDelay?: boolean
-    family?: 4 | 6
-  }
-
-  /** Only when mode === 'sentinel' */
-  sentinel?: {
-    sentinels: SentinelAddress[]
-    name: string
-    sentinelPassword?: string
-    password?: string
-    role?: 'master' | 'slave'
-  }
-
-  /** Only when mode === 'cluster' */
-  cluster?: {
-    nodes: ClusterNode[]
-    options?: ClusterOptions
-  }
+  connection?: BymaxCacheStandaloneConnection
+  sentinel?: BymaxCacheSentinelConnection
+  cluster?: BymaxCacheClusterConnection
 
   /**
    * Global namespace. All keys receive prefix `{namespace}{separator}`.
@@ -373,11 +429,21 @@ export interface BymaxCacheModuleOptions {
   /** Timeout for graceful shutdown in ms. Default: 5000 */
   shutdownTimeoutMs?: number
 
-  /** Default: true */
+  /**
+   * Allows `flushNamespace()` when NODE_ENV === 'production'. Default: false.
+   * Leave false in real production environments.
+   */
+  allowFlushInProduction?: boolean
+
+  /**
+   * Default: true. For `forRootAsync` the flag is decided before the factory
+   * resolves: pass `isGlobal` at the `forRootAsync({ isGlobal, ... })` call site;
+   * a value returned from inside `useFactory` has no effect.
+   */
   isGlobal?: boolean
 
   /** Lua scripts pre-registered at initialization */
-  scripts?: IScriptDefinition[]
+  scripts?: readonly IScriptDefinition[]
 }
 ```
 
@@ -392,39 +458,47 @@ export interface BymaxCacheModuleAsyncOptions {
 }
 ```
 
+`forRootAsync` accepts the builder-generated async-options type, a superset of the interface above that also admits the NestJS `useClass` / `useExisting` provider strategies. `BymaxCacheModuleAsyncOptions` documents the common `useFactory` path.
+
 ### 4.3 Options table with defaults
 
 | Option                            | Type                                      | Required | Default                  |
 | --------------------------------- | ----------------------------------------- | -------- | ------------------------ |
-| `mode`                            | `'standalone' \| 'sentinel' \| 'cluster'` | In the   | `'standalone'`           |
+| `mode`                            | `'standalone' \| 'sentinel' \| 'cluster'` | No       | `'standalone'`           |
 | `connection.url`                  | `string`                                  | \*       | —                        |
-| `connection.host`                 | `string`                                  | \*       | `'localhost'`            |
-| `connection.port`                 | `number`                                  | In the   | `6379`                   |
-| `connection.password`             | `string`                                  | In the   | —                        |
-| `connection.db`                   | `number`                                  | In the   | `0`                      |
-| `connection.username`             | `string`                                  | In the   | —                        |
-| `connection.tls`                  | `ConnectionOptions`                       | In the   | —                        |
-| `connection.lazyConnect`          | `boolean`                                 | In the   | `false`                  |
-| `connection.connectTimeout`       | `number`                                  | In the   | `10000`                  |
-| `connection.commandTimeout`       | `number`                                  | In the   | `5000`                   |
-| `connection.maxRetriesPerRequest` | `number`                                  | In the   | `3`                      |
-| `connection.enableReadyCheck`     | `boolean`                                 | In the   | `true`                   |
-| `connection.enableOfflineQueue`   | `boolean`                                 | In the   | `false`                  |
-| `connection.retryStrategy`        | `function`                                | In the   | exp. backoff             |
-| `connection.reconnectOnError`     | `function`                                | In the   | reconnects on `READONLY` |
-| `connection.keepAlive`            | `number`                                  | In the   | `0`                      |
-| `connection.noDelay`              | `boolean`                                 | In the   | `true`                   |
-| `connection.family`               | `4 \| 6`                                  | In the   | `4`                      |
+| `connection.host`                 | `string`                                  | \*       | —                        |
+| `connection.port`                 | `number`                                  | No       | — (ioredis: `6379`)      |
+| `connection.password`             | `string`                                  | No       | —                        |
+| `connection.db`                   | `number`                                  | No       | — (ioredis: `0`)         |
+| `connection.username`             | `string`                                  | No       | —                        |
+| `connection.tls`                  | `ConnectionOptions`                       | No       | —                        |
+| `connection.lazyConnect`          | `boolean`                                 | No       | `false`                  |
+| `connection.connectTimeout`       | `number`                                  | No       | `10000`                  |
+| `connection.commandTimeout`       | `number`                                  | No       | `5000`                   |
+| `connection.maxRetriesPerRequest` | `number`                                  | No       | `3`                      |
+| `connection.enableReadyCheck`     | `boolean`                                 | No       | `true`                   |
+| `connection.enableOfflineQueue`   | `boolean`                                 | No       | `false`                  |
+| `connection.retryStrategy`        | `function`                                | No       | exp. backoff             |
+| `connection.reconnectOnError`     | `function`                                | No       | reconnects on `READONLY` |
+| `connection.keepAlive`            | `number`                                  | No       | `0`                      |
+| `connection.noDelay`              | `boolean`                                 | No       | `true`                   |
+| `connection.family`               | `4 \| 6`                                  | No       | `4`                      |
 | `sentinel.sentinels`              | `SentinelAddress[]`                       | \*\*     | —                        |
 | `sentinel.name`                   | `string`                                  | \*\*     | —                        |
+| `sentinel.sentinelPassword`       | `string`                                  | No       | —                        |
+| `sentinel.password`               | `string`                                  | No       | —                        |
+| `sentinel.role`                   | `'master' \| 'replica' \| 'slave'`        | No       | ioredis default (master) |
+| `sentinel.natMap`                 | `NatMap`                                  | No       | —                        |
 | `cluster.nodes`                   | `ClusterNode[]`                           | \*\*\*   | —                        |
-| `namespace`                       | `string`                                  | In the   | `'app'`                  |
-| `keySeparator`                    | `string`                                  | In the   | `':'`                    |
-| `serializer`                      | `ISerializer`                             | In the   | JSON                     |
-| `events.onEvent`                  | `function`                                | In the   | —                        |
-| `shutdownTimeoutMs`               | `number`                                  | In the   | `5000`                   |
-| `isGlobal`                        | `boolean`                                 | In the   | `true`                   |
-| `scripts`                         | `IScriptDefinition[]`                     | In the   | `[]`                     |
+| `cluster.options`                 | `ClusterOptions`                          | No       | —                        |
+| `namespace`                       | `string`                                  | No       | `'app'`                  |
+| `keySeparator`                    | `string`                                  | No       | `':'`                    |
+| `serializer`                      | `ISerializer`                             | No       | JSON                     |
+| `events.onEvent`                  | `function`                                | No       | —                        |
+| `shutdownTimeoutMs`               | `number`                                  | No       | `5000`                   |
+| `allowFlushInProduction`          | `boolean`                                 | No       | `false`                  |
+| `isGlobal`                        | `boolean`                                 | No       | `true`                   |
+| `scripts`                         | `readonly IScriptDefinition[]`            | No       | none                     |
 
 \* `connection.url` OR `connection.host` when `mode === 'standalone'`.
 \*\* When `mode === 'sentinel'`.
@@ -488,14 +562,16 @@ export class AppModule {}
 
 ### 4.6 Validation at Initialization
 
-The module validates on `OnModuleInit` and throws `CacheException` if:
+`validateOptions` runs when the module is registered (`forRoot`, or when the `forRootAsync` factory resolves), before any connection is made. It throws `CacheException` if:
 
-- `mode === 'sentinel'` without `sentinel.sentinels` or `sentinel.name`
-- `mode === 'cluster'` without `cluster.nodes`
-- `mode === 'standalone'` without `connection.url` or `connection.host`
-- `namespace` empty or contains `keySeparator`
-- `shutdownTimeoutMs < 100`
-- `connection.connectTimeout < 100`
+- `mode === 'sentinel'` without `sentinel.sentinels` or `sentinel.name` (`SENTINEL_MISCONFIGURED`)
+- `mode === 'cluster'` without `cluster.nodes` (`CLUSTER_MISCONFIGURED`)
+- `mode === 'standalone'` without `connection.url` or `connection.host` (`CONNECTION_FAILED`)
+- `connection.url` is not a parseable Redis URL (`CONNECTION_FAILED`, `reason: 'invalid connection.url'`; the URL is omitted from `details`)
+- `namespace` is empty or whitespace-only, contains `keySeparator`, or contains a Redis glob metacharacter (`*`, `?`, `[`, `\`); `]` is accepted (`INVALID_NAMESPACE`)
+- `keySeparator` is empty (`INVALID_NAMESPACE`)
+- `shutdownTimeoutMs < 100` (`CONNECTION_FAILED`)
+- `connection.connectTimeout < 100` (`CONNECTION_FAILED`)
 
 ---
 
@@ -512,45 +588,59 @@ The module validates on `OnModuleInit` and throws `CacheException` if:
 
 ### 5.2 Method Table
 
-| Method                                               | Signature                                                                    | Description                                                        |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `get<T>`                                             | `(prefix: string, id: string) => Promise<T \| null>`                         | Read + deserialize                                                 |
-| `getRaw`                                             | `(prefix: string, id: string) => Promise<string \| null>`                    | Read string without deserializing                                  |
-| `set<T>`                                             | `(prefix, id, value: T, ttlSeconds?: number) => Promise<void>`               | Serialize + write with optional TTL                                |
-| `setRaw`                                             | `(prefix, id, value: string, ttlSeconds?: number) => Promise<void>`          | Write string without serializing                                   |
-| `setNx<T>`                                           | `(prefix, id, value: T, ttlSeconds?: number) => Promise<boolean>`            | SET NX — true if written                                           |
-| `del`                                                | `(prefix, id) => Promise<number>`                                            | DEL                                                                |
-| `delMany`                                            | `(prefix, ids: string[]) => Promise<number>`                                 | DEL in batch                                                       |
-| `exists`                                             | `(prefix, id) => Promise<boolean>`                                           | EXISTS                                                             |
-| `incr`                                               | `(prefix, id, by?: number) => Promise<number>`                               | INCR / INCRBY                                                      |
-| `decr`                                               | `(prefix, id, by?: number) => Promise<number>`                               | DECR / DECRBY                                                      |
-| `expire`                                             | `(prefix, id, ttlSeconds: number) => Promise<boolean>`                       | EXPIRE                                                             |
-| `ttl`                                                | `(prefix, id) => Promise<number>`                                            | TTL (`-2` does not exist, `-1` in the expiration)                  |
-| `persist`                                            | `(prefix, id) => Promise<boolean>`                                           | PERSIST                                                            |
-| `mget<T>`                                            | `(prefix, ids: string[]) => Promise<Array<T \| null>>`                       | MGET                                                               |
-| `mset<T>`                                            | `(prefix, entries: Array<[string, T]>) => Promise<void>`                     | MSET (no TTL — use pipeline)                                       |
-| `keys`                                               | `(prefix, pattern: string) => Promise<string[]>`                             | KEYS — restricted use (see §5.4)                                   |
-| `scan`                                               | `(prefix, pattern, count?: number) => AsyncIterable<string>`                 | SCAN cursor-based — preferred in production                        |
-| `hget<T>` / `hset<T>` / `hgetall<T>` / `hdel`        | Hash operations                                                              | HGET/HSET/HGETALL/HDEL                                             |
-| `sadd` / `srem` / `smembers` / `sismember` / `scard` | Set operations                                                               | SADD/SREM/SMEMBERS/SISMEMBER/SCARD                                 |
-| `pipeline`                                           | `() => ChainablePipeline`                                                    | Raw pipeline (consumer composes keys)                              |
-| `eval`                                               | `(scriptName, keys: string[], args: (string\|number)[]) => Promise<unknown>` | Executes registered Lua                                            |
-| `getClient`                                          | `() => Redis`                                                                | Escape hatch — keys are NOT auto-namespaced                        |
-| `isHealthy` / `ping` / `info`                        | Health                                                                       | PING / INFO                                                        |
-| `flushNamespace`                                     | `() => Promise<number>`                                                      | Deletes everything in the namespace — blocked in production (§5.5) |
+| Method           | Signature                                                                                          | Description                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `get<T>`         | `(prefix: string, id: string) => Promise<T \| null>`                                               | Read + deserialize                                                 |
+| `getRaw`         | `(prefix: string, id: string) => Promise<string \| null>`                                          | Read string without deserializing                                  |
+| `set<T>`         | `(prefix, id, value: T, ttlSeconds?: number) => Promise<void>`                                     | Serialize + write with optional TTL                                |
+| `setRaw`         | `(prefix, id, value: string, ttlSeconds?: number) => Promise<void>`                                | Write string without serializing                                   |
+| `setNx<T>`       | `(prefix, id, value: T, ttlSeconds?: number) => Promise<boolean>`                                  | SET NX — true if written                                           |
+| `del`            | `(prefix, id) => Promise<number>`                                                                  | DEL                                                                |
+| `delMany`        | `(prefix, ids: readonly string[]) => Promise<number>`                                              | DEL in batch                                                       |
+| `exists`         | `(prefix, id) => Promise<boolean>`                                                                 | EXISTS                                                             |
+| `incr`           | `(prefix, id, by = 1) => Promise<number>`                                                          | INCR / INCRBY                                                      |
+| `decr`           | `(prefix, id, by = 1) => Promise<number>`                                                          | DECR / DECRBY                                                      |
+| `expire`         | `(prefix, id, ttlSeconds: number) => Promise<boolean>`                                             | EXPIRE                                                             |
+| `ttl`            | `(prefix, id) => Promise<number>`                                                                  | TTL (`-2` does not exist, `-1` no expiration)                      |
+| `persist`        | `(prefix, id) => Promise<boolean>`                                                                 | PERSIST                                                            |
+| `mget<T>`        | `(prefix, ids: readonly string[]) => Promise<Array<T \| null>>`                                    | MGET (empty `ids` returns `[]` without a Redis call)               |
+| `mset<T>`        | `(prefix, entries: ReadonlyArray<readonly [string, T]>) => Promise<void>`                          | MSET (no TTL — use pipeline); empty `entries` is a no-op           |
+| `keys`           | `(prefix, pattern: string) => Promise<string[]>`                                                   | KEYS — restricted use (see §5.4)                                   |
+| `scan`           | `(prefix, pattern, count = 100) => AsyncIterable<string>`                                          | SCAN cursor-based — preferred in production; not in cluster mode   |
+| `hget<T>`        | `(prefix, id, field: string) => Promise<T \| null>`                                                | HGET                                                               |
+| `hset<T>`        | `(prefix, id, field: string, value: T) => Promise<number>`                                         | HSET                                                               |
+| `hgetall<T>`     | `(prefix, id) => Promise<Record<string, T>>`                                                       | HGETALL                                                            |
+| `hdel`           | `(prefix, id, ...fields: readonly string[]) => Promise<number>`                                    | HDEL                                                               |
+| `sadd` / `srem`  | `(prefix, id, ...members: readonly string[]) => Promise<number>`                                   | SADD / SREM                                                        |
+| `smembers`       | `(prefix, id) => Promise<string[]>`                                                                | SMEMBERS                                                           |
+| `sismember`      | `(prefix, id, member: string) => Promise<boolean>`                                                 | SISMEMBER                                                          |
+| `scard`          | `(prefix, id) => Promise<number>`                                                                  | SCARD                                                              |
+| `pipeline`       | `() => ChainableCommander`                                                                         | Raw pipeline (consumer composes keys)                              |
+| `eval`           | `(scriptName, keys: readonly string[], args: ReadonlyArray<string \| number>) => Promise<unknown>` | Executes registered Lua; `keys` are namespaced                     |
+| `getClient`      | `() => Redis`                                                                                      | Escape hatch — keys are NOT auto-namespaced; not in cluster mode   |
+| `isHealthy`      | `() => Promise<boolean>`                                                                           | PING; never throws                                                 |
+| `ping`           | `() => Promise<string>`                                                                            | Raw PING; propagates connection failures                           |
+| `info`           | `(section?: string) => Promise<string>`                                                            | INFO                                                               |
+| `flushNamespace` | `() => Promise<number>`                                                                            | Deletes everything in the namespace — blocked in production (§5.5) |
+
+In cluster mode `scan`, `getClient` and `flushNamespace` throw `CacheException` `UNSUPPORTED_IN_CLUSTER`.
 
 ### 5.3 Critical Signatures
 
 ```typescript
 @Injectable()
 export class CacheService {
+  private readonly serializer: ISerializer // options.serializer, else the injected token, else JsonSerializer
+
   constructor(
     @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
-    private readonly connection: ConnectionManager,
-    private readonly keyBuilder: KeyBuilder,
-    private readonly serializer: Serializer,
-    @Optional() private readonly scriptRegistry?: ScriptManagerService
-  ) {}
+    @Inject(ConnectionManager) private readonly connection: ConnectionManager,
+    @Inject(KeyBuilder) private readonly keyBuilder: KeyBuilder,
+    @Optional() @Inject(BYMAX_CACHE_SERIALIZER) injectedSerializer?: ISerializer,
+    @Optional() @Inject(ScriptManagerService) private readonly scriptRegistry?: ScriptManagerService
+  ) {
+    this.serializer = resolveSerializer(options, injectedSerializer)
+  }
 
   /**
    * Reads a value and deserializes via configured serializer.
@@ -566,7 +656,7 @@ export class CacheService {
 
   /**
    * Writes a value with optional TTL.
-   * @param ttlSeconds Omit for in the expiration
+   * @param ttlSeconds Omit for no expiration
    */
   async set<T>(prefix: string, id: string, value: T, ttlSeconds?: number): Promise<void> {
     const key = this.keyBuilder.build(prefix, id)
@@ -596,7 +686,11 @@ export class CacheService {
    * Executes a Lua script registered via ScriptManager.
    * Keys are auto-prefixed with namespace.
    */
-  async eval(scriptName: string, keys: string[], args: (string | number)[]): Promise<unknown> {
+  async eval(
+    scriptName: string,
+    keys: readonly string[],
+    args: ReadonlyArray<string | number>
+  ): Promise<unknown> {
     if (!this.scriptRegistry) {
       throw new CacheException(CACHE_ERROR_CODES.SCRIPT_REGISTRY_MISSING)
     }
@@ -607,9 +701,13 @@ export class CacheService {
   /**
    * Cursor-based key iteration. Prefer over keys() in production.
    */
-  async *scan(prefix: string, pattern: string, count = 100): AsyncIterable<string> {
+  async *scan(prefix: string, pattern: string, count = SCAN_COUNT): AsyncIterable<string> {
     const fullPattern = this.keyBuilder.build(prefix, pattern)
-    const stream = this.connection.getClient().scanStream({ match: fullPattern, count })
+    const client = this.connection.getClient()
+    if (!isScannableClient(client)) {
+      throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'scan' })
+    }
+    const stream = client.scanStream({ match: fullPattern, count })
     for await (const chunk of stream) {
       for (const key of chunk as string[]) yield key
     }
@@ -631,6 +729,7 @@ export class CacheService {
  * options.allowFlushInProduction === true OR NODE_ENV !== 'production'.
  *
  * Use ONLY in tests/tooling. In production, prefer del/delMany.
+ * Throws CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER in cluster mode.
  */
 async flushNamespace(): Promise<number>
 ```
@@ -678,9 +777,15 @@ export interface ISerializer {
 ```typescript
 export class JsonSerializer implements ISerializer {
   serialize<T>(value: T): string {
+    // A top-level undefined, function or symbol is rejected (JSON.stringify would
+    // return undefined instead of a string); a JSON.stringify throw is wrapped too.
+    // Both throw CacheException(SERIALIZATION_FAILED, { error }).
     return JSON.stringify(value)
   }
   deserialize<T>(raw: string): T {
+    // A JSON.parse throw becomes
+    // CacheException(DESERIALIZATION_FAILED, { error, length }): a fixed text and
+    // the length of `raw`, never any part of its content.
     return JSON.parse(raw) as T
   }
 }
@@ -727,7 +832,7 @@ export type SerializableValue =
 
 ### 6.5 Error Handling
 
-When `JSON.parse` throws, `CacheService` propagates it as `CacheException` with code `DESERIALIZATION_FAILED`, including the affected key in `details`. It never returns a partial value.
+When `JSON.parse` throws, `JsonSerializer.deserialize` throws `CacheException` with code `DESERIALIZATION_FAILED` and `details: { error: 'stored value is not valid JSON', length }` (a fixed text and the length of the stored value; no part of its content, no preview and not the parser's own message, which quotes the start of the input; the key is not included). `CacheService` lets it propagate. It never returns a partial value.
 
 ---
 
@@ -747,22 +852,23 @@ With defaults `namespace = 'app'` and `separator = ':'`:
 app:users:550e8400-e29b-41d4-a716-446655440000
 ```
 
+The namespace and the separator are validated at registration (§4.6). `prefix` and `id` are not validated beyond being non-empty (§7.5).
+
 ### 7.2 Implementation — `KeyBuilder`
 
 ```typescript
 @Injectable()
 export class KeyBuilder {
-  constructor(@Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions) {}
+  constructor(@Inject(BYMAX_CACHE_OPTIONS) options: ResolvedOptions) {}
 
-  /** Composes {namespace}:{prefix}:{id} */
-  build(prefix: string, id: string): string {
-    return `${this.options.namespace}${this.options.keySeparator}${prefix}${this.options.keySeparator}${id}`
-  }
+  /** Composes {namespace}{sep}{prefix}{sep}{id}. Throws INVALID_KEY when prefix or id is empty. */
+  build(prefix: string, id: string): string
 
-  /** Applies only the namespace (used inside Lua key prep) */
-  applyNamespace(keyWithoutNamespace: string): string {
-    return `${this.options.namespace}${this.options.keySeparator}${keyWithoutNamespace}`
-  }
+  /** Applies only the namespace (used for Pub/Sub channels and Lua keys). Throws INVALID_KEY when empty. */
+  applyNamespace(keyWithoutNamespace: string): string
+
+  /** Returns `{namespace}{sep}` (e.g. 'app:'), the base of flushNamespace's SCAN pattern. */
+  getNamespacePrefix(): string
 }
 ```
 
@@ -789,6 +895,9 @@ export class KeyBuilder {
 - ❌ `getClient().set('raw_key', value)` — bypasses the namespace
 - ❌ `cache.get('users', `${userId}:profile`)` — separator character inside `id`
 - ❌ Composing the key manually at the call site
+- ❌ A `prefix` or `id` that contains the key separator. The library does **not** enforce this: it validates the separator in the namespace only, and `KeyBuilder.build` rejects only an empty `prefix` or `id`. Keys collide silently: `build('a', 'b:c') === build('a:b', 'c') === 'app:a:b:c'`.
+- ❌ A `prefix` that contains Redis glob metacharacters (`*`, `?`, `[`, `]`, `\`). The library does **not** enforce this either, and `keys()` and `scan()` compose the `prefix` into their match pattern, so the pattern widens, escapes or matches nothing.
+- ✅ Encode each field before building the key: `cache.get(encodeURIComponent(prefix), encodeURIComponent(id))`. Keys are unambiguous only for a single-character `keySeparator` that appears in neither field; per-field `encodeURIComponent` provides that only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), otherwise the separator must be rejected, and a multi-character separator can straddle a field boundary (with `'aa'`, `('ba', 'c')` and `('b', 'ac')` build the same key). Glob characters in `prefix` must be rejected.
 
 ---
 
@@ -797,71 +906,38 @@ export class KeyBuilder {
 ### 8.1 `PubSubService`
 
 ```typescript
+export type Unsubscribe = () => Promise<void>
+export type IPubSubHandler<T> = (message: T, channel: string) => void | Promise<void>
+export type IPubSubPatternHandler<T> = (message: T, channel: string, pattern: string) => void | Promise<void>
+
 @Injectable()
 export class PubSubService implements OnModuleDestroy {
-  private subscriber: Redis | null = null
-
   constructor(
-    @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
-    private readonly connection: ConnectionManager,
-    private readonly keyBuilder: KeyBuilder,
-    private readonly serializer: Serializer
-  ) {}
+    @Inject(BYMAX_CACHE_OPTIONS) options: ResolvedOptions,
+    @Inject(ConnectionManager) connection: ConnectionManager,
+    @Inject(KeyBuilder) keyBuilder: KeyBuilder,
+    @Optional() @Inject(BYMAX_CACHE_SERIALIZER) injectedSerializer?: ISerializer,
+    @Optional() @Inject(BYMAX_CACHE_EVENTS) events?: ICacheEvents
+  )
 
-  /**
-   * Publishes to a namespaced channel.
-   * @returns Number of subscribers that received the message
-   */
-  async publish<T>(channel: string, message: T): Promise<number> {
-    const full = this.keyBuilder.applyNamespace(channel)
-    const raw = this.serializer.serialize(message)
-    return this.connection.getClient().publish(full, raw)
-  }
+  /** Publishes to a namespaced channel on the main client. Returns the number of receivers. */
+  publish<T>(channel: string, message: T): Promise<number>
 
-  /**
-   * Subscribes to a channel. Creates the subscriber connection lazily.
-   * @returns Unsubscribe function
-   */
-  async subscribe<T>(
-    channel: string,
-    handler: (message: T) => Promise<void>
-  ): Promise<() => Promise<void>> {
-    const full = this.keyBuilder.applyNamespace(channel)
-    const sub = this.ensureSubscriber()
-    await sub.subscribe(full)
-    const listener = async (incoming: string, raw: string): Promise<void> => {
-      if (incoming !== full) return
-      await handler(this.serializer.deserialize<T>(raw))
-    }
-    sub.on('message', listener)
-    return async () => {
-      sub.off('message', listener)
-      await sub.unsubscribe(full)
-    }
-  }
+  /** Subscribes to a namespaced channel; the dedicated subscriber connection is created lazily. */
+  subscribe<T>(channel: string, handler: IPubSubHandler<T>): Promise<Unsubscribe>
 
-  /** Pattern-subscribe — supports globs like 'users:*' */
-  async psubscribe<T>(
-    pattern: string,
-    handler: (channel: string, message: T) => Promise<void>
-  ): Promise<() => Promise<void>> {
-    // ...analogous to subscribe, but uses psubscribe/pmessage
-  }
+  /** Pattern-subscribes (e.g. 'users:*', namespaced before subscribing). */
+  psubscribe<T>(pattern: string, handler: IPubSubPatternHandler<T>): Promise<Unsubscribe>
 
-  private ensureSubscriber(): Redis {
-    if (this.subscriber && this.subscriber.status === 'ready') return this.subscriber
-    this.subscriber = this.connection.createSubscriberClient()
-    return this.subscriber
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    if (this.subscriber) {
-      await this.subscriber.quit().catch(() => this.subscriber?.disconnect())
-      this.subscriber = null
-    }
-  }
+  /** Quits the subscriber connection; forces disconnect() if quit fails. */
+  onModuleDestroy(): Promise<void>
 }
 ```
+
+- Channels and patterns are namespaced through `KeyBuilder.applyNamespace`; handlers receive the **full namespaced** channel (and pattern).
+- Listeners are reference-counted per channel and per pattern: `UNSUBSCRIBE` / `PUNSUBSCRIBE` is sent only when the last listener is removed. Each `Unsubscribe` is idempotent.
+- A handler that throws (or rejects), and a payload that fails to deserialize, never tears down the subscriber. The failure is swallowed and forwarded to `events.onEvent('error', { role: 'subscriber', reason: 'handler_error', channel, error })`; a throw from `onEvent` itself is also swallowed.
+- The subscriber connection has its offline queue enabled in standalone and sentinel modes (§2.3).
 
 ### 8.2 Example
 
@@ -895,7 +971,7 @@ export class NotificationDispatcher implements OnModuleInit, OnModuleDestroy {
 
 ### 8.3 Guarantees and Limitations
 
-Redis Pub/Sub is **fire-and-forget**: in the persistence, replay, or ack. For delivery guarantees, use Streams or a queue (`@bymax-one/nest-queue`). After the subscriber reconnects, `ioredis` re-subscribes channels automatically — but messages published during the offline window are **lost**.
+Redis Pub/Sub is **fire-and-forget**: no persistence, replay, or ack. For delivery guarantees, use Streams or a queue (`@bymax-one/nest-queue`). After the subscriber reconnects, `ioredis` re-subscribes channels automatically — but messages published during the offline window are **lost**. Handler failures are not retried; they are reported through `events.onEvent` (§8.1).
 
 ---
 
@@ -905,7 +981,7 @@ Redis Pub/Sub is **fire-and-forget**: in the persistence, replay, or ack. For de
 
 Composite operations need to be atomic. Classic case: refresh token rotation (`nest-auth`) — two concurrent requests with the same token cannot create two sessions. Without Lua, both would pass through the `GET` before the `DEL`.
 
-Lua scripts execute atomically on the server. `ScriptManager` loads via `SCRIPT LOAD`, caches the SHA1, and uses `EVALSHA` on subsequent invocations — cheaper than sending the full script.
+Lua scripts execute atomically on the server. `ScriptManager` loads via `SCRIPT LOAD`, caches the SHA1, and uses `EVALSHA` on subsequent invocations — cheaper than sending the full script. In cluster mode it uses plain `EVAL` instead (§9.3).
 
 ### 9.2 `IScriptDefinition` interface
 
@@ -922,60 +998,30 @@ export interface IScriptDefinition {
 
 ```typescript
 @Injectable()
-export class ScriptManagerService implements OnModuleInit {
-  private readonly scripts = new Map<string, { lua: string; sha?: string }>()
-
+export class ScriptManagerService implements OnApplicationBootstrap {
   constructor(
-    @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
-    private readonly connection: ConnectionManager
-  ) {
-    for (const def of options.scripts ?? []) {
-      this.scripts.set(def.name, { lua: def.lua })
-    }
-  }
+    @Inject(BYMAX_CACHE_OPTIONS) options: ResolvedOptions,
+    @Inject(ConnectionManager) connection: ConnectionManager
+  ) // seeds the registry from options.scripts
 
-  /** Pre-loads scripts in OnModuleInit (unless lazyConnect=true) */
-  async onModuleInit(): Promise<void> {
-    if (this.options.connection?.lazyConnect) return
-    for (const [name] of this.scripts) await this.load(name)
-  }
+  /** Preloads every registered script with SCRIPT LOAD (skipped when connection.lazyConnect is set). */
+  onApplicationBootstrap(): Promise<void>
 
-  register(name: string, lua: string): void {
-    this.scripts.set(name, { lua })
-  }
+  register(name: string, lua: string): void
 
-  async load(name: string): Promise<string> {
-    const entry = this.scripts.get(name)
-    if (!entry) throw new CacheException(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, { name })
-    if (!entry.sha) {
-      entry.sha = (await this.connection.getClient().script('LOAD', entry.lua)) as string
-    }
-    return entry.sha
-  }
+  /** SCRIPT LOAD + SHA1 cache. Throws SCRIPT_NOT_REGISTERED for an unknown name. */
+  load(name: string): Promise<string>
 
   /**
-   * Executes the script. Uses EVALSHA; on NOSCRIPT reloads and retries.
-   * Caller is responsible for ensuring `keys` are already namespaced.
+   * Executes the script. Does NOT namespace `keys` — the caller does (CacheService.eval does).
+   * - standalone / sentinel: EVALSHA; on NOSCRIPT, reloads once and retries.
+   * - cluster: plain EVAL; at least one key is required for slot routing.
+   * A failure of the call, of the reload or of the retry surfaces as
+   * CacheException(SCRIPT_EXECUTION_FAILED, { name, originalError }); a cluster call with
+   * no keys throws the same code with { name, reason } before any command is sent; an
+   * unknown name throws SCRIPT_NOT_REGISTERED.
    */
-  async eval(name: string, keys: string[], args: (string | number)[]): Promise<unknown> {
-    const entry = this.scripts.get(name)
-    if (!entry) throw new CacheException(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, { name })
-    try {
-      if (!entry.sha) entry.sha = await this.load(name)
-      return await this.connection.getClient().evalsha(entry.sha, keys.length, ...keys, ...args)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes('NOSCRIPT')) {
-        // FLUSHALL or server restart cleared the script — reload
-        entry.sha = (await this.connection.getClient().script('LOAD', entry.lua)) as string
-        return await this.connection.getClient().evalsha(entry.sha, keys.length, ...keys, ...args)
-      }
-      throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
-        name,
-        originalError: msg
-      })
-    }
-  }
+  eval(name: string, keys: readonly string[], args: ReadonlyArray<string | number>): Promise<unknown>
 }
 ```
 
@@ -1061,14 +1107,16 @@ export class RedisHealthIndicator extends HealthIndicator {
 
 ### 10.3 Signals via Events
 
-`events.onEvent` can feed Prometheus/OpenTelemetry metrics:
+`events.onEvent` can feed Prometheus/OpenTelemetry metrics. An `'error'` event that carries `data.reason` is not a socket error: `'handler_error'` (a Pub/Sub handler failed, §8.1) and `'forced_disconnect'` (shutdown) are reported through the same event name.
 
 ```typescript
 BymaxCacheModule.forRoot({
   events: {
-    onEvent: (event) => {
+    onEvent: (event, data) => {
       if (event === 'ready') metrics.gauge('redis_status').set(1)
-      if (event === 'close' || event === 'error') metrics.gauge('redis_status').set(0)
+      if (event === 'close' || (event === 'error' && data.reason === undefined)) {
+        metrics.gauge('redis_status').set(0)
+      }
     }
   }
 })
@@ -1083,109 +1131,38 @@ BymaxCacheModule.forRoot({
 ```typescript
 @Injectable()
 export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
-  private client: Redis | null = null
-  private readonly redisOptionsResolved: RedisOptions
+  #client: Redis | Cluster | null = null // private (#): an ioredis instance carries options.password as a field
 
   constructor(
-    @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
-    @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
-  ) {
-    this.redisOptionsResolved = this.buildRedisOptions(options)
-  }
+    @Inject(BYMAX_CACHE_OPTIONS) options: ResolvedOptions,
+    @Optional() @Inject(BYMAX_CACHE_EVENTS) events?: ICacheEvents
+  )
 
-  async onModuleInit(): Promise<void> {
-    this.client = this.createClient()
-    this.registerListeners(this.client, 'main')
-    if (!this.options.connection?.lazyConnect) await this.waitUntilReady()
-  }
+  /** Creates the client; unless lazyConnect is set, waits for 'ready'. An 'error' before ready rejects with CONNECTION_FAILED. */
+  onModuleInit(): Promise<void>
 
-  getClient(): Redis {
-    if (!this.client) {
-      this.client = this.createClient()
-      this.registerListeners(this.client, 'main')
-    }
-    return this.client
-  }
+  /** Returns the singleton client (created on first use). Redis in standalone/sentinel, Cluster in cluster mode. */
+  getClient(): Redis | Cluster
 
-  /** Creates a NEW dedicated connection for subscriber mode. Caller owns the lifecycle. */
-  createSubscriberClient(): Redis {
-    const client = this.createClient()
-    this.registerListeners(client, 'subscriber')
-    return client
-  }
+  /** Creates a NEW dedicated connection for subscriber mode (offline queue enabled outside cluster mode). Caller owns the lifecycle. */
+  createSubscriberClient(): Redis | Cluster
 
-  async onModuleDestroy(): Promise<void> {
-    if (!this.client) return
-    const timeout = this.options.shutdownTimeoutMs ?? 5000
-    try {
-      await Promise.race([
-        this.client.quit(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('SHUTDOWN_TIMEOUT')), timeout))
-      ])
-    } catch {
-      this.client.disconnect()
-    } finally {
-      this.client = null
-    }
-  }
-
-  private createClient(): Redis {
-    switch (this.options.mode ?? 'standalone') {
-      case 'standalone':
-        return new Redis(this.redisOptionsResolved)
-      case 'sentinel':
-        return new Redis({
-          ...this.redisOptionsResolved,
-          sentinels: this.options.sentinel!.sentinels,
-          name: this.options.sentinel!.name,
-          sentinelPassword: this.options.sentinel!.sentinelPassword,
-          role: this.options.sentinel!.role
-        })
-      case 'cluster':
-        return new (Redis as typeof Redis).Cluster(
-          this.options.cluster!.nodes,
-          this.options.cluster!.options
-        ) as unknown as Redis
-    }
-  }
-
-  private buildRedisOptions(opts: ResolvedOptions): RedisOptions {
-    const c = opts.connection ?? {}
-    const fromUrl = c.url ? parseRedisUrl(c.url) : {}
-    return {
-      host: c.host,
-      port: c.port,
-      password: c.password,
-      db: c.db,
-      username: c.username,
-      tls: c.tls,
-      lazyConnect: c.lazyConnect ?? false,
-      connectTimeout: c.connectTimeout ?? 10_000,
-      commandTimeout: c.commandTimeout ?? 5_000,
-      maxRetriesPerRequest: c.maxRetriesPerRequest ?? 3,
-      enableReadyCheck: c.enableReadyCheck ?? true,
-      enableOfflineQueue: c.enableOfflineQueue ?? false,
-      retryStrategy: c.retryStrategy ?? ((times) => Math.min(times * 50, 2000)),
-      reconnectOnError: c.reconnectOnError ?? ((err) => err.message.includes('READONLY')),
-      keepAlive: c.keepAlive ?? 0,
-      noDelay: c.noDelay ?? true,
-      family: c.family ?? 4,
-      ...fromUrl // URL has priority
-    }
-  }
-
-  private registerListeners(client: Redis, role: 'main' | 'subscriber'): void {
-    client.on('connect', () => this.events?.onEvent?.('connect', { role }))
-    client.on('ready', () => this.events?.onEvent?.('ready', { role }))
-    client.on('error', (err) => this.events?.onEvent?.('error', { role, error: err.message }))
-    client.on('close', () => this.events?.onEvent?.('close', { role }))
-    client.on('reconnecting', (delay: number) =>
-      this.events?.onEvent?.('reconnecting', { role, delay })
-    )
-    client.on('end', () => this.events?.onEvent?.('end', { role }))
-  }
+  /**
+   * quit() raced against shutdownTimeoutMs (a SHUTDOWN_TIMEOUT CacheException rejects the race).
+   * On timeout or failure: emits onEvent('error', { role: 'main', reason: 'forced_disconnect', shutdownTimeoutMs })
+   * and calls disconnect().
+   */
+  onModuleDestroy(): Promise<void>
 }
 ```
+
+Client construction by mode:
+
+- `standalone` — `new Redis(options)`; discrete fields are applied first and the parsed `connection.url` overrides them.
+- `sentinel` — `new Redis({ ...options, sentinels, name, sentinelPassword, password, role, natMap })`; `role: 'replica'` is passed to ioredis as `'slave'`.
+- `cluster` — `new Cluster(cluster.nodes, cluster.options)` (ioredis `Cluster`).
+
+Every client emits `connect`, `ready`, `error`, `close`, `reconnecting` and `end` to `events.onEvent` with a `role` of `'main'` or `'subscriber'`. A throw from the callback is swallowed.
 
 ### 11.2 `ICacheEvents` interface
 
@@ -1201,23 +1178,31 @@ export interface ICacheEvents {
 }
 ```
 
+`data` never carries connection credentials and always carries `role: 'main' | 'subscriber'` for connection events. The `CacheEventName` union has no dedicated member for failures that are not socket errors, so `'error'` also carries:
+
+| `data.reason`         | Source                                                          | Other fields                             |
+| --------------------- | --------------------------------------------------------------- | ---------------------------------------- |
+| _(absent)_            | ioredis socket error                                            | `error` (message)                        |
+| `'handler_error'`     | A Pub/Sub handler threw or a payload failed to deserialize (§8) | `role: 'subscriber'`, `channel`, `error` |
+| `'forced_disconnect'` | Graceful `quit()` exceeded `shutdownTimeoutMs` (shutdown)       | `role: 'main'`, `shutdownTimeoutMs`      |
+
 ### 11.3 `parseRedisUrl`
 
 Parses `redis://`, `rediss://` (TLS) URLs with user, password, port, and database. Returns `Partial<RedisOptions>` — discrete options serve as fallback.
 
 ### 11.4 Retry / Reconnection Behavior
 
-| Scenario                             | Default behavior                                                                         |
-| ------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Initial connection fails             | `retryStrategy` = `Math.min(times * 50, 2000)` (50ms, 100ms, …, 2s). In the total limit. |
-| Individual command fails             | Retried up to `maxRetriesPerRequest` (3) before propagating                              |
-| Server returns `READONLY` (failover) | `reconnectOnError` returns `true` — forces reconnection                                  |
-| Other errors                         | `reconnectOnError` returns `false` — error propagates                                    |
-| `client.quit()` on shutdown          | Waits up to `shutdownTimeoutMs`; if exceeded, forces `disconnect()`                      |
+| Scenario                             | Default behavior                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| Initial connection fails             | `retryStrategy` = `Math.min(times * 50, 2000)` (50ms, 100ms, …, 2s). No total limit. |
+| Individual command fails             | Retried up to `maxRetriesPerRequest` (3) before propagating                          |
+| Server returns `READONLY` (failover) | `reconnectOnError` returns `true` — forces reconnection                              |
+| Other errors                         | `reconnectOnError` returns `false` — error propagates                                |
+| `client.quit()` on shutdown          | Waits up to `shutdownTimeoutMs`; if exceeded, forces `disconnect()`                  |
 
 ### 11.5 Offline Queue Disabled
 
-`enableOfflineQueue: false` by default — when the connection drops, new commands fail immediately instead of queueing. We prefer to fail fast rather than OOM from silent buffering. Consumers that need buffering enable it explicitly.
+`enableOfflineQueue: false` by default — when the connection drops, new commands fail immediately instead of queueing. We prefer to fail fast rather than OOM from silent buffering. Consumers that need buffering enable it explicitly. The dedicated subscriber connection is the exception in standalone and sentinel modes: its offline queue is enabled so a `subscribe` issued before the socket is ready is queued. In cluster mode the subscriber uses the configured cluster options.
 
 ---
 
