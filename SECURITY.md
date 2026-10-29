@@ -58,8 +58,8 @@ supported: upgrade to the latest minor.
   dependency, minimizing supply-chain surface.
 - Published with npm **provenance** (OIDC trusted publishing) — no long-lived
   tokens.
-- Error `details` must never include secret values; serialized previews are
-  truncated to avoid leaking whole payloads.
+- Error `details` must never include secret values: a stored value that fails to
+  decode is reported by a fixed text and its length, never by any part of its content.
 - CodeQL, OpenSSF Scorecard and OSV-Scanner on the full lockfile run on `main` and on a
   weekly schedule. Pull requests are also checked by CodeQL, OSV-Scanner and a
   dependency-review job that fails on high severity. A weekly job audits the declared

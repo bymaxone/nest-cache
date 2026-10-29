@@ -8,9 +8,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Nothing you execute changes.** `dist/` built from this tag is byte-for-byte identical
-  to the published 1.2.2: the unpacked tarball was diffed against a fresh build. The only edit
-  under `src/` is a unit test that pins the admin pipeline count.
+- `JsonSerializer.deserialize` throws `DESERIALIZATION_FAILED` with `details` of a fixed `error` text and the
+  `length` of the stored value. `details.preview` and the parser's own message, which quoted the start of the
+  input, are gone. The error code is unchanged; a consumer that read `details.preview` must stop.
+- Apart from that, nothing you execute changes.
 
 ### Documentation
 
@@ -25,6 +26,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- **A non-JSON stored value no longer appears in the exception body.** `CacheException` extends
+  `HttpException`, so a default Nest filter sends `details` to the HTTP client. A cached value that was
+  not JSON (written by another writer, or by another serializer) leaked up to 100 characters of itself
+  through `details.preview`, and the start of it through `details.error`. It could carry PII or a token.
+  Only a malformed entry triggers it; a valid JSON value never does.
 - Dependency advisories in development-only transitive dependencies are fixed by raising the
   `overrides` floors in `pnpm-workspace.yaml`. None of them ships: the package
   publishes with `"dependencies": {}`.

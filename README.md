@@ -83,7 +83,7 @@ pnpm add @bymax-one/nest-cache ioredis
 
 - ✅ **Fail-closed serialization** — malformed payloads raise `CacheException(DESERIALIZATION_FAILED)`, never a partial value
 - ✅ **Production flush guard** — `flushNamespace()` is blocked under `NODE_ENV=production` unless explicitly allowed
-- ✅ **Secrets never echoed** — connection URLs and cached values are kept out of error `details`; previews are truncated
+- ✅ **Secrets never echoed** — connection URLs and cached values are kept out of error `details`; no part of a stored value is ever echoed
 - ✅ **Script bodies are registered, not interpolated** — call sites pass a name plus keys/args, never Lua source
 
 ### 🧩 Developer Experience
@@ -630,7 +630,7 @@ Error `details` are built to be safe to log:
 
 - A malformed `connection.url` throws `CONNECTION_FAILED` with `reason: 'invalid connection.url'` — the URL is omitted, because it may embed a password.
 - `SERIALIZATION_FAILED` carries the encoder's message, never the value being encoded.
-- `DESERIALIZATION_FAILED` carries a `preview` of the raw payload truncated to **100 characters** with an ellipsis — enough to debug a codec mismatch, bounded so a cached record full of PII is not copied into a log line.
+- `DESERIALIZATION_FAILED` carries a fixed `error` text and the `length` of the stored value, and nothing from its content — not a preview, not the parser's message, which quotes the start of its input. The exception is an `HttpException`, so a default Nest filter sends `details` to the HTTP client; a cached record holding PII or a token must never reach it.
 
 ### Destructive operations are guarded in production
 
@@ -677,7 +677,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 | Key Validation        | Empty `prefix` / `id` rejected before the command is issued (`INVALID_KEY`); emptiness only — separators and glob characters in `prefix` / `id` are not rejected |
 | Deserialization       | Fails closed — `DESERIALIZATION_FAILED`; never a partial or wrongly-typed value                                                                                  |
 | Serialization         | Top-level `undefined` / function / symbol rejected; the value is never echoed into `details`                                                                     |
-| Error Payloads        | Connection URLs omitted (may embed credentials); raw payload previews truncated to 100 characters                                                                |
+| Error Payloads        | Connection URLs omitted (may embed credentials); a stored value is never echoed (a fixed text and its length only)                                               |
 | Destructive Ops       | `flushNamespace()` blocked under `NODE_ENV=production` unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped                                      |
 | Lua Execution         | Scripts registered by name; call sites pass keys/args only — request input never reaches a script body                                                           |
 | Cluster Safety        | `scan` / `flushNamespace` / `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on a single node                                                        |

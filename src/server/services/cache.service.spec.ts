@@ -59,6 +59,29 @@ describe('CacheService', () => {
     await connection.onModuleDestroy()
   })
 
+  describe('a stored value that is not JSON', () => {
+    // End to end: a raw value written by another writer into this namespace must
+    // surface as DESERIALIZATION_FAILED without any part of the value in the
+    // exception body that a default Nest filter sends to the HTTP client.
+    it('get throws DESERIALIZATION_FAILED and leaks no byte of the stored value', async () => {
+      await cache.setRaw('users', 'u1', 'sk-live-4eC39HqLyjWDarjtT1zdp7dc is not json')
+
+      let thrown: unknown
+      try {
+        await cache.get('users', 'u1')
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(CacheException)
+      const cacheError = thrown as CacheException
+      expect(cacheError.code).toBe(CACHE_ERROR_CODES.DESERIALIZATION_FAILED)
+      const everything = JSON.stringify(cacheError.getResponse()) + cacheError.message
+      expect(everything).not.toContain('sk-live')
+      expect(everything).not.toContain('4eC39')
+    })
+  })
+
   describe('get / set / getRaw / setRaw', () => {
     // A JSON object must survive a set→get round trip — the core typed-cache
     // contract (serialize on write, deserialize on read).
