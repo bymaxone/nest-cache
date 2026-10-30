@@ -11,6 +11,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `JsonSerializer.deserialize` throws `DESERIALIZATION_FAILED` with `details` of a fixed `error` text and the
   `length` of the stored value. `details.preview` and the parser's own message, which quoted the start of the
   input, are gone. The error code is unchanged; a consumer that read `details.preview` must stop.
+- **Apply to a derived backend.** Do not read `details.preview` or `details.error` to debug a decoding
+  failure. Log the error on the server by its code, `cache.deserialization_failed`; the call site already
+  knows the prefix and id it asked for. Use `details.length` when you need a size signal. A backend that
+  sent `details` to its clients needs no other change: the response no longer carries any part of the
+  stored value.
 - Apart from that, nothing you execute changes.
 
 ### Documentation
@@ -33,7 +38,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Only a malformed entry triggers it; a valid JSON value never does.
 - Dependency advisories in development-only transitive dependencies are fixed by raising the
   `overrides` floors in `pnpm-workspace.yaml`. None of them ships: the package
-  publishes with `"dependencies": {}`.
+  publishes with `"dependencies": {}`, so no consumer was exposed to these advisories.
 - `GHSA-gcqx-w48m-w2h4` (`deepmerge`, reached only through `jest-config`) has no patched
   release. It is suppressed in `osv-scanner.toml` until 2027-01-27 and nowhere else.
 
