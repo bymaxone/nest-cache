@@ -4,14 +4,16 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.3] - 2026-10-29
+## [Unreleased]
+
+## [1.2.3] - 2026-10-30
 
 ### Changed
 
 - `JsonSerializer.deserialize` throws `DESERIALIZATION_FAILED` with `details` of a fixed `error` text and the
   `length` of the stored value. `details.preview` and the parser's own message, which quoted the start of the
   input, are gone. The error code is unchanged; a consumer that read `details.preview` must stop.
-- **Apply to a derived backend.** Do not read `details.preview` or `details.error` to debug a decoding
+- **Apply to a consumer.** Do not read `details.preview` or `details.error` to debug a decoding
   failure. Log the error on the server by its code, `cache.deserialization_failed`; the call site already
   knows the prefix and id it asked for. Use `details.length` when you need a size signal. A backend that
   sent `details` to its clients needs no other change: the response no longer carries any part of the
@@ -392,6 +394,7 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...HEAD
 [1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1
