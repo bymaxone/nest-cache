@@ -77,6 +77,9 @@ function publicImports() {
   return `${publicImport('server', PKG.name)}\n${publicImport('admin', `${PKG.name}/admin`)}`
 }
 
+/** One `import ... from '...'` statement, as the README writes it. */
+const IMPORT_STATEMENT = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
+
 /**
  * Turns a README fragment into something a compiler can check without changing what
  * it claims: a snippet that does not import the package gets every public name
@@ -86,11 +89,10 @@ function publicImports() {
  * the wrapper, and a snippet that declares classes or types is left as written.
  */
 function prepareSnippet(code, importsPkg) {
-  const importPattern = /^import\s[\s\S]*?from\s+['"][^'"]+['"]\s*;?\n/gm
-  const imports = code.match(importPattern) ?? []
+  const imports = code.match(IMPORT_STATEMENT) ?? []
   // `{ ... }` is how a snippet says "the usual arguments". Left alone it is a parse
   // error, and a parse error in a call hides every semantic error around it.
-  const body = code.replace(importPattern, '').replaceAll('{ ... }', '{} as never')
+  const body = code.replace(IMPORT_STATEMENT, '').replaceAll('{ ... }', '{} as never')
   const header = `${importsPkg ? '' : `${publicImports()}\n`}${imports.join('')}`
   const declares = /^(export\s+)?(abstract\s+)?(class|interface|type|enum|function)\s/m.test(body)
   const decoratedMethod = /^@\w+\([^)]*\)\s*\n\s*(async\s+)?\w+\s*\(/m.test(body)
@@ -641,13 +643,26 @@ function checkSnippets() {
     const m = /Property '[^']+' does not exist on type '([^']+)'/.exec(line)
     if (!m) return false
     const file = /^([^(]+)\(/.exec(line)?.[1]
+    // A union, an object type or an imported `type Name` is not a class the snippet
+    // declares: none of them may excuse the error. Only a bare identifier can name
+    // a local declaration, and it is matched literally.
+    if (!/^[A-Za-z_$][\w$]*$/.test(m[1])) return false
+    // The imports are the package's own types, so only the snippet's body is searched.
     // `tsc` emits backslashes on Windows, so the basename is taken on either.
-    const own = sources.get(file?.split(/[\\/]/).pop() ?? '') ?? ''
-    return new RegExp(`\\b(class|interface|type)\\s+${m[1]}\\b`).test(own)
+    const own = (sources.get(file?.split(/[\\/]/).pop() ?? '') ?? '').replace(IMPORT_STATEMENT, '')
+    // `$` is an identifier character and a regexp metacharacter, and it is not a word
+    // character, so `\b` cannot end the name: a lookahead does.
+    const name = m[1].replaceAll('$', '\\$')
+    return new RegExp(`\\b(class|interface|type)\\s+${name}(?![\\w$])`).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
-   * optional integration. Reported as uncovered, not as a failure. */
-  const isForeignModule = (line) => /error TS2307/.test(line) && !line.includes(PKG.name)
+   * optional integration. Reported as uncovered, not as a failure. A relative
+   * import is never excused: the README has no files for it to resolve to, so it is
+   * a path the reader cannot follow. */
+  const isForeignModule = (line) => {
+    const module = /error TS2307: Cannot find module '([^']+)'/.exec(line)?.[1]
+    return module !== undefined && !module.startsWith('.') && !module.startsWith(PKG.name)
+  }
 
   try {
     const lines = compileGate()
@@ -668,7 +683,7 @@ function checkSnippets() {
     console.log(
       `  snippets: ${subjects.length} compiled against dist/` +
         (context > 0
-          ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, or a parse-level elision)`
+          ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, a parse-level elision or a class the snippet abbreviates)`
           : '')
     )
   } finally {
