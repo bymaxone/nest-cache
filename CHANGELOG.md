@@ -15,12 +15,23 @@ A documentation and test release. `dist/` is unchanged from 1.2.3, so nothing yo
 - The README error-code table described `cache.shutdown_timeout` as thrown when `quit()` exceeds
   `shutdownTimeoutMs`. It never reaches the caller: the library forces `disconnect()` and emits an
   `error` event with `reason: 'forced_disconnect'`. The row now says so.
+- The sentinel example passed `process.env.REDIS_PASSWORD` as `password`, which does not compile
+  for a consumer that enables `exactOptionalPropertyTypes`. It now falls back to an empty string,
+  which ioredis treats like no password.
 
 ### Tests
 
 - `src/readme.spec.ts` parses the README's option-defaults table and error-code table and asserts them
   against the resolved defaults, the minimum timeouts, `CACHE_ERROR_CODES` and the status each
   `CacheException` carries, so a README that drifts from the code fails CI.
+
+### Internal
+
+- `check:published` compiles every README snippet, not only the ones that import the package, through the
+  TypeScript API so a syntax error in one snippet no longer hides the type errors in the others. A
+  snippet that omits its import is given the package's public names, and the names a snippet takes from
+  the surrounding prose are typed in `scripts/readme-prelude.d.ts`, so a wrong method, option or field is
+  an error instead of a call on `any`.
 
 ## [1.2.3] - 2026-10-30
 
