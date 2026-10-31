@@ -1,57 +1,78 @@
 /**
- * Testcontainers wrapper for a real Redis Cluster (`grokzen/redis-cluster`).
+ * Testcontainers wrapper for a real Redis Cluster of three masters.
  *
- * A single container runs a 3-master / 3-replica cluster on ports 7200-7205.
- * Two Docker-on-non-Linux details make it reachable from the host:
- *   - the ports are bound 1:1 (host == container) so MOVED/ASK redirects to a
- *     sibling node land on a published port, and
- *   - the cluster announces `0.0.0.0` (IP env), which a `natMap` rewrites to
- *     `127.0.0.1:<same-port>` for the client.
- * Readiness is the cluster-create output, not a node's listen log — see the wait
- * strategy below.
- * Ports 7200+ are used (not 7000) because macOS reserves 7000 for AirPlay.
+ * One `redis` container runs three `redis-server` processes on ports 7200-7202 and forms
+ * the cluster with `redis-cli --cluster create`. Two details make it reachable from the
+ * host, on Linux and on Docker Desktop alike:
+ *   - the ports are bound 1:1 (host == container), so a MOVED/ASK redirect to a sibling
+ *     node lands on a published port, and
+ *   - each node announces `127.0.0.1` and its own client port, which is where the host
+ *     reaches it, so the client needs no `natMap`.
+ * The cluster bus ports (client port + 10000) stay inside the container: the nodes gossip
+ * over loopback.
+ * Readiness is the cluster-create output, not a node's listen log — see the wait strategy
+ * below. Ports 7200+ are used (not 7000) because macOS reserves 7000 for AirPlay.
  */
 import Redis from 'ioredis'
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers'
 
-import type { ClusterNode, NatMap } from 'ioredis'
+import type { ClusterNode } from 'ioredis'
 
-/** Client ports the grokzen cluster listens on (3 masters + 3 replicas). */
-const CLUSTER_PORTS = [7200, 7201, 7202, 7203, 7204, 7205] as const
+/** Client ports of the three masters. */
+const CLUSTER_PORTS = [7200, 7201, 7202] as const
 
-/** A started cluster plus the `nodes` + `natMap` the cache module needs. */
+/** Redis major under test; the same variable the standalone container reads. */
+const DEFAULT_IMAGE = 'redis:8-alpine'
+
+/** One `redis-server` flag set; `$p` is the node's client port. */
+const SERVER_FLAGS = [
+  '--port $p',
+  '--cluster-enabled yes',
+  '--cluster-config-file /tmp/nodes-$p.conf',
+  '--cluster-announce-ip 127.0.0.1',
+  '--cluster-announce-port $p',
+  '--cluster-announce-bus-port 1$p',
+  '--appendonly no',
+  "--save ''",
+  '--dir /tmp',
+  '--daemonize yes'
+].join(' ')
+
+/** Starts the masters, waits for each to answer, then forms the cluster. */
+const BOOT_SCRIPT = [
+  `for p in ${CLUSTER_PORTS.join(' ')}; do redis-server ${SERVER_FLAGS}; done`,
+  `for p in ${CLUSTER_PORTS.join(' ')}; do until redis-cli -p $p ping > /dev/null 2>&1; do sleep 0.2; done; done`,
+  `redis-cli --cluster create ${CLUSTER_PORTS.map((port) => `127.0.0.1:${String(port)}`).join(' ')} --cluster-yes`,
+  'exec tail -f /dev/null'
+].join('\n')
+
+/** A started cluster plus the `nodes` the cache module needs. */
 export interface StartedRedisCluster {
   /** The container handle; the caller must `stop()` it when the suite ends. */
   container: StartedTestContainer
   /** Seed nodes for `cluster.nodes`. */
   nodes: ClusterNode[]
-  /** Rewrites the cluster's announced `0.0.0.0:<port>` to the reachable host. */
-  natMap: NatMap
 }
 
 /**
- * Boots a `grokzen/redis-cluster:7.0.10` container and waits until it is ready.
+ * Boots the three-master cluster and waits until every node reports it converged.
  *
- * @returns The container plus the seed nodes and `natMap` for cluster-mode config.
+ * @returns The container plus the seed nodes for cluster-mode config.
  */
 export async function startRedisCluster(): Promise<StartedRedisCluster> {
-  const container = await new GenericContainer('grokzen/redis-cluster:7.0.10')
-    .withEnvironment({ IP: '0.0.0.0', INITIAL_PORT: String(CLUSTER_PORTS[0]) })
+  const container = await new GenericContainer(process.env['REDIS_IMAGE'] ?? DEFAULT_IMAGE)
+    .withEntrypoint(['sh', '-c', BOOT_SCRIPT])
     .withExposedPorts(...CLUSTER_PORTS.map((port) => ({ container: port, host: port })))
-    // Wait for slot allocation, not for a port to open. Each of the six nodes
-    // logs "Ready to accept connections" as soon as it binds, and the first of
-    // those matches — returning while `redis-cli --cluster create` is still
-    // running, so the client connects to a cluster with no slots assigned and
-    // fails with CLUSTERDOWN. This line is emitted only once the cluster is
-    // actually formed.
+    // Wait for slot allocation, not for a port to open. Each node logs "Ready to accept
+    // connections" as soon as it binds, and the first of those matches — returning while
+    // `redis-cli --cluster create` is still running, so the client connects to a cluster
+    // with no slots assigned and fails with CLUSTERDOWN. This line is emitted only once
+    // the cluster is actually formed.
     .withWaitStrategy(Wait.forLogMessage(/All 16384 slots covered/i))
     .withStartupTimeout(120_000)
     .start()
 
   const nodes: ClusterNode[] = CLUSTER_PORTS.map((port) => ({ host: '127.0.0.1', port }))
-  const natMap: NatMap = Object.fromEntries(
-    CLUSTER_PORTS.map((port) => [`0.0.0.0:${port}`, { host: '127.0.0.1', port }])
-  )
   try {
     await waitForClusterConvergence()
   } catch (cause: unknown) {
@@ -61,31 +82,19 @@ export async function startRedisCluster(): Promise<StartedRedisCluster> {
     await container.stop()
     throw cause
   }
-  return { container, nodes, natMap }
+  return { container, nodes }
 }
 
-/** How long to wait for every node to agree the cluster is formed. */
+/** How long the nodes get to agree on the slot map after the create command returns. */
 const CONVERGENCE_TIMEOUT_MS = 60_000
 
-/** How long to wait between convergence polls. */
+/** Interval between convergence probes. */
 const CONVERGENCE_POLL_MS = 250
 
 /**
- * Blocks until every node answers `CLUSTER INFO` with a formed, fully-covered cluster.
- *
- * The log wait strategy above proves `redis-cli --cluster create` printed its coverage line, but
- * that is the CONTAINER's view at one instant. What the client needs is the state each node
- * serves on the port the test will actually dial, and the gap between the two is real: a run
- * whose ports were released moments earlier by a previous container, or whose nodes have not
- * finished gossiping, answers `CLUSTERDOWN` or bounces a request between nodes until ioredis
- * gives up with "Too many Cluster redirections". Both were observed intermittently, on `main`
- * as well as on a branch, at roughly one run in three.
- *
- * Polling `cluster_state` and `cluster_slots_assigned` on every node closes both: the first is
- * false while slots are still being assigned, the second while any node disagrees about who owns
- * what.
- *
- * @throws If the cluster has not converged before {@link CONVERGENCE_TIMEOUT_MS}.
+ * Polls `CLUSTER INFO` on every node until all report `cluster_state:ok` with the full slot
+ * range assigned. A node can lag the others by a gossip round after the create command
+ * returns, and a client that connects to a lagging seed gets CLUSTERDOWN.
  */
 async function waitForClusterConvergence(): Promise<void> {
   const deadline = Date.now() + CONVERGENCE_TIMEOUT_MS
@@ -109,7 +118,7 @@ async function waitForClusterConvergence(): Promise<void> {
   )
 }
 
-/** Reads `CLUSTER INFO` from one node, answering `null` while it is not reachable yet. */
+/** Reads `CLUSTER INFO` from one node, or `null` when it does not answer. */
 async function readClusterInfo(port: number): Promise<string | null> {
   const client = new Redis({
     host: '127.0.0.1',

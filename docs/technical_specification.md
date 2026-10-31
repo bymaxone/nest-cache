@@ -1459,7 +1459,7 @@ Strategic pause after Phase 2 — validate the API with a real consumer before a
 ## 16. Known Limitations
 
 1. **No Redis Streams in this version.** `XADD`/`XREAD`/`XGROUP` are deferred to a future `nest-stream`. Access via `cache.getClient().xadd(...)` remains available.
-2. **Cluster mode is experimental.** Works via `ioredis.Cluster` passthrough, but multi-key commands require all keys to be in the same slot — `KeyBuilder` does not enforce this. `scan`, `keys`, `getClient` and `flushNamespace` throw `UNSUPPORTED_IN_CLUSTER`.
+2. **Cluster mode is a passthrough to `ioredis.Cluster`.** Multi-key commands require all keys to be in the same slot — `KeyBuilder` does not enforce this. `scan`, `keys`, `getClient`, `flushNamespace` and every `./admin` call that reads keys throw `UNSUPPORTED_IN_CLUSTER`. The end-to-end suite runs a real three-master cluster (`redis:8-alpine`) and measures single-key reads and writes across slots, `EVAL`, Pub/Sub delivery to channel and pattern subscribers, and each refusal above.
 3. **No hot-reload of configuration.** Changing `namespace`, `serializer`, or `connection.url` requires a restart.
 4. **Pub/Sub does not persist messages.** Limitation of Redis Pub/Sub, not of the lib.
 5. **`KEYS` may block the server.** `cache.keys()` exists but JSDoc discourages it in production.
