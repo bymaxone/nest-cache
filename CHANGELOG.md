@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- The README error-code table described `cache.shutdown_timeout` as thrown when `quit()` exceeds
+  `shutdownTimeoutMs`. It never reaches the caller: the library forces `disconnect()` and emits an
+  `error` event with `reason: 'forced_disconnect'`. The row now says so.
+
+### Tests
+
+- `src/readme.spec.ts` parses the README's option-defaults table and error-code table and asserts them
+  against the resolved defaults, the minimum timeouts, `CACHE_ERROR_CODES` and the status each
+  `CacheException` carries, so a README that drifts from the code fails CI.
+
 ## [1.2.3] - 2026-10-30
 
 ### Changed
