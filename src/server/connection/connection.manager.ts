@@ -138,8 +138,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    * main client (whose offline queue stays disabled to avoid silent buffering).
    * This override applies to standalone/sentinel modes only; in cluster mode
    * {@link createClient} ignores it and the cluster client manages its own subscriber
-   * connection; the cluster end-to-end suite measures delivery to channel and pattern
-   * subscribers.
+   * connection.
    *
    * @returns A fresh client wired with `subscriber`-role event listeners.
    */
