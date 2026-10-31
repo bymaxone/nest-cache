@@ -171,7 +171,7 @@ BymaxCacheModule.forRoot({
       { host: 'sentinel2.example.com', port: 26379 }
     ],
     name: 'mymaster',
-    password: process.env.REDIS_PASSWORD
+    password: process.env.REDIS_PASSWORD ?? ''
   },
   namespace: 'app'
 })
