@@ -27,6 +27,8 @@ import { readRedisStats } from '../utils/parse-info'
  * the concrete `CacheService`, while a test supplies a plain object with two
  * methods and no cast. A cast would be a blocking finding under this
  * repository's suppression policy, so the narrow type is not a convenience.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export type ICacheProbe = Pick<CacheService, 'ping' | 'info'>
 

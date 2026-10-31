@@ -43,6 +43,8 @@ const REQUIRED_FIELDS = ['id', 'label', 'pattern', 'origin'] as const
  *
  * @param pattern - A pattern that already satisfies {@link SCOPE_PATTERN_SHAPE}.
  * @returns The literal prefix, and whether a trailing `*` allows a suffix.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function readScopePattern(pattern: string): {
   readonly prefix: string
@@ -61,6 +63,8 @@ export function readScopePattern(pattern: string): {
  * @param pattern - The scope's validated match pattern.
  * @param key - The key a caller named.
  * @returns `true` when the key belongs to the scope.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function isKeyInScope(pattern: string, key: string): boolean {
   const { prefix, isPrefixMatch } = readScopePattern(pattern)
@@ -104,6 +108,8 @@ function readField(scope: CacheScope, field: (typeof REQUIRED_FIELDS)[number]): 
  * @returns A frozen list of frozen scopes, in declaration order.
  * @throws {CacheException} `INVALID_SCOPE` when the list is empty, a required
  *   field is empty, an id repeats, or a pattern has no literal prefix.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function validateScopes(scopes: readonly CacheScope[]): readonly CacheScope[] {
   if (scopes.length === 0) {
@@ -161,6 +167,8 @@ export function validateScopes(scopes: readonly CacheScope[]): readonly CacheSco
  * @param id - The identifier from the request.
  * @returns The scope.
  * @throws {CacheException} `SCOPE_NOT_FOUND` when no declaration has that id.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function findScope(scopes: readonly CacheScope[], id: string): CacheScope {
   const found = scopes.find((scope) => scope.id === id)

@@ -219,6 +219,15 @@ import { BymaxCacheModule } from '@bymax-one/nest-cache'
 export class AppModule {}
 ```
 
+> [!IMPORTANT]
+> **Call `app.enableShutdownHooks()` in `main.ts`.** Nest runs `OnModuleDestroy` on `SIGTERM` / `SIGINT` only when shutdown hooks are enabled. Without it the process exits on a signal without quitting the Redis connection gracefully, and `shutdownTimeoutMs` never comes into play.
+
+```typescript
+const app = await NestFactory.create(AppModule)
+app.enableShutdownHooks()
+await app.listen(3000)
+```
+
 ### 3. Inject `CacheService`
 
 The module is global by default, so no re-import is needed in feature modules:
@@ -420,6 +429,9 @@ export class HealthController {
 
 A read-only surface for an operator-facing console: is the cache answering, what is it doing, what is in it.
 
+> [!WARNING]
+> **`/admin` has no authentication or authorization of its own.** The library registers services, not routes: `CacheStatusService` and `CacheAdminService` list keys, report `INFO` statistics and, for a readable scope, return stored values to whoever calls them. Put every route you build on them behind your own guard (an authenticated operator role), and never on a public route.
+
 ```ts
 import { BymaxCacheModule } from '@bymax-one/nest-cache'
 import { BymaxCacheAdminModule } from '@bymax-one/nest-cache/admin'
@@ -470,6 +482,21 @@ this.admin.listScopes()      // never touches the connection
 await this.admin.listKeys('cache', { includeSize: true })
 await this.admin.revealValue('auth', 'auth:sess:1')  // { status: 'withheld', origin }
 ```
+
+### Options
+
+| Option              | Type                    | Default | Description                                                              |
+| ------------------- | ----------------------- | ------- | ------------------------------------------------------------------------ |
+| `scopes`            | `readonly CacheScope[]` | —       | The keyspaces this deployment exposes; required                          |
+| `degradedAboveMs`   | `number`                | `250`   | Probe latency above which `health()` reports `degraded`                  |
+| `probeTimeoutMs`    | `number`                | `2000`  | How long `health()` waits for `PING` before reporting `down`             |
+| `scanLimit`         | `number`                | `500`   | Entries one `listKeys` page may carry (a page can slightly exceed it)    |
+| `commandBatchLimit` | `number`                | `100`   | Commands in one pipeline batch                                           |
+| `revealLimit`       | `number`                | `200`   | Members or fields `revealValue` returns before `isComplete` is `false`   |
+| `revealStringLimit` | `number`                | `4096`  | Characters of a string value `revealValue` returns                       |
+| `isGlobal`          | `boolean`               | `false` | Register the admin module globally. The cache module's default is `true` |
+
+Every threshold must be a positive integer; one that is not fails the boot with `cache.invalid_scope`. `CacheAdminService` also has `listScopes()` and `describeKey(scope, key)`, which returns a key's type, TTL and whether its value is readable, without the value.
 
 ### What the library owns, and what you own
 
@@ -646,7 +673,7 @@ Scripts are declared up front — through `options.scripts` or `ScriptManagerSer
 
 ### Cluster mode refuses commands it cannot honor safely
 
-`scan()`, `flushNamespace()`, and `getClient()` throw `UNSUPPORTED_IN_CLUSTER` under `mode: 'cluster'` rather than silently operating on one node. A partial flush that reports success is worse than an error.
+`scan()`, `keys()`, `flushNamespace()`, and `getClient()` throw `UNSUPPORTED_IN_CLUSTER` under `mode: 'cluster'` rather than silently operating on one node. `KEYS` carries no key, so the cluster client sends it to a single node and the reply would list only that node's share of the keyspace. A partial flush that reports success is worse than an error.
 
 ### Security Checklist
 
@@ -680,7 +707,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 | Error Payloads        | Connection URLs omitted (may embed credentials); a stored value is never echoed (a fixed text and its length only)                                               |
 | Destructive Ops       | `flushNamespace()` blocked under `NODE_ENV=production` unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped                                      |
 | Lua Execution         | Scripts registered by name; call sites pass keys/args only — request input never reaches a script body                                                           |
-| Cluster Safety        | `scan` / `flushNamespace` / `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on a single node                                                        |
+| Cluster Safety        | `scan` / `keys` / `flushNamespace` / `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on a single node                                               |
 | Transport             | `rediss://` sets TLS on the client; explicit `connection.tls` supported for custom CA / mTLS                                                                     |
 | Connection Resilience | Bounded `maxRetriesPerRequest`, `READONLY`-failover reconnect, graceful `quit()` with a shutdown timeout                                                         |
 | Supply Chain          | `"dependencies": {}` — no transitive runtime packages of the library's own choosing; published with npm provenance                                               |
@@ -746,6 +773,8 @@ pnpm lint          # ESLint
 | Namespace       | `flushNamespace` (prod-guarded)                        |
 | Health          | `isHealthy` · `ping` · `info`                          |
 
+**TTLs.** `ttlSeconds` on `set`, `setRaw` and `setNx` is a safe integer of at least `1`; omit it for no expiry. `expire` takes a safe integer, and as in Redis a zero or negative one deletes the key. Anything else throws `INVALID_TTL` before a command is sent.
+
 ### `PubSubService`
 
 `publish<T>(channel, message)` · `subscribe<T>(channel, handler)` · `psubscribe<T>(pattern, handler)`
@@ -758,6 +787,26 @@ pnpm lint          # ESLint
 
 `CacheException` (extends `HttpException`) + `CACHE_ERROR_CODES` (namespaced `cache.*`).
 
+### Types, constants and tokens
+
+From `@bymax-one/nest-cache`:
+
+| Export                                                                                          | What it is                                                                                  |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `BymaxCacheModuleOptions`, `BymaxCacheModuleAsyncOptions`                                       | The options of `forRoot()` and `forRootAsync()`; the Configuration table lists their fields |
+| `BymaxCacheStandaloneConnection`, `BymaxCacheSentinelConnection`, `BymaxCacheClusterConnection` | The `connection`, `sentinel` and `cluster` blocks                                           |
+| `RedisOptions`, `ClusterOptions`, `ClusterNode`, `SentinelAddress`                              | The ioredis option types the blocks above refer to, re-exported                             |
+| `ResolvedOptions`                                                                               | The shape injected under `BYMAX_CACHE_OPTIONS`, with every default applied                  |
+| `IPubSubHandler`, `IPubSubPatternHandler`, `Unsubscribe`                                        | The handler signatures and the function `subscribe` / `psubscribe` return                   |
+| `CACHE_ERROR_MESSAGES`                                                                          | The default message of every code, keyed by code                                            |
+| `DEFAULT_NAMESPACE`, `DEFAULT_KEY_SEPARATOR`, `DEFAULT_REDIS_PORT`                              | `'app'`, `':'` and `6379`                                                                   |
+
+From `@bymax-one/nest-cache/shared` (also re-exported from the main entry): `CACHE_EVENT_NAMES`, `CacheEventName`, `CacheConnectionStatus`, `CacheErrorCode`, `CacheNamespace`, `CacheKeyPrefix` and `SerializableValue`.
+
+From `@bymax-one/nest-cache/admin`: `BymaxCacheAdminModuleOptions` and `BymaxCacheAdminModuleAsyncOptions` (the Options table above), `CacheScope`, `ListKeysOptions`, the result types `CacheHealth`, `CacheConfig`, `CacheMode`, `RedisStats`, `KeyspacePage`, `KeyEntry`, `KeyDetail`, `KeyTtl`, `RevealResult` and `RevealedValue`, the token `BYMAX_CACHE_ADMIN_OPTIONS`, and the defaults `DEFAULT_DEGRADED_ABOVE_MS`, `DEFAULT_PROBE_TIMEOUT_MS`, `DEFAULT_SCAN_LIMIT`, `DEFAULT_COMMAND_BATCH_LIMIT`, `DEFAULT_REVEAL_LIMIT` and `DEFAULT_REVEAL_STRING_LIMIT`.
+
+The other names `/admin` exports (the scope and `INFO` helpers such as `validateScopes` and `readRedisStats`, `resolveAdminOptions`, and the reader contracts) are implementation helpers, marked `@deprecated`: they will leave the public surface in 2.0.0, so do not depend on them.
+
 ---
 
 ## 🪪 Default Error Codes
@@ -767,23 +816,24 @@ All errors are instances of `CacheException` and carry a stable `code` string fr
 | Code                                 | HTTP | When thrown                                                                                                                                                            |
 | ------------------------------------ | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cache.connection_failed`            | 500  | Cannot connect after retries; also bootstrap validation of `connection` and timeouts                                                                                   |
-| `cache.command_timeout`              | 504  | Reserved; not currently thrown by the library                                                                                                                          |
-| `cache.connection_lost`              | 503  | Reserved; not currently thrown by the library                                                                                                                          |
+| `cache.command_timeout`              | 504  | Reserved, never thrown today                                                                                                                                           |
+| `cache.connection_lost`              | 503  | Reserved, never thrown today                                                                                                                                           |
 | `cache.deserialization_failed`       | 500  | Malformed payload in `get<T>`                                                                                                                                          |
 | `cache.serialization_failed`         | 500  | Unserializable value in `set<T>`                                                                                                                                       |
 | `cache.invalid_key`                  | 400  | Empty prefix or id (`build`), or empty key (`applyNamespace`)                                                                                                          |
+| `cache.invalid_ttl`                  | 400  | `ttlSeconds` is not a safe integer, or is below 1 for `set` / `setRaw` / `setNx`                                                                                       |
 | `cache.invalid_namespace`            | 500  | Empty or whitespace-only namespace, empty `keySeparator`, namespace containing the separator or a glob metacharacter (`*`, `?`, `[`, `\`)                              |
 | `cache.script_not_registered`        | 500  | `eval(name)` before `register(name)`                                                                                                                                   |
 | `cache.script_execution_failed`      | 500  | Lua runtime error or NOSCRIPT retry failure                                                                                                                            |
 | `cache.script_registry_missing`      | 500  | `eval` called when no `ScriptManagerService` is wired                                                                                                                  |
 | `cache.flush_disabled_in_production` | 403  | `flushNamespace()` in prod without `allowFlushInProduction`                                                                                                            |
-| `cache.unsupported_in_cluster`       | 500  | `scan`, `flushNamespace`, or `getClient` called in cluster mode                                                                                                        |
+| `cache.unsupported_in_cluster`       | 500  | `scan`, `keys`, `flushNamespace`, or `getClient` called in cluster mode                                                                                                |
 | `cache.cluster_misconfigured`        | 500  | `mode: 'cluster'` without `cluster.nodes`                                                                                                                              |
 | `cache.sentinel_misconfigured`       | 500  | `mode: 'sentinel'` without `sentinel.sentinels`/`name`                                                                                                                 |
 | `cache.shutdown_timeout`             | 500  | Internal, never thrown to the caller: `quit()` exceeded `shutdownTimeoutMs`, so the library forces `disconnect()` and emits `error` with `reason: 'forced_disconnect'` |
 | `cache.invalid_scope`                | 500  | `/admin` scope allowlist invalid at wiring                                                                                                                             |
 | `cache.scope_not_found`              | 500  | `/admin` call named an undeclared scope id                                                                                                                             |
-| `cache.scope_not_readable`           | 500  | Reserved; not currently thrown (unreadable scopes return `withheld`)                                                                                                   |
+| `cache.scope_not_readable`           | 500  | Reserved, never thrown today (unreadable scopes return `withheld`)                                                                                                     |
 | `cache.key_not_in_scope`             | 500  | `/admin` call named a key outside the named scope                                                                                                                      |
 
 Full catalog and HTTP status mapping: [`docs/technical_specification.md §12`](./docs/technical_specification.md).

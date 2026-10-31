@@ -12,11 +12,17 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { resolveAdminOptions } from './admin'
 import { applyDefaults } from './server/config/default-options'
 import {
   MIN_CONNECT_TIMEOUT_MS,
   MIN_SHUTDOWN_TIMEOUT_MS
 } from './server/constants/default-timeouts'
+import {
+  DEFAULT_KEY_SEPARATOR,
+  DEFAULT_NAMESPACE,
+  DEFAULT_REDIS_PORT
+} from './server/constants/default-namespace'
 import { CacheException } from './server/errors/cache.exception'
 import { CACHE_ERROR_CODES } from './shared'
 
@@ -136,5 +142,52 @@ describe('README error-code table', () => {
         status
       })
     }
+  })
+})
+
+describe('README admin options table', () => {
+  const rows = tableRowsAfter('### Options')
+  const resolved: Record<string, unknown> = {
+    ...resolveAdminOptions({
+      scopes: [{ id: 'a', label: 'A', pattern: 'a:*', isReadable: true, origin: 'x' }]
+    })
+  }
+
+  /*
+   * Arrange: the `/admin` Options table.
+   * Act: resolve the admin options with only the required `scopes`.
+   * Assert: every documented default equals the resolved value, and `scopes` is required.
+   */
+  it('documents the value resolveAdminOptions resolves for every option', () => {
+    const documented = rows.map(([option, , fallback]) => [
+      (option ?? '').replace(/`/g, ''),
+      fallback === '—' ? undefined : readDefault(fallback ?? '')
+    ])
+
+    expect(documented.map(([option]) => option).sort()).toEqual(Object.keys(resolved).sort())
+    for (const [option, fallback] of documented) {
+      if (option === 'scopes') {
+        expect(fallback).toBeUndefined()
+      } else {
+        expect({ [String(option)]: resolved[String(option)] }).toEqual({
+          [String(option)]: fallback
+        })
+      }
+    }
+  })
+})
+
+describe('README exported constants', () => {
+  /*
+   * Arrange: the row that documents the three server defaults.
+   * Act: read their values from the code.
+   * Assert: the row states each value.
+   */
+  it('states the values of DEFAULT_NAMESPACE, DEFAULT_KEY_SEPARATOR and DEFAULT_REDIS_PORT', () => {
+    const row = README.split('\n').find((line) => line.startsWith('| `DEFAULT_NAMESPACE`')) ?? ''
+
+    expect(row).toContain(`\`'${DEFAULT_NAMESPACE}'\``)
+    expect(row).toContain(`\`'${DEFAULT_KEY_SEPARATOR}'\``)
+    expect(row).toContain(`\`${String(DEFAULT_REDIS_PORT)}\``)
   })
 })

@@ -441,6 +441,22 @@ describe('CacheService', () => {
       expect(found).toHaveLength(2)
     })
 
+    // KEYS carries no key, so ioredis routes it to one sampled node of a cluster and
+    // the reply covers only that node's slice of the keyspace: a silently partial
+    // list. It must refuse like its siblings. Shadowing scanStream simulates Cluster.
+    it('keys throws UNSUPPORTED_IN_CLUSTER instead of returning a partial list (cluster mode)', async () => {
+      Object.defineProperty(connection.getClient(), 'scanStream', {
+        value: undefined,
+        configurable: true
+      })
+
+      const caught = await cache.keys('p', '*').catch((error: unknown) => error)
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+      expect((caught as CacheException).details).toEqual({ operation: 'keys' })
+    })
+
     // scan must yield the same matching keys via async iteration, using the
     // default count when none is given (covers the default-parameter branch).
     it('scan yields matching keys via async iteration with the default count', async () => {

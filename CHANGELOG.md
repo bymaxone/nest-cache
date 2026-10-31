@@ -8,13 +8,47 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.2.4] - 2026-10-31
 
-A documentation and test release. `dist/` is unchanged from 1.2.3, so nothing you execute changes.
+Two calls now refuse input they could not honor, one error code is added, and the documentation catches up with the code.
+
+### Added
+
+- **`CACHE_ERROR_CODES.INVALID_TTL` (`cache.invalid_ttl`, HTTP 400)**, thrown for a TTL the library refuses. See Changed.
+
+### Changed
+
+- **`CacheService.keys()` is refused in cluster mode.** `KEYS` carries no key, so the cluster client sends
+  it to one sampled node and the reply listed only that node's share of the keyspace, with no sign that it
+  was partial. It now throws `UNSUPPORTED_IN_CLUSTER` with `details.operation: 'keys'`, like `scan`,
+  `getClient` and `flushNamespace`. **Apply to a consumer.** A cluster deployment that called `keys()`
+  must iterate with `scan` on each node through its own client, or avoid listing keys; standalone and
+  sentinel are unchanged.
+- **`ttlSeconds` is validated, with a new error code, `cache.invalid_ttl` (HTTP 400).** `set`, `setRaw`
+  and `setNx` need a safe integer of at least 1, or none for no expiry; `expire` needs a safe integer,
+  and zero or a negative one still deletes the key, as in Redis. Anything else throws `CacheException`
+  with `INVALID_TTL` and `details.reason` set to `not_a_safe_integer` or `below_minimum`, before a command
+  is sent. **Apply to a consumer.** What now throws `INVALID_TTL`: `set`, `setRaw`, `setNx` with `0`, a negative number, a fraction, `NaN`, `Infinity` or an integer above 2^53; `expire` with a fraction, `NaN`, `Infinity` or an integer above 2^53. Redis documents `SET ... EX` as a positive integer and `EXPIRE` as an
+  integer, and answers anything else with a raw reply error that carries no `cache.*` code, so the values
+  refused here already failed. The one exception is an integer above 2^53 seconds, a TTL of about 285
+  million years, which this refuses and Redis may accept. Code that caught the raw error by its message
+  should switch to `error.code === 'cache.invalid_ttl'`.
+
+### Deprecated
+
+- **Implementation helpers exported from `@bymax-one/nest-cache/admin`** are marked `@deprecated` and will
+  leave the public surface in 2.0.0: `validateScopes`, `findScope`, `isKeyInScope`, `readScopePattern`,
+  `resolveAdminOptions`, `ResolvedAdminOptions`, `parseInfoFields`, `readRedisStats`, `readKeyTtl`,
+  `readKeyType`, `readSizeBytes`, `IRedisReader`, `IRedisReaderSource`, `IRedisPipeline`,
+  `PipelineReply` and `ICacheProbe`. They keep working in 1.x. Do not depend on them.
 
 ### Documentation
 
 - The README error-code table described `cache.shutdown_timeout` as thrown when `quit()` exceeds
   `shutdownTimeoutMs`. It never reaches the caller: the library forces `disconnect()` and emits an
   `error` event with `reason: 'forced_disconnect'`. The row now says so.
+- The README states that `app.enableShutdownHooks()` is required for the graceful shutdown to run, and
+  carries a warning that `/admin` has no authentication of its own. It documents the `/admin` options
+  and their defaults and the exported types, constants and tokens it left out, lists `keys` among the
+  cluster-refused calls, and marks the three codes the library never throws as reserved.
 - The sentinel example passed `process.env.REDIS_PASSWORD` as `password`, which does not compile
   for a consumer that enables `exactOptionalPropertyTypes`. It now falls back to an empty string,
   which ioredis treats like no password.
