@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.3.0] - 2026-10-31
+## [1.2.4] - 2026-10-31
 
 Two calls now refuse input they could not honor, one error code is added, and the documentation catches up with the code.
 
@@ -460,8 +460,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.3.0...HEAD
-[1.3.0]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.3.0
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1
