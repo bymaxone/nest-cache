@@ -34,6 +34,9 @@ A documentation and test release. `dist/` is unchanged from 1.2.3, so nothing yo
   an error instead of a call on `any`.
 - The same gate no longer excuses a wrong method on an imported type or on a union-typed value as a
   class the README abbreviates, and a relative import in a snippet that resolves to nothing fails it.
+- The same gate now checks the typed names the snippets rely on, so a name in that declaration file that
+  stops resolving is an error instead of silently becoming `any`, and it tolerates a parse error only
+  where the parse tree shows a `...` elision, so a genuine syntax error in a snippet fails it.
 
 ## [1.2.3] - 2026-10-30
 
