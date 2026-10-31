@@ -62,8 +62,8 @@ describe('CacheService ttlSeconds', () => {
     })
   })
 
-  // expire keeps Redis's meaning for zero and negative integers (the key is deleted),
-  // so a call that works today keeps working; only a non-integer is refused.
+  // expire accepts zero and negative safe integers, because Redis deletes the key for them;
+  // only a non-integer is refused.
   it('expire still deletes the key for a zero TTL', async () => {
     await cache.set('x', 'z', 'v')
 

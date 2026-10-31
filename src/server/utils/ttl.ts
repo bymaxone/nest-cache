@@ -15,8 +15,8 @@ export const MIN_WRITE_TTL_SECONDS = 1
 /**
  * Throws `INVALID_TTL` unless `ttlSeconds` is a safe integer that reaches `minimum`.
  *
- * `EXPIRE` keeps Redis's meaning for zero and negative integers (the key is
- * deleted), so a caller that relies on it keeps working: it passes no `minimum`.
+ * `EXPIRE` accepts zero and negative integers because Redis deletes the key for them, so it
+ * passes no `minimum`.
  *
  * @param ttlSeconds - The TTL the caller passed.
  * @param minimum - Smallest accepted value, or `undefined` for any safe integer.
