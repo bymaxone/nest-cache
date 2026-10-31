@@ -28,8 +28,8 @@ every Bymax repository.
 typed NestJS module: typed `get<T>`/`set<T>`, automatic key namespacing, Pub/Sub
 on namespaced channels, and a Lua script manager (`EVALSHA` + `NOSCRIPT`
 fallback). It owns connection lifecycle, reconnection, graceful shutdown, and
-propagates connection events via an `events.onEvent` callback. It reads no
-environment variables — everything is supplied through DI. Published as a
+propagates connection events via an `events.onEvent` callback. It reads only
+`NODE_ENV` (the production flush guard); everything else comes through DI. Published as a
 public, MIT, zero-runtime-dependency package.
 
 ## 2. Architecture
@@ -43,7 +43,7 @@ public, MIT, zero-runtime-dependency package.
   `DynamicModule.global` (not a manual `@Global()` — see spec §0).
 - **DI tokens (Symbol):** `BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`,
   `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`, `BYMAX_CACHE_SERIALIZER`,
-  `BYMAX_CACHE_KEY_BUILDER`.
+  `BYMAX_CACHE_KEY_BUILDER`; `./admin` adds `BYMAX_CACHE_ADMIN_OPTIONS`.
 - **Core units:** `ConnectionManager` (singleton + lifecycle, standalone /
   sentinel / cluster), `CacheService` (typed API + namespacing), `PubSubService`,
   `ScriptManagerService`, plus `KeyBuilder` / `parseRedisUrl` / serializer utils.
@@ -58,7 +58,7 @@ public, MIT, zero-runtime-dependency package.
   append-only).
 - Generics (`get<T>`, `set<T>`) with a pluggable `ISerializer`; keys always built
   through the key builder.
-- Redis: offline queue disabled (fail fast), bounded `retryStrategy`,
+- Redis: main-client offline queue disabled (fail fast), bounded `retryStrategy`,
   `reconnectOnError` on `READONLY` failover.
 
 ## 4. Security Specification
@@ -85,7 +85,7 @@ public, MIT, zero-runtime-dependency package.
 ## 6. Build and Publish
 
 - tsup → 3 subpaths, ESM + CJS + `.d.ts`/`.d.cts`, `sideEffects: false`, peers
-  external. `minify: false` (readable backend bundle).
+  external. Not minified.
 - `files` allowlist publishes only `dist` + metadata. `pnpm size` gate +
   `pnpm check:exports` + `dogfood-smoke-test.mjs` before tagging. Release via
   OIDC provenance.
