@@ -6,6 +6,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-10-31
+
+A documentation and test release. `dist/` is unchanged from 1.2.3, so nothing you execute changes.
+
 ### Documentation
 
 - The README error-code table described `cache.shutdown_timeout` as thrown when `quit()` exceeds
@@ -406,7 +410,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1

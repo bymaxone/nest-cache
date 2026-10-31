@@ -1,3 +1,14 @@
+/**
+ * Documentation-contract tests for the published README.
+ *
+ * Layer: repository root (reads `README.md`, imports the server and shared surfaces).
+ * Pins the option-defaults table and the error-code table to the code.
+ *
+ * The README ships in the npm tarball and `check:published` only compiles its fenced
+ * snippets, so a wrong default or status in a table is read by consumers as fact and
+ * nothing else would catch it. Rows are parsed from the markdown itself, so editing the
+ * README without the code (or the reverse) fails here.
+ */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -9,14 +20,6 @@ import {
 import { CacheException } from './server/errors/cache.exception'
 import { CACHE_ERROR_CODES } from './shared'
 
-/**
- * Pins the README's option-defaults table and error-code table to the code.
- *
- * The README ships in the npm tarball and `check:published` only compiles its fenced
- * snippets, so a wrong default or status in a table is read by consumers as fact and
- * nothing else would catch it. Rows are parsed from the markdown itself, so editing the
- * README without the code (or the reverse) fails here.
- */
 const README = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
 
 /** Splits a markdown table row into trimmed cells; `\|` inside a cell is not a separator. */
