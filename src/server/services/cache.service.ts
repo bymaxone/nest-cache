@@ -27,6 +27,7 @@ import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
+import { assertTtlSeconds, MIN_WRITE_TTL_SECONDS } from '../utils/ttl'
 
 /** Production value of `NODE_ENV` that gates the destructive flush guard. */
 const PRODUCTION_ENV = 'production'
@@ -122,14 +123,17 @@ export class CacheService {
    * @param prefix - Entity-group prefix.
    * @param id - Entity id.
    * @param value - The value to store (passed through the serializer).
-   * @param ttlSeconds - Optional expiry in seconds; omit for no expiration.
+   * @param ttlSeconds - Optional expiry in seconds, a safe integer of at least 1; omit for
+   *   no expiration.
    * @returns Resolves once the write completes.
    * @throws {CacheException} `SERIALIZATION_FAILED` when `value` cannot be encoded.
+   * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer of at least 1.
    */
   async set<T>(prefix: string, id: string, value: T, ttlSeconds?: number): Promise<void> {
     const key = this.keyBuilder.build(prefix, id)
     const raw = this.serializer.serialize(value)
     if (ttlSeconds !== undefined) {
+      assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
       await this.connection.getClient().set(key, raw, 'EX', ttlSeconds)
     } else {
       await this.connection.getClient().set(key, raw)
@@ -142,12 +146,15 @@ export class CacheService {
    * @param prefix - Entity-group prefix.
    * @param id - Entity id.
    * @param value - The raw string to store as-is.
-   * @param ttlSeconds - Optional expiry in seconds; omit for no expiration.
+   * @param ttlSeconds - Optional expiry in seconds, a safe integer of at least 1; omit for
+   *   no expiration.
    * @returns Resolves once the write completes.
+   * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer of at least 1.
    */
   async setRaw(prefix: string, id: string, value: string, ttlSeconds?: number): Promise<void> {
     const key = this.keyBuilder.build(prefix, id)
     if (ttlSeconds !== undefined) {
+      assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
       await this.connection.getClient().set(key, value, 'EX', ttlSeconds)
     } else {
       await this.connection.getClient().set(key, value)
@@ -161,13 +168,16 @@ export class CacheService {
    * @param prefix - Entity-group prefix.
    * @param id - Entity id.
    * @param value - The value to store (passed through the serializer).
-   * @param ttlSeconds - Optional expiry in seconds applied on the same atomic write.
+   * @param ttlSeconds - Optional expiry in seconds applied on the same atomic write, a safe
+   *   integer of at least 1.
    * @returns `true` when the value was stored, `false` when the key already existed.
    * @throws {CacheException} `SERIALIZATION_FAILED` when `value` cannot be encoded.
+   * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer of at least 1.
    */
   async setNx<T>(prefix: string, id: string, value: T, ttlSeconds?: number): Promise<boolean> {
     const key = this.keyBuilder.build(prefix, id)
     const raw = this.serializer.serialize(value)
+    if (ttlSeconds !== undefined) assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
     const result =
       ttlSeconds !== undefined
         ? await this.connection.getClient().set(key, raw, 'EX', ttlSeconds, 'NX')
@@ -254,10 +264,13 @@ export class CacheService {
    *
    * @param prefix - Entity-group prefix.
    * @param id - Entity id.
-   * @param ttlSeconds - Expiry in seconds.
+   * @param ttlSeconds - Expiry in seconds, a safe integer. As in Redis, zero or a negative
+   *   value deletes the key.
    * @returns `true` when the timeout was set, `false` when the key does not exist.
+   * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer.
    */
   async expire(prefix: string, id: string, ttlSeconds: number): Promise<boolean> {
+    assertTtlSeconds(ttlSeconds, undefined)
     const result = await this.connection
       .getClient()
       .expire(this.keyBuilder.build(prefix, id), ttlSeconds)
@@ -489,6 +502,9 @@ export class CacheService {
    * @param prefix - Entity-group prefix.
    * @param pattern - Glob pattern for the id segment, e.g. `'*'`.
    * @returns The matching fully-namespaced keys.
+   * @throws {CacheException} `UNSUPPORTED_IN_CLUSTER` when called in cluster mode:
+   *   `KEYS` carries no key, so the cluster client sends it to one sampled node and the
+   *   reply would cover only that node's share of the keyspace.
    * @example
    * ```ts
    * await cache.keys('users', '*') // ['app:users:u_1', 'app:users:u_2']
@@ -496,7 +512,11 @@ export class CacheService {
    */
   async keys(prefix: string, pattern: string): Promise<string[]> {
     const fullPattern = this.keyBuilder.build(prefix, pattern)
-    return this.connection.getClient().keys(fullPattern)
+    const client = this.connection.getClient()
+    if (!isScannableClient(client)) {
+      throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'keys' })
+    }
+    return client.keys(fullPattern)
   }
 
   /**

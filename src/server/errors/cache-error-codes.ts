@@ -60,5 +60,9 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
   [
     CACHE_ERROR_CODES.KEY_NOT_IN_SCOPE,
     'That key does not belong to the named administration scope.'
+  ],
+  [
+    CACHE_ERROR_CODES.INVALID_TTL,
+    'A TTL in seconds must be a safe integer, and at least 1 for a write that sets one.'
   ]
 ])

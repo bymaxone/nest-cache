@@ -6,6 +6,7 @@
  * Only names the surrounding prose introduces belong here; a wrong option, method or
  * field on a package type is a real error and must stay one.
  */
+import type { NestFactory as NestFactoryClass } from '@nestjs/core'
 import type {
   BymaxCacheModule as BymaxCacheModuleClass,
   CacheService,
@@ -40,6 +41,9 @@ declare global {
   const next: string
 
   /** NestJS names a snippet uses without importing them. */
+  const NestFactory: typeof NestFactoryClass
+  /** The root module of the application a snippet bootstraps. */
+  class AppModule {}
   function Module(metadata: { imports?: unknown[] }): ClassDecorator
   function Inject(token: unknown): ParameterDecorator
 

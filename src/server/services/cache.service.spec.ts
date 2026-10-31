@@ -295,6 +295,52 @@ describe('CacheService', () => {
       expect(await cache.ttl('x', '3')).toBe(-1)
       expect(await cache.persist('x', 'missing')).toBe(false)
     })
+
+    // The write methods refuse a TTL Redis would reject, before anything is sent: no
+    // raw reply error, and nothing written. Each case is one write family member.
+    describe.each([
+      ['set', (ttl: number) => cache.set('x', 'w', 'v', ttl)],
+      ['setRaw', (ttl: number) => cache.setRaw('x', 'w', 'v', ttl)],
+      ['setNx', (ttl: number) => cache.setNx('x', 'w', 'v', ttl)]
+    ])('%s with an invalid TTL', (_name, write) => {
+      it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+        'refuses %s with INVALID_TTL and writes nothing',
+        async (ttl) => {
+          const caught = await write(ttl).catch((error: unknown) => error)
+
+          expect(caught).toBeInstanceOf(CacheException)
+          expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_TTL)
+          expect(await cache.exists('x', 'w')).toBe(false)
+        }
+      )
+
+      it('still accepts 1, the smallest valid TTL', async () => {
+        await write(1)
+
+        expect(await cache.ttl('x', 'w')).toBeGreaterThan(0)
+      })
+    })
+
+    // expire keeps Redis's meaning for zero and negative integers (the key is deleted),
+    // so a call that works today keeps working; only a non-integer is refused.
+    it('expire still deletes the key for a zero TTL', async () => {
+      await cache.set('x', 'z', 'v')
+
+      expect(await cache.expire('x', 'z', 0)).toBe(true)
+      expect(await cache.exists('x', 'z')).toBe(false)
+    })
+
+    it.each([1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+      'expire refuses %s with INVALID_TTL and leaves the key untouched',
+      async (ttl) => {
+        await cache.set('x', 'e', 'v')
+
+        const caught = await cache.expire('x', 'e', ttl).catch((error: unknown) => error)
+
+        expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_TTL)
+        expect(await cache.ttl('x', 'e')).toBe(-1)
+      }
+    )
   })
 
   describe('batch (mget / mset)', () => {
@@ -439,6 +485,22 @@ describe('CacheService', () => {
       const found = await cache.keys('users', '*')
       expect(found).toEqual(expect.arrayContaining(['test:users:u_1', 'test:users:u_2']))
       expect(found).toHaveLength(2)
+    })
+
+    // KEYS carries no key, so ioredis routes it to one sampled node of a cluster and
+    // the reply covers only that node's slice of the keyspace: a silently partial
+    // list. It must refuse like its siblings. Shadowing scanStream simulates Cluster.
+    it('keys throws UNSUPPORTED_IN_CLUSTER instead of returning a partial list (cluster mode)', async () => {
+      Object.defineProperty(connection.getClient(), 'scanStream', {
+        value: undefined,
+        configurable: true
+      })
+
+      const caught = await cache.keys('p', '*').catch((error: unknown) => error)
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER)
+      expect((caught as CacheException).details).toEqual({ operation: 'keys' })
     })
 
     // scan must yield the same matching keys via async iteration, using the

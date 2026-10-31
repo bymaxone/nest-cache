@@ -624,7 +624,9 @@ export class AppModule {}
 | `info`           | `(section?: string) => Promise<string>`                                                            | INFO                                                               |
 | `flushNamespace` | `() => Promise<number>`                                                                            | Deletes everything in the namespace — blocked in production (§5.5) |
 
-In cluster mode `scan`, `getClient` and `flushNamespace` throw `CacheException` `UNSUPPORTED_IN_CLUSTER`.
+In cluster mode `scan`, `keys`, `getClient` and `flushNamespace` throw `CacheException` `UNSUPPORTED_IN_CLUSTER`.
+
+`ttlSeconds` on `set`, `setRaw` and `setNx` is a safe integer of at least 1 (omitted: no expiry); on `expire` it is a safe integer, and zero or a negative one deletes the key as in Redis. Any other value throws `INVALID_TTL` before a command is sent, where Redis would have answered with a raw reply error.
 
 ### 5.3 Critical Signatures
 
@@ -718,7 +720,7 @@ export class CacheService {
 
 ### 5.4 KEYS vs SCAN
 
-`KEYS pattern` is O(N) and **blocks** Redis. Use `scan` in production. `keys()` exists for convenience in tests — JSDoc warns explicitly.
+`KEYS pattern` is O(N) and **blocks** Redis. Use `scan` in production. `keys()` exists for convenience in tests — JSDoc warns explicitly. It is refused in cluster mode: `KEYS` carries no key, so the cluster client sends it to one sampled node and the reply would list only that node's share of the keyspace.
 
 ### 5.5 `flushNamespace` is Destructive
 
@@ -1255,10 +1257,11 @@ export class CacheException extends HttpException {
 | `cache.cluster_misconfigured`        | 500  | `mode === 'cluster'` without `cluster.nodes`                                                                                        |
 | `cache.sentinel_misconfigured`       | 500  | `mode === 'sentinel'` without `sentinel.sentinels` or `sentinel.name`                                                               |
 | `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`; handled internally by forcing `disconnect()`                                                 |
-| `cache.unsupported_in_cluster`       | 500  | `scan`, `getClient` or `flushNamespace` called in cluster mode                                                                      |
+| `cache.unsupported_in_cluster`       | 500  | `scan`, `keys`, `getClient` or `flushNamespace` called in cluster mode                                                              |
+| `cache.invalid_ttl`                  | 400  | `ttlSeconds` is not a safe integer, or is below 1 for `set`, `setRaw` or `setNx`                                                    |
 | `cache.invalid_scope`                | 500  | `./admin`: a scope or threshold is malformed (§18)                                                                                  |
 | `cache.scope_not_found`              | 500  | `./admin`: no scope is declared under the given id                                                                                  |
-| `cache.scope_not_readable`           | 500  | Reserved: the library does not throw it; `revealValue` returns `status: 'withheld'` instead                                         |
+| `cache.scope_not_readable`           | 500  | Reserved, never thrown today: the library does not throw it; `revealValue` returns `status: 'withheld'` instead                     |
 | `cache.key_not_in_scope`             | 500  | `./admin`: the key does not belong to the named scope                                                                               |
 
 ### 12.3 Exported Constants
@@ -1283,7 +1286,8 @@ export const CACHE_ERROR_CODES = {
   INVALID_SCOPE: 'cache.invalid_scope',
   SCOPE_NOT_FOUND: 'cache.scope_not_found',
   SCOPE_NOT_READABLE: 'cache.scope_not_readable',
-  KEY_NOT_IN_SCOPE: 'cache.key_not_in_scope'
+  KEY_NOT_IN_SCOPE: 'cache.key_not_in_scope',
+  INVALID_TTL: 'cache.invalid_ttl'
 } as const satisfies Record<string, `cache.${string}`>
 
 export type CacheErrorCode = (typeof CACHE_ERROR_CODES)[keyof typeof CACHE_ERROR_CODES]
@@ -1455,7 +1459,7 @@ Strategic pause after Phase 2 — validate the API with a real consumer before a
 ## 16. Known Limitations
 
 1. **No Redis Streams in this version.** `XADD`/`XREAD`/`XGROUP` are deferred to a future `nest-stream`. Access via `cache.getClient().xadd(...)` remains available.
-2. **Cluster mode is experimental.** Works via `ioredis.Cluster` passthrough, but multi-key commands require all keys to be in the same slot — `KeyBuilder` does not enforce this. `scan`, `getClient` and `flushNamespace` throw `UNSUPPORTED_IN_CLUSTER`.
+2. **Cluster mode is experimental.** Works via `ioredis.Cluster` passthrough, but multi-key commands require all keys to be in the same slot — `KeyBuilder` does not enforce this. `scan`, `keys`, `getClient` and `flushNamespace` throw `UNSUPPORTED_IN_CLUSTER`.
 3. **No hot-reload of configuration.** Changing `namespace`, `serializer`, or `connection.url` requires a restart.
 4. **Pub/Sub does not persist messages.** Limitation of Redis Pub/Sub, not of the lib.
 5. **`KEYS` may block the server.** `cache.keys()` exists but JSDoc discourages it in production.
