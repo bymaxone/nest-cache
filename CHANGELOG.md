@@ -6,6 +6,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-10-31
+
+A documentation and test release. Nothing you execute changes: `dist/` differs from 1.2.4 only in one comment, the
+JSDoc of `ConnectionManager.createSubscriberClient`, which no longer calls cluster Pub/Sub experimental.
+
+### Documentation
+
+- The README states that Pub/Sub works in cluster mode: channel and pattern subscribers both receive the
+  message. The same sentence in the `createSubscriberClient` JSDoc described it as an experimental
+  passthrough.
+
+### Tests
+
+- The cluster end-to-end suite runs three masters on `redis:8-alpine`, formed with `redis-cli --cluster
+create`, and measures what the cluster guards claim: `keys`, `getClient`, `scan`, `flushNamespace` and the
+  administration calls that read keys throw `UNSUPPORTED_IN_CLUSTER`, a rejected `ttlSeconds` writes nothing,
+  and Pub/Sub delivers to channel and pattern subscribers. Without the `keys` guard a real cluster returned
+  2 of 6 seeded keys.
+
 ## [1.2.4] - 2026-10-31
 
 Two calls now refuse input they could not honor, one error code is added, and the documentation catches up with the code.
@@ -460,7 +479,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.5...HEAD
+[1.2.5]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2

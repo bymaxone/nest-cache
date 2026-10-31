@@ -324,6 +324,9 @@ Channels are namespaced like keys. The subscriber connection is created lazily o
 subscription. Redis Pub/Sub is fire-and-forget — messages published while a subscriber is offline
 are not replayed.
 
+Pub/Sub also works in cluster mode: channel and pattern subscribers both receive the message, which
+the end-to-end suite verifies against a three-master cluster.
+
 ---
 
 ## 📜 Lua Scripts
