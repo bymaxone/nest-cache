@@ -805,6 +805,8 @@ From `@bymax-one/nest-cache/shared` (also re-exported from the main entry): `CAC
 
 From `@bymax-one/nest-cache/admin`: `BymaxCacheAdminModuleOptions` and `BymaxCacheAdminModuleAsyncOptions` (the Options table above), `CacheScope`, `ListKeysOptions`, the result types `CacheHealth`, `CacheConfig`, `CacheMode`, `RedisStats`, `KeyspacePage`, `KeyEntry`, `KeyDetail`, `KeyTtl`, `RevealResult` and `RevealedValue`, the token `BYMAX_CACHE_ADMIN_OPTIONS`, and the defaults `DEFAULT_DEGRADED_ABOVE_MS`, `DEFAULT_PROBE_TIMEOUT_MS`, `DEFAULT_SCAN_LIMIT`, `DEFAULT_COMMAND_BATCH_LIMIT`, `DEFAULT_REVEAL_LIMIT` and `DEFAULT_REVEAL_STRING_LIMIT`.
 
+The other names `/admin` exports (the scope and `INFO` helpers such as `validateScopes` and `readRedisStats`, `resolveAdminOptions`, and the reader contracts) are implementation helpers, marked `@deprecated`: they will leave the public surface in 2.0.0, so do not depend on them.
+
 ---
 
 ## 🪪 Default Error Codes

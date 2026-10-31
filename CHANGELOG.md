@@ -6,11 +6,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.2.4] - 2026-10-31
+## [1.3.0] - 2026-10-31
 
-Two calls now refuse input they could not honor, and the documentation catches up with the code. `dist/` differs from 1.2.3 only in those two places and in one added error code.
+Two calls now refuse input they could not honor, one error code is added, and the documentation catches up with the code.
 
-### Fixed
+### Added
+
+- **`CACHE_ERROR_CODES.INVALID_TTL` (`cache.invalid_ttl`, HTTP 400)**, thrown for a TTL the library refuses. See Changed.
+
+### Changed
 
 - **`CacheService.keys()` is refused in cluster mode.** `KEYS` carries no key, so the cluster client sends
   it to one sampled node and the reply listed only that node's share of the keyspace, with no sign that it
@@ -18,18 +22,23 @@ Two calls now refuse input they could not honor, and the documentation catches u
   `getClient` and `flushNamespace`. **Apply to a consumer.** A cluster deployment that called `keys()`
   must iterate with `scan` on each node through its own client, or avoid listing keys; standalone and
   sentinel are unchanged.
-
-### Changed
-
 - **`ttlSeconds` is validated, with a new error code, `cache.invalid_ttl` (HTTP 400).** `set`, `setRaw`
   and `setNx` need a safe integer of at least 1, or none for no expiry; `expire` needs a safe integer,
   and zero or a negative one still deletes the key, as in Redis. Anything else throws `CacheException`
   with `INVALID_TTL` and `details.reason` set to `not_a_safe_integer` or `below_minimum`, before a command
-  is sent. **Apply to a consumer.** Redis documents `SET ... EX` as a positive integer and `EXPIRE` as an
+  is sent. **Apply to a consumer.** What now throws `INVALID_TTL`: `set`, `setRaw`, `setNx` with `0`, a negative number, a fraction, `NaN`, `Infinity` or an integer above 2^53; `expire` with a fraction, `NaN`, `Infinity` or an integer above 2^53. Redis documents `SET ... EX` as a positive integer and `EXPIRE` as an
   integer, and answers anything else with a raw reply error that carries no `cache.*` code, so the values
   refused here already failed. The one exception is an integer above 2^53 seconds, a TTL of about 285
   million years, which this refuses and Redis may accept. Code that caught the raw error by its message
   should switch to `error.code === 'cache.invalid_ttl'`.
+
+### Deprecated
+
+- **Implementation helpers exported from `@bymax-one/nest-cache/admin`** are marked `@deprecated` and will
+  leave the public surface in 2.0.0: `validateScopes`, `findScope`, `isKeyInScope`, `readScopePattern`,
+  `resolveAdminOptions`, `ResolvedAdminOptions`, `parseInfoFields`, `readRedisStats`, `readKeyTtl`,
+  `readKeyType`, `readSizeBytes`, `IRedisReader`, `IRedisReaderSource`, `IRedisPipeline`,
+  `PipelineReply` and `ICacheProbe`. They keep working in 1.x. Do not depend on them.
 
 ### Documentation
 
@@ -451,8 +460,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...HEAD
-[1.2.4]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.2.4
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bymaxone/nest-cache/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-cache/compare/v1.2.0...v1.2.1

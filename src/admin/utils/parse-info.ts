@@ -61,6 +61,8 @@ const NUMERIC_VALUE = /^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/
  *
  * @param text - The raw `INFO` output.
  * @returns Field name to raw text value.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function parseInfoFields(text: string): ReadonlyMap<string, string> {
   const fields = new Map<string, string>()
@@ -194,6 +196,8 @@ function role(fields: ReadonlyMap<string, string>): ReplicationRole {
  * @param infoText - The raw `INFO` output.
  * @param readAt - When the reading was taken, by the reading host's clock.
  * @returns The parsed statistics.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function readRedisStats(infoText: string, readAt: Date): RedisStats {
   const fields = parseInfoFields(infoText)

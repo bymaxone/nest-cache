@@ -1,8 +1,8 @@
 # @bymax-one/nest-cache — Complete Technical Specification
 
-> **Version:** 1.2.4
+> **Version:** 1.3.0
 > **Last updated:** 2026-10-29 (reflects v1.2.3; the §0 overrides remain normative)
-> **Status:** Implemented (v1.2.4)
+> **Status:** Implemented (v1.3.0)
 > **Type:** Public npm package (`@bymax-one/nest-cache`)
 
 ---

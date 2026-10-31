@@ -46,6 +46,8 @@ const TTL_PERSISTENT = -1
  *
  * @param reply - Whatever the server answered.
  * @returns The recognised type, or `other`.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function readKeyType(reply: unknown): RedisKeyType {
   return isKnownType(reply) ? reply : 'other'
@@ -60,6 +62,8 @@ export function readKeyType(reply: unknown): RedisKeyType {
  *
  * @param reply - Whatever the server answered.
  * @returns Whether the key expires, is persistent, or is gone.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function readKeyTtl(reply: unknown): KeyTtl {
   if (typeof reply !== 'number' || !Number.isFinite(reply)) {
@@ -88,6 +92,8 @@ export function readKeyTtl(reply: unknown): KeyTtl {
  *
  * @param reply - Whatever the server answered.
  * @returns The size in bytes, or `null` when no size was reported.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function readSizeBytes(reply: unknown): number | null {
   return typeof reply === 'number' && Number.isFinite(reply) ? reply : null

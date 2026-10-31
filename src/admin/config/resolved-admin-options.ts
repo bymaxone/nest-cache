@@ -20,6 +20,9 @@ import type { BymaxCacheAdminModuleOptions } from '../interfaces/admin-module-op
 import type { CacheScope } from '../interfaces/cache-scope.interface'
 
 /** Administration options after defaults are merged and validated. */
+/**
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
+ */
 export interface ResolvedAdminOptions {
   readonly scopes: readonly CacheScope[]
   readonly degradedAboveMs: number
@@ -61,6 +64,8 @@ function requirePositiveInteger(option: string, value: number): void {
  * @returns The frozen resolved options.
  * @throws {CacheException} `INVALID_SCOPE` when a scope is malformed or a
  *   threshold is not a positive integer.
+ *
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function resolveAdminOptions(
   options: BymaxCacheAdminModuleOptions

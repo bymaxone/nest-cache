@@ -15,9 +15,15 @@
  */
 
 /** One entry of a pipeline's result: an error, or a value. */
+/**
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
+ */
 export type PipelineReply = [Error | null, unknown]
 
 /** A pipeline being composed, chainable the way ioredis's commander is. */
+/**
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
+ */
 export interface IRedisPipeline {
   /** Queues `TYPE`. */
   type(key: string): IRedisPipeline
@@ -30,6 +36,9 @@ export interface IRedisPipeline {
 }
 
 /** The subset of the Redis client this surface reads through. */
+/**
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
+ */
 export interface IRedisReader {
   /** Cursor-based key iteration. */
   scan(
@@ -70,6 +79,9 @@ export interface IRedisReader {
 }
 
 /** How the administration surface obtains its reader. */
+/**
+ * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
+ */
 export interface IRedisReaderSource {
   /**
    * Returns the client.
