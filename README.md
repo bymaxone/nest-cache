@@ -496,7 +496,7 @@ await this.admin.revealValue('auth', 'auth:sess:1')  // { status: 'withheld', or
 | `revealStringLimit` | `number`                | `4096`  | Characters of a string value `revealValue` returns                       |
 | `isGlobal`          | `boolean`               | `false` | Register the admin module globally. The cache module's default is `true` |
 
-Every threshold must be a positive integer; one that is not fails the boot with `cache.invalid_scope`. `CacheAdminService` also has `listScopes()` and `describeKey(scope, key)`, which returns a key's type, TTL and size without its value.
+Every threshold must be a positive integer; one that is not fails the boot with `cache.invalid_scope`. `CacheAdminService` also has `listScopes()` and `describeKey(scope, key)`, which returns a key's type, TTL and whether its value is readable, without the value.
 
 ### What the library owns, and what you own
 
