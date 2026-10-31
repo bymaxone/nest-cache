@@ -32,6 +32,8 @@ A documentation and test release. `dist/` is unchanged from 1.2.3, so nothing yo
   snippet that omits its import is given the package's public names, and the names a snippet takes from
   the surrounding prose are typed in `scripts/readme-prelude.d.ts`, so a wrong method, option or field is
   an error instead of a call on `any`.
+- The same gate no longer excuses a wrong method on an imported type or on a union-typed value as a
+  class the README abbreviates, and a relative import in a snippet that resolves to nothing fails it.
 
 ## [1.2.3] - 2026-10-30
 
