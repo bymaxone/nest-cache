@@ -68,6 +68,7 @@
   },
   "scripts": {
     "build": "pnpm clean && tsup",
+    "check:api": "node scripts/check-api-surface.mjs",
     "check:exports": "attw --pack .",
     "check:mutants": "node scripts/check-mutation-directives.mjs",
     "check:admin-readonly": "node scripts/check-admin-readonly.mjs",
