@@ -44,9 +44,28 @@ describe('JsonSerializer', () => {
     }
   })
 
-  // A `toJSON` hook can throw a non-Error value; the message extractor must fall
+  // A throw value that cannot be printed (no prototype, so `String()` throws) must still
+  // surface as the structured SERIALIZATION_FAILED, not as a TypeError from the error path.
+  it('wraps a prototype-less throw from a toJSON hook', () => {
+    const hostile = {
+      toJSON(): never {
+        throw Object.create(null)
+      }
+    }
+
+    try {
+      serializer.serialize(hostile)
+      throw new Error('expected serialize to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(CacheException)
+      expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
+      expect((error as CacheException).details?.['error']).toBe('unprintable error')
+    }
+  })
+
+  // A `toJSON` hook can throw a non-Error value; the error describer must fall
   // back to String(err) so `details.error` is still populated (covers the
-  // non-Error branch of the shared helper that JSON.parse alone cannot reach).
+  // non-Error branch of describeError that JSON.parse alone cannot reach).
   it('stringifies a non-Error throw from a toJSON hook', () => {
     const hostile = {
       toJSON(): never {

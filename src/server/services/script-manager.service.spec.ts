@@ -161,7 +161,7 @@ describe('ScriptManagerService', () => {
   })
 
   // A non-NOSCRIPT error must be wrapped as SCRIPT_EXECUTION_FAILED with the
-  // original message preserved in details (Error branch of the message extractor),
+  // original message preserved in details (Error branch of describeError),
   // and must FAIL FAST — no reload (SCRIPT LOAD) and no retry. The pre-load +
   // mockClear isolates the lazy first load so the call counts pin the NOSCRIPT
   // guard: they kill the `NOSCRIPT_MARKER = ''` mutant, under which `.includes('')`
@@ -182,7 +182,7 @@ describe('ScriptManagerService', () => {
   })
 
   // A non-Error rejection must still be stringified into details (the non-Error
-  // branch of the message extractor) and wrapped as SCRIPT_EXECUTION_FAILED.
+  // branch of describeError) and wrapped as SCRIPT_EXECUTION_FAILED.
   it('stringifies a non-Error rejection into the wrapped error', async () => {
     expect.assertions(3)
     evalsha.mockRejectedValue('plain-string-failure')
@@ -192,6 +192,19 @@ describe('ScriptManagerService', () => {
     if (!(caught instanceof CacheException)) throw caught
     expect(caught.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
     expect(caught.details?.['originalError']).toBe('plain-string-failure')
+  })
+
+  // A rejection that cannot be printed (no prototype, so `String()` throws) must still be
+  // wrapped as SCRIPT_EXECUTION_FAILED, not escape as a TypeError from the error path.
+  it('wraps a prototype-less rejection as SCRIPT_EXECUTION_FAILED', async () => {
+    expect.assertions(3)
+    evalsha.mockRejectedValue(Object.create(null))
+
+    const caught = await registry.eval('cas', [], []).catch((e: unknown) => e)
+    expect(caught).toBeInstanceOf(CacheException)
+    if (!(caught instanceof CacheException)) throw caught
+    expect(caught.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+    expect(caught.details?.['originalError']).toBe('unprintable error')
   })
 
   // In cluster mode eval must use EVAL with the full Lua body (routed by key),

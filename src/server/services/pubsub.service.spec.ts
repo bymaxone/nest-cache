@@ -102,7 +102,7 @@ describe('PubSubService', () => {
   })
 
   // A non-Error handler throw must still be stringified into the forwarded event
-  // (the non-Error branch of the message extractor).
+  // (the non-Error branch of describeError).
   it('stringifies a non-Error handler throw for the events callback', async () => {
     const onEvent = jest.fn()
     const observed = new PubSubService(options, connection, keyBuilder, undefined, { onEvent })
@@ -116,6 +116,25 @@ describe('PubSubService', () => {
     expect(onEvent).toHaveBeenCalledWith(
       'error',
       expect.objectContaining({ error: 'plain-string-failure' })
+    )
+    await observed.onModuleDestroy()
+  })
+
+  // A handler throw that cannot be printed (no prototype, so `String()` throws) must still
+  // reach the events callback; the event must not be lost to a throw inside the reporter.
+  it('reports a prototype-less handler throw to the events callback', async () => {
+    const onEvent = jest.fn()
+    const observed = new PubSubService(options, connection, keyBuilder, undefined, { onEvent })
+    await observed.subscribe('obs', () => {
+      throw Object.create(null)
+    })
+
+    await observed.publish('obs', 'x')
+    await tick()
+
+    expect(onEvent).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({ reason: 'handler_error', error: 'unprintable error' })
     )
     await observed.onModuleDestroy()
   })
