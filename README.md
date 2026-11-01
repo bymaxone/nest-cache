@@ -279,6 +279,45 @@ Both `forRoot(options)` (synchronous) and `forRootAsync({ useFactory, inject, im
 
 ---
 
+## 🔌 A second, dedicated connection
+
+`BymaxCacheModule` registers one connection. When another part of the application needs its own, with different options (for example a standalone connection beside a cache that runs in cluster mode), build it with `createConnectionManager` rather than hand-writing the resolved options, which would skip validation and the defaults.
+
+```ts
+import { Inject, Injectable, Module } from '@nestjs/common'
+import { ConnectionManager, createConnectionManager } from '@bymax-one/nest-cache'
+
+export const AUTH_REDIS = Symbol('AUTH_REDIS')
+
+@Module({
+  providers: [
+    {
+      provide: AUTH_REDIS,
+      useFactory: (): ConnectionManager =>
+        createConnectionManager({
+          mode: 'standalone',
+          connection: { url: process.env.AUTH_REDIS_URL ?? 'redis://localhost:6379' }
+        })
+    }
+  ],
+  exports: [AUTH_REDIS]
+})
+export class AuthRedisModule {}
+
+@Injectable()
+export class SessionStore {
+  constructor(@Inject(AUTH_REDIS) private readonly redis: ConnectionManager) {}
+
+  async ping(): Promise<string> {
+    return this.redis.getClient().ping()
+  }
+}
+```
+
+It takes the same options as `forRoot()` and runs the same validation and defaults, so an invalid set throws the same `CacheException` before any client exists. The manager owns its connection: Nest connects it on `onModuleInit` and quits it on `onModuleDestroy`, with the forced `disconnect()` after `shutdownTimeoutMs`, so you write neither hook. The connection is independent of the one the module registers, and the client you get from `getClient()` applies no namespace: its keys are not prefixed.
+
+---
+
 ## 🔑 Key Namespacing
 
 Every key is composed as `{namespace}{separator}{prefix}{separator}{id}` (default separator `:`).

@@ -26,7 +26,7 @@ import {
 } from './bymax-cache.constants'
 import type { ASYNC_OPTIONS_TYPE, OPTIONS_TYPE } from './bymax-cache.module.builder'
 import { ConfigurableModuleClass, MODULE_OPTIONS_TOKEN } from './bymax-cache.module.builder'
-import { applyDefaults, validateOptions } from './config/default-options'
+import { resolveOptions } from './config/default-options'
 import type { ResolvedOptions } from './config/resolved-options'
 import { ConnectionManager } from './connection/connection.manager'
 import type { ICacheEvents } from './interfaces/cache-events.interface'
@@ -49,8 +49,7 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
    *   fail bootstrap validation (e.g. missing connection, misconfigured mode).
    */
   static override forRoot(options: typeof OPTIONS_TYPE): DynamicModule {
-    validateOptions(options)
-    const resolved = applyDefaults(options)
+    const resolved = resolveOptions(options)
 
     const providers: Provider[] = [
       { provide: MODULE_OPTIONS_TOKEN, useValue: options },
@@ -118,10 +117,7 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
     return [
       {
         provide: BYMAX_CACHE_OPTIONS,
-        useFactory: (raw: BymaxCacheModuleOptions): ResolvedOptions => {
-          validateOptions(raw)
-          return applyDefaults(raw)
-        },
+        useFactory: (raw: BymaxCacheModuleOptions): ResolvedOptions => resolveOptions(raw),
         inject: [MODULE_OPTIONS_TOKEN]
       },
       {

@@ -6,6 +6,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-10-31
+
+### Added
+
+- **`createConnectionManager(options)`**, exported from the main entry. It takes the options
+  `BymaxCacheModule.forRoot` takes, validates and defaults them exactly as the module does, and returns a
+  `ConnectionManager` that Nest connects on `onModuleInit` and quits on `onModuleDestroy` when it is
+  registered as a provider. A consumer that needs a second, dedicated connection (for example a standalone
+  one beside a clustered cache) no longer has to hand-write `ResolvedOptions`, which skipped validation and
+  the defaults. The README has a section, "A second, dedicated connection", with a provider snippet.
+
+### Internal
+
+- `forRoot`, `forRootAsync` and `createConnectionManager` share one `resolveOptions` function, so the
+  sequence "validate, then apply defaults" is written once. Nothing about `forRoot` or `forRootAsync`
+  changes.
+
 ## [1.2.5] - 2026-10-31
 
 A documentation and test release. Nothing you execute changes: `dist/` differs from 1.2.4 only in one comment, the
@@ -479,7 +496,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.5...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.6...HEAD
+[1.2.6]: https://github.com/bymaxone/nest-cache/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/bymaxone/nest-cache/compare/v1.2.2...v1.2.3
