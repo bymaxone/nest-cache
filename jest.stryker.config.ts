@@ -18,7 +18,13 @@ import base from './jest.config.ts'
  */
 const config: Config = {
   ...base,
-  testEnvironment: '@stryker-mutator/jest-runner/jest-env/node'
+  testEnvironment: '@stryker-mutator/jest-runner/jest-env/node',
+  // `check-api-surface.spec.ts` runs a repository script on fixture directories and touches no
+  // code in `src`, so it kills no mutant.
+  testPathIgnorePatterns: [
+    ...(base.testPathIgnorePatterns ?? ['/node_modules/']),
+    '/check-api-surface\\.spec\\.ts$'
+  ]
 }
 
 export default config
