@@ -11,6 +11,7 @@ export { BymaxCacheModule } from './bymax-cache.module'
 
 // Services / managers
 export { ConnectionManager } from './connection/connection.manager'
+export { createConnectionManager } from './connection/create-connection-manager'
 export { KeyBuilder } from './utils/key-builder'
 
 // Cache service + default serializer

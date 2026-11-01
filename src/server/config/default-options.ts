@@ -232,3 +232,17 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
 
   return Object.freeze(resolved)
 }
+
+/**
+ * Validates the consumer options and applies the defaults: the one sequence every entry
+ * point (`forRoot`, `forRootAsync`, `createConnectionManager`) runs before it builds
+ * anything from them.
+ *
+ * @param options - The raw consumer options.
+ * @returns A shallow-frozen {@link ResolvedOptions} carrying every defaulted field.
+ * @throws {CacheException} Whatever {@link validateOptions} throws for a violation.
+ */
+export function resolveOptions(options: BymaxCacheModuleOptions): Readonly<ResolvedOptions> {
+  validateOptions(options)
+  return applyDefaults(options)
+}
