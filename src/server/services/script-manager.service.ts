@@ -18,6 +18,7 @@ import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import { describeError } from '../utils/describe-error'
 
 /** The `SCRIPT LOAD` subcommand keyword. */
 const SCRIPT_LOAD = 'LOAD'
@@ -30,15 +31,6 @@ interface ScriptEntry {
   lua: string
   sha?: string
 }
-
-/**
- * Extracts a human-readable message from an unknown throw value. Redis client
- * rejections are `Error`s, but a non-`Error` throw is still surfaced safely.
- *
- * @param err - The caught throw value.
- * @returns The error message, or `String(err)` when it is not an `Error`.
- */
-const toErrorMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 @Injectable()
 export class ScriptManagerService implements OnApplicationBootstrap {
@@ -159,7 +151,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       } catch (err) {
         throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
           name,
-          originalError: toErrorMessage(err)
+          originalError: describeError(err)
         })
       }
     }
@@ -167,10 +159,10 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       const sha = entry.sha ?? (await this.load(name))
       return await client.evalsha(sha, keys.length, ...keys, ...args)
     } catch (err) {
-      if (!toErrorMessage(err).includes(NOSCRIPT_MARKER)) {
+      if (!describeError(err).includes(NOSCRIPT_MARKER)) {
         throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
           name,
-          originalError: toErrorMessage(err)
+          originalError: describeError(err)
         })
       }
       // The server evicted the SHA — reload once and retry. Wrap a failure of
@@ -184,7 +176,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       } catch (retryErr) {
         throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
           name,
-          originalError: toErrorMessage(retryErr)
+          originalError: describeError(retryErr)
         })
       }
     }

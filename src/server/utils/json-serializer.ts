@@ -12,6 +12,7 @@
  */
 import { Injectable } from '@nestjs/common'
 
+import { describeError } from './describe-error'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
@@ -22,19 +23,6 @@ import type { ISerializer } from '../interfaces/serializer.interface'
  * HTTP client.
  */
 const DESERIALIZATION_ERROR = 'stored value is not valid JSON'
-
-/**
- * Extracts a human-readable message from an unknown throw value.
- *
- * `JSON.stringify`/`JSON.parse` reject with `Error` subclasses, but a value's
- * `toJSON` hook can throw anything, so the non-`Error` branch is real and must
- * stay.
- *
- * @param err - The caught throw value (`Error`, string, or anything else).
- * @returns The error message, or `String(err)` when it is not an `Error`.
- */
-const extractErrorMessage = (err: unknown): string =>
-  err instanceof Error ? err.message : String(err)
 
 /**
  * `ISerializer` backed by `JSON.stringify` / `JSON.parse`.
@@ -86,7 +74,7 @@ export class JsonSerializer implements ISerializer {
       return JSON.stringify(value)
     } catch (err) {
       throw new CacheException(CACHE_ERROR_CODES.SERIALIZATION_FAILED, {
-        error: extractErrorMessage(err)
+        error: describeError(err)
       })
     }
   }

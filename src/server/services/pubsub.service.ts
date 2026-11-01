@@ -28,6 +28,7 @@ import { ConnectionManager } from '../connection/connection.manager'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import type { IPubSubHandler, IPubSubPatternHandler } from '../interfaces/pubsub-handler.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { describeError } from '../utils/describe-error'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
 
@@ -296,7 +297,7 @@ export class PubSubService implements OnModuleDestroy {
         role: 'subscriber',
         reason: 'handler_error',
         channel,
-        error: error instanceof Error ? error.message : String(error)
+        error: describeError(error)
       })
     } catch {
       // Observability must never crash the subscriber connection.

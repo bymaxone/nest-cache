@@ -13,6 +13,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `app:user-profile:<userId>` with a 3600-second TTL and served from the cache on the second call. The
   snippet gate compiles the Quick Start but cannot run it.
 
+## [1.2.7] - 2026-11-01
+
+### Fixed
+
+- A thrown or rejected value that cannot be printed no longer makes the error path throw. Three places
+  turned a caught value into text with `err instanceof Error ? err.message : String(err)`, and
+  `String()` throws for an object with no prototype (`Object.create(null)`) or a `toString` that throws.
+  A `toJSON` hook that threw such a value escaped `JsonSerializer.serialize` as a `TypeError` instead of
+  `cache.serialization_failed`; a Redis script rejection of that kind escaped `ScriptManagerService.eval`
+  as a `TypeError` instead of `cache.script_execution_failed`; and a Pub/Sub handler that threw one was
+  never reported to `onEvent`, because the reporter threw inside its own guard.
+- The three sites now share one `describeError` helper that never throws. It reads a string `message`
+  from the value itself instead of testing `instanceof Error`, which is false for an `Error` created in
+  another realm (`vm`, a worker) and for an error-shaped object; otherwise it uses `String()`, and
+  falls back to the fixed text `unprintable error`. The text of every error that printed before is
+  unchanged.
+
 ## [1.2.6] - 2026-10-31
 
 ### Added
@@ -503,7 +520,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.6...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.7...HEAD
+[1.2.7]: https://github.com/bymaxone/nest-cache/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/bymaxone/nest-cache/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/bymaxone/nest-cache/compare/v1.2.3...v1.2.4
