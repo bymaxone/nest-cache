@@ -78,3 +78,6 @@ export type {
   CacheNamespace,
   SerializableValue
 } from '../shared'
+
+/** Throwaway proof of the api-surface gate; never merged. */
+export const API_SURFACE_PROOF = 'proof' as const

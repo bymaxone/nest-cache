@@ -13,6 +13,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `app:user-profile:<userId>` with a 3600-second TTL and served from the cache on the second call. The
   snippet gate compiles the Quick Start but cannot run it.
 
+## [1.2.8] - 2026-11-01
+
+### Fixed
+
+- Throwaway proof of the api-surface gate; never merged.
+
 ## [1.2.7] - 2026-11-01
 
 ### Fixed
