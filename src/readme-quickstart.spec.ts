@@ -33,7 +33,7 @@ class ProfileRepository {
   }))
 }
 
-// README "3. Inject `CacheService`", unchanged apart from the `repo` property.
+// README "3. Inject `CacheService`", unchanged apart from the `repo` property (and no `export`).
 @Injectable()
 class ProfileService {
   // Not in the README: it leaves `this.repo` undeclared.
@@ -56,7 +56,7 @@ class ProfileService {
 // not, so the metadata the compiler would emit is declared here.
 Reflect.defineMetadata('design:paramtypes', [CacheService], ProfileService)
 
-// README Scenario 1 — Standalone, unchanged.
+// README Scenario 1 — Standalone, unchanged apart from the `providers` this test needs.
 @Module({
   imports: [
     BymaxCacheModule.forRoot({
