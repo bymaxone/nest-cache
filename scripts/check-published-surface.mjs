@@ -12,7 +12,7 @@
  *   sees what a consumer resolving through `exports` sees, and the consumer
  *   fixture happened to use a workaround form.
  * - A pull request deleted a `## [x.y.z]` heading while adding the next one,
- *   which silently turns the release notes into the generic fallback.
+ *   which leaves the release with no notes section to publish.
  *
  * Run after `pnpm build` — the snippets compile against `dist/`.
  */
@@ -426,12 +426,13 @@ async function checkLinks() {
 // 2. The release notes for this version are extractable.
 // ---------------------------------------------------------------------------
 
-/** Mirrors the awk in `release.yml`: everything between this version's heading
- * and the next one. Kept deliberately identical — a check that reads the file
- * differently from the workflow proves nothing about the workflow. */
+/** Mirrors the awk in `release.yml`: everything between this version's heading,
+ * matched as the literal prefix `## [x.y.z]`, and the next one. Kept deliberately
+ * identical — a check that reads the file differently from the workflow proves
+ * nothing about the workflow. */
 function releaseNotes(version) {
   const lines = CHANGELOG.split('\n')
-  const start = lines.findIndex((l) => /^## \[/.test(l) && l.includes(`[${version}]`))
+  const start = lines.findIndex((l) => l.startsWith(`## [${version}]`))
   if (start === -1) return null
   const rest = lines.slice(start + 1)
   const end = rest.findIndex((l) => /^## \[/.test(l))
@@ -444,10 +445,7 @@ function releaseNotes(version) {
 function checkChangelog() {
   const notes = releaseNotes(PKG.version)
   if (notes === null) {
-    fail(
-      'changelog',
-      `no "## [${PKG.version}]" heading — the release would publish the generic fallback`
-    )
+    fail('changelog', `no "## [${PKG.version}]" heading — the release workflow would fail`)
     return
   }
   if (notes.length < 40) {
@@ -534,7 +532,7 @@ function checkChangelog() {
   for (const v of missing) {
     fail(
       'changelog',
-      `v${v} is tagged but has no "## [${v}]" section — its release notes would be the generic fallback`
+      `v${v} is tagged but has no "## [${v}]" section — the release workflow would fail on it`
     )
   }
   console.log(
