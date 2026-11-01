@@ -74,6 +74,41 @@ describe('strip-bundle-comments', () => {
     expect(read(dist, 'index.mjs')).toBe('const a = 1\n')
   })
 
+  // Two comments alone on a line go together with the line, and the code after it stays.
+  it('removes a line that holds only several comments without touching the next line', () => {
+    const dist = layout({ 'index.mjs': '/* one */ /* two */\nexport const x = 1\n' })
+
+    run(dist)
+
+    expect(read(dist, 'index.mjs')).toBe('export const x = 1\n')
+  })
+
+  // A block comment that spans lines is a line break to the parser: `return` followed by one and
+  // then a value returns nothing. Removing the comment outright would make it return the value.
+  it('keeps the line break a multi-line comment stood for after `return`', () => {
+    const dist = layout({
+      'index.mjs': [
+        'function f() {',
+        '  return /* first',
+        '     second */ 1',
+        '}',
+        'console.log(String(f()))',
+        ''
+      ].join('\n')
+    })
+    const before = spawnSync(process.execPath, [join(dist, 'server', 'index.mjs')], {
+      encoding: 'utf8'
+    }).stdout
+
+    run(dist)
+
+    const after = spawnSync(process.execPath, [join(dist, 'server', 'index.mjs')], {
+      encoding: 'utf8'
+    }).stdout
+    expect(before).toBe('undefined\n')
+    expect(after).toBe(before)
+  })
+
   it('removes a comment inside an empty block and one at the end of the file', () => {
     const dist = layout({ 'index.mjs': 'function f() { /* nothing */ }\n// last line\n' })
 

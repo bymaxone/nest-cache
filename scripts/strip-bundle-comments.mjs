@@ -76,8 +76,15 @@ export function stripComments(source) {
       // The comment owned its line: remove the line, newline included.
       output = output.slice(0, lineStart) + output.slice(lineEndAt === -1 ? lineEnd : lineEnd + 1)
     } else {
-      // Code shares the line: drop the comment and the blanks that separated it from the code.
-      output = output.slice(0, pos - (before.length - before.trimEnd().length)) + output.slice(end)
+      // Code shares the line: drop the comment and the blanks that separated it from the code. A
+      // comment that spans lines counts as a line break to the parser (after `return` it ends the
+      // statement), so one break stays when code follows it.
+      const lineBreak =
+        before.trim() !== '' && after.trim() !== '' && source.slice(pos, end).includes('\n')
+      output =
+        output.slice(0, pos - (before.length - before.trimEnd().length)) +
+        (lineBreak ? '\n' : '') +
+        output.slice(end)
     }
   }
   return output
