@@ -83,6 +83,8 @@ relax this (a matcher more permissive than the server's is a silent cross-scope 
 pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
+`pnpm check:api` compares the built `.d.ts`/`.d.cts` with the previous published version: a patch whose public declarations differ fails, a minor or major passes with the diff printed, and there is no override. The release workflow runs it before the publish.
+
 Mutation testing (before tagging a release), under Node 24:
 
 ```bash
