@@ -33,7 +33,7 @@ class ProfileRepository {
   }))
 }
 
-// README "3. Inject `CacheService`", unchanged apart from the two lines marked below.
+// README "3. Inject `CacheService`", unchanged apart from the `repo` property.
 @Injectable()
 class ProfileService {
   // Not in the README: it leaves `this.repo` undeclared.
