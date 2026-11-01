@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Tests
+
+- `src/readme-quickstart.spec.ts` runs the README Quick Start as written: the standalone module and the
+  `ProfileService` cache-aside flow, over an in-memory Redis, asserting that the value is stored under
+  `app:user-profile:<userId>` with a 3600-second TTL and served from the cache on the second call. The
+  snippet gate compiles the Quick Start but cannot run it.
+
 ## [1.2.6] - 2026-10-31
 
 ### Added
