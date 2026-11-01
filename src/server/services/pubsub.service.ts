@@ -35,9 +35,14 @@ import { resolveSerializer } from '../utils/resolve-serializer'
 /** Detaches a subscription's listener and unsubscribes its channel/pattern. */
 export type Unsubscribe = () => Promise<void>
 
-/** Mutable live-listener counter for one namespaced channel or pattern. */
+/**
+ * Live-listener counter for one namespaced channel or pattern, with the SUBSCRIBE /
+ * PSUBSCRIBE that put it on the server. Every listener that joins awaits `ready`, so a
+ * caller is told it is subscribed only once the server accepted the command.
+ */
 interface SubscriptionRef {
   count: number
+  ready: Promise<unknown>
 }
 
 @Injectable()
@@ -216,8 +221,12 @@ export class PubSubService implements OnModuleDestroy {
 
   /**
    * Subscribes the target (channel or pattern) only when it gains its FIRST
-   * listener, then increments and returns its shared {@link SubscriptionRef} so a
-   * later release knows when to issue the matching UNSUBSCRIBE / PUNSUBSCRIBE.
+   * listener, then returns its shared {@link SubscriptionRef} so a later release
+   * knows when to issue the matching UNSUBSCRIBE / PUNSUBSCRIBE.
+   *
+   * Callers share one in-flight command and count as listeners from the moment they
+   * join. If it fails, all of them reject and the entry is dropped, so the next call
+   * sends the command again.
    *
    * @param refs - The channel or pattern ref-count map.
    * @param target - The full namespaced channel/pattern.
@@ -231,11 +240,14 @@ export class PubSubService implements OnModuleDestroy {
   ): Promise<SubscriptionRef> {
     let ref = refs.get(target)
     if (!ref) {
-      ref = { count: 0 }
-      refs.set(target, ref)
-      await subscribe()
+      const created: SubscriptionRef = { count: 0, ready: subscribe() }
+      // Registered before any caller awaits `ready`, so the entry is gone when they reject.
+      created.ready.catch(() => refs.delete(target))
+      refs.set(target, created)
+      ref = created
     }
     ref.count += 1
+    await ref.ready
     return ref
   }
 
@@ -243,6 +255,9 @@ export class PubSubService implements OnModuleDestroy {
    * Decrements the (closure-captured) ref and issues the UNSUBSCRIBE / PUNSUBSCRIBE
    * only when the LAST listener is removed — so unsubscribing one handler never
    * silently stops delivery to the others on the same channel/pattern.
+   *
+   * A rejected UNSUBSCRIBE reaches the caller while the server keeps the channel; its
+   * messages find no listener, and the next subscription sends SUBSCRIBE again.
    *
    * @param refs - The channel or pattern ref-count map.
    * @param target - The full namespaced channel/pattern.

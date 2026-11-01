@@ -13,6 +13,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `app:user-profile:<userId>` with a 3600-second TTL and served from the cache on the second call. The
   snippet gate compiles the Quick Start but cannot run it.
 
+## [1.2.8] - 2026-11-01
+
+### Fixed
+
+- `PubSubService.subscribe` and `psubscribe` no longer report a subscription the server never accepted.
+  The first listener on a channel or pattern recorded it before the `SUBSCRIBE` / `PSUBSCRIBE` had been
+  accepted. When that command failed (a `LOADING` reply, a reset connection, a command timeout), the
+  caller got the error, but the record stayed: the next `subscribe()` on the same channel found it, sent
+  no command, and resolved, so its handler was attached to a subscription that was never made and
+  no message ever reached it. A caller that arrived while the command was still in flight was told it
+  was subscribed before the outcome was known, with the same result.
+- Every listener now waits for the same in-flight command. When it fails, all of them reject and the
+  record is dropped, so the next call sends the command again; a listener counts from the moment it
+  joins, so the last other listener leaving while it waits cannot unsubscribe the channel under it. The
+  public signatures are unchanged.
+
 ## [1.2.7] - 2026-11-01
 
 ### Fixed
@@ -519,7 +535,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.7...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.8...HEAD
+[1.2.8]: https://github.com/bymaxone/nest-cache/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/bymaxone/nest-cache/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/bymaxone/nest-cache/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/bymaxone/nest-cache/compare/v1.2.4...v1.2.5
