@@ -14,8 +14,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   consumer's bundler uses, and the `// src/...` markers between modules. About half of each bundle's
   compressed size was that prose, and the documentation people read in an editor comes from the `.d.ts`
   and `.d.cts` files, which are unchanged, as are the public declarations and the runtime behaviour. A
-  stack frame still points at readable code. The size budgets drop to match: server 15.0 to 8.1 kB,
-  admin 7.25 to 5.3 kB and shared 1.5 to 0.5 kB, brotli.
+  stack frame still points at readable code. The size budgets in `scripts/check-size.mjs` drop to match.
 
 ### Tests
 
