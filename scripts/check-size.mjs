@@ -21,10 +21,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //
 // Bymax bundle-size convention (canonical: Obsidian → 03 - Resources/NestJS/
 // Bymax-Conventions.md → "Bundle-size budgets"):
-//   1. The .mjs ships UNMINIFIED with JSDoc (tsup `minify: false`) on purpose —
-//      readable stack traces / source inside a consumer's node_modules outweigh
-//      a few KB on a backend lib that never reaches a browser. We do NOT minify
-//      a lib just to satisfy a size budget.
+//   1. The .mjs ships UNMINIFIED, without comments (tsup `minify: false`, then
+//      scripts/strip-bundle-comments.mjs) on purpose — readable stack traces /
+//      source inside a consumer's node_modules outweigh a few KB on a backend lib
+//      that never reaches a browser, and the documentation lives in the .d.ts.
+//      We do NOT minify a lib just to satisfy a size budget.
 //   2. The budget is CALIBRATED to the real built artifact + MODEST headroom:
 //      enough to absorb normal inter-release growth, tight enough to catch
 //      accidental bloat (e.g. a peer dep leaking into the bundle). It is a
@@ -52,10 +53,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // the one `BymaxCacheModule` registered. If this number ever jumps toward the
 // server's, the externalisation has broken and DI is about to fail at a
 // consumer's runtime.
+//
+// Budgets are measured on the bundle after the comments are stripped: server 7.29,
+// admin 4.80 and shared 0.45 kB, each with about 11% of headroom.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 15.0 * 1024 },
-  { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 7.25 * 1024 },
-  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 1.5 * 1024 }
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 8.1 * 1024 },
+  { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5.3 * 1024 },
+  { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`
