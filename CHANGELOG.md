@@ -19,6 +19,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Throwaway proof of the api-surface gate; never merged.
 
+#### Apply to a derived backend
+
+The proof constant is exported and never released.
+
 ## [1.2.7] - 2026-11-01
 
 ### Fixed
