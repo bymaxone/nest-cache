@@ -11,8 +11,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - A cluster client now fails fast, as the standalone and sentinel clients do. The cluster branch passed
-  `cluster.options` to ioredis untouched, so it ran on ioredis defaults: an offline queue that is on, no
-  command timeout and a connect timeout of ioredis's own. When the cluster went down after boot, every
+  `cluster.options` to ioredis untouched, so it ran on ioredis defaults: an offline queue that is on and no
+  command timeout. When the cluster went down after boot, every
   cache call waited in that queue for as long as the outage lasted (measured still pending after 20 s,
   against about 0 ms standalone), so a caller that treats an unreachable cache as a miss never reached its
   fallback. The cluster client now starts from `enableOfflineQueue: false` and `redisOptions` of
