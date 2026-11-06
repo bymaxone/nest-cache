@@ -98,7 +98,11 @@ export interface BymaxCacheSentinelConnection {
 export interface BymaxCacheClusterConnection {
   /** Seed nodes for cluster discovery. */
   nodes: ClusterNode[]
-  /** ioredis cluster options. */
+  /**
+   * ioredis cluster options. Unset, the client fails fast like the other modes: `enableOfflineQueue`
+   * false and `redisOptions` of `connectTimeout` 10 000 ms, `commandTimeout` 5 000 ms and
+   * `maxRetriesPerRequest` 3. Anything set here wins over those.
+   */
   options?: ClusterOptions
 }
 
