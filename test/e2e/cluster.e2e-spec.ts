@@ -268,7 +268,7 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
   // Scenario: every node goes away after the client booted and served traffic.
   // Rule: a read rejects within the default command timeout instead of waiting in an offline
   // queue for the cluster to come back, so a caller that treats an unreachable cache as a miss
-  // reaches its fallback (QA-010; the cluster client used to wait for as long as the outage lasted).
+  // reaches its fallback.
   it('rejects a get within the command timeout once the whole cluster is down', async () => {
     await cache.set('outage', 'k', { v: 1 })
     expect(await cache.get('outage', 'k')).toEqual({ v: 1 })

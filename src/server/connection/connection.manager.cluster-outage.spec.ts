@@ -1,3 +1,11 @@
+/**
+ * Unit tests for how {@link ConnectionManager} configures the cluster client when the cluster
+ * cannot be reached.
+ *
+ * Layer: server. They run the real ioredis `Cluster` against a closed local port, because the
+ * behaviour under test (a command rejecting at once instead of waiting in an offline queue) is
+ * ioredis's, and a fake client cannot exercise it. No server is involved, so no container is needed.
+ */
 import { applyDefaults } from '../config/default-options'
 import { ConnectionManager } from './connection.manager'
 
