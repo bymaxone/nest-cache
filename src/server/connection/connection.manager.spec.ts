@@ -290,7 +290,11 @@ describe('ConnectionManager', () => {
 
       manager.getClient()
       expect(clusterInstances).toHaveLength(1)
-      expect(clusterInstances[0]?.options).toEqual({ enableReadyCheck: true })
+      expect(clusterInstances[0]?.options).toEqual({
+        enableOfflineQueue: false,
+        enableReadyCheck: true,
+        redisOptions: { connectTimeout: 10_000, commandTimeout: 5_000, maxRetriesPerRequest: 3 }
+      })
       expect(clusterInstances[0]?.nodes).toEqual([{ host: 'c', port: 6379 }])
     })
 
@@ -303,7 +307,10 @@ describe('ConnectionManager', () => {
       })
 
       manager.getClient()
-      expect(clusterInstances[0]?.options).toEqual({})
+      expect(clusterInstances[0]?.options).toEqual({
+        enableOfflineQueue: false,
+        redisOptions: { connectTimeout: 10_000, commandTimeout: 5_000, maxRetriesPerRequest: 3 }
+      })
     })
 
     // Cluster mode with a missing cluster block (forced past validation) must

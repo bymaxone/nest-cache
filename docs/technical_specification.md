@@ -1,8 +1,8 @@
 # @bymax-one/nest-cache — Complete Technical Specification
 
-> **Version:** 1.2.8
+> **Version:** 1.2.9
 > **Last updated:** 2026-10-29 (reflects v1.2.3; the §0 overrides remain normative)
-> **Status:** Implemented (v1.2.8)
+> **Status:** Implemented (v1.2.9)
 > **Type:** Public npm package (`@bymax-one/nest-cache`)
 
 ---
@@ -156,7 +156,7 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 | Publisher (`publish`)                        | `client` (singleton) | `publish` is a normal command                                                  |
 | BullMQ                                       | **NOT exposed**      | Requires `maxRetriesPerRequest: null`; `nest-queue` creates its own connection |
 
-The `subscriber` is created on the first call to `subscribe`/`psubscribe`, built from the same options as the main client, except that its offline queue is enabled, so a subscribe issued before the socket is ready is queued instead of failing. In cluster mode the override is ignored and the subscriber uses the configured cluster options.
+The `subscriber` is created on the first call to `subscribe`/`psubscribe`, built from the same options as the main client, except that its offline queue is enabled, so a subscribe issued before the socket is ready is queued instead of failing. In cluster mode the override sets the cluster client's own offline queue. A cluster client otherwise starts with `enableOfflineQueue: false` and `redisOptions` of `connectTimeout` 10 000 ms, `commandTimeout` 5 000 ms and `maxRetriesPerRequest` 3, each overridable through `cluster.options`, so a cache call fails fast while the cluster is down.
 
 ---
 

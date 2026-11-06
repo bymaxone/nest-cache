@@ -6,6 +6,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-11-06
+
+### Fixed
+
+- A cluster client now fails fast, as the standalone and sentinel clients do. The cluster branch passed
+  `cluster.options` to ioredis untouched, so it ran on ioredis defaults: an offline queue that is on and no
+  command timeout. When the cluster went down after boot, every
+  cache call waited in that queue for as long as the outage lasted (measured still pending after 20 s,
+  against about 0 ms standalone), so a caller that treats an unreachable cache as a miss never reached its
+  fallback. The cluster client now starts from `enableOfflineQueue: false` and `redisOptions` of
+  `connectTimeout` 10 000 ms, `commandTimeout` 5 000 ms and `maxRetriesPerRequest` 3, and anything set in
+  `cluster.options` (including `cluster.options.redisOptions`) wins over them. The subscriber client keeps
+  an offline queue, as in the other modes, so a subscribe issued before its sockets are ready is buffered.
+- Apply to a consumer: if you run `mode: 'cluster'`, a cache call made while the cluster is unreachable now
+  rejects at once instead of waiting; handle that rejection the way you handle a standalone one. To keep
+  the old queueing, set `cluster.options.enableOfflineQueue: true`. The public declarations are unchanged.
+
+### Changed
+
+- The shipped `index.mjs` and `index.cjs` bundles no longer carry comments (the `.d.ts` and `.d.cts` files,
+  where editors read the documentation, are untouched). Comments were about half of the server bundle's
+  brotli size. The build proves each stripped bundle is the same program before it writes anything.
+- Built with tsup 9. The runtime bundles are byte-identical; the declaration files differ only in how the
+  final export list is spelled (`export { A, type B }` instead of `export { A }; export type { B }`), which
+  `pnpm check:api` reports as no difference.
+
 ### Tests
 
 - `src/readme-quickstart.spec.ts` runs the README Quick Start as written: the standalone module and the
@@ -535,7 +561,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.8...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/bymaxone/nest-cache/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/bymaxone/nest-cache/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/bymaxone/nest-cache/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/bymaxone/nest-cache/compare/v1.2.5...v1.2.6

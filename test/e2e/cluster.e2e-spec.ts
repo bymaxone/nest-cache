@@ -88,7 +88,7 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
   afterAll(async () => {
     await adminApp?.close()
     await app?.close()
-    await cluster?.container.stop()
+    await cluster?.container.stop().catch(() => undefined) // already stopped by the outage test
   })
 
   // Single-key reads/writes must route to the owning slot's node and round-trip —
@@ -263,4 +263,33 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
       expect(stats.server.mode).toBe('cluster')
     })
   })
+
+  // Keep this the LAST test: it stops the cluster, so nothing after it can reach one.
+  // Scenario: every node goes away after the client booted and served traffic.
+  // Rule: a read rejects within the default command timeout instead of waiting in an offline
+  // queue for the cluster to come back, so a caller that treats an unreachable cache as a miss
+  // reaches its fallback.
+  it('rejects a get within the command timeout once the whole cluster is down', async () => {
+    await cache.set('outage', 'k', { v: 1 })
+    expect(await cache.get('outage', 'k')).toEqual({ v: 1 })
+
+    await cluster.container.stop()
+
+    // The client notices the dead sockets on its own; the first calls may still be in flight.
+    const started = Date.now()
+    let settledAt = Number.POSITIVE_INFINITY
+    const outcome = await Promise.race([
+      cache.get('outage', 'k').then(
+        () => 'resolved',
+        () => {
+          settledAt = Date.now() - started
+          return 'rejected'
+        }
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve('pending'), 15_000))
+    ])
+
+    expect(outcome).toBe('rejected')
+    expect(settledAt).toBeLessThan(5_000)
+  }, 60_000)
 })
