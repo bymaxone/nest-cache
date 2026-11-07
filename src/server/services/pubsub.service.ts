@@ -25,6 +25,8 @@ import {
 } from '../bymax-cache.constants'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
+import { CacheException } from '../errors/cache.exception'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import type { IPubSubHandler, IPubSubPatternHandler } from '../interfaces/pubsub-handler.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
@@ -55,6 +57,9 @@ export class PubSubService implements OnApplicationShutdown {
    * carries `options.password` as a plain field.
    */
   #subscriber: Redis | Cluster | null = null
+
+  /** Set once shutdown begins, so no subscriber is opened that nothing would close. */
+  #shutDown = false
 
   /** Live-listener ref-count per namespaced channel; UNSUBSCRIBE fires on the last. */
   private readonly channelRefs = new Map<string, SubscriptionRef>()
@@ -192,6 +197,7 @@ export class PubSubService implements OnApplicationShutdown {
    * `onApplicationShutdown`, after the HTTP server has stopped, like the main client.
    */
   async onApplicationShutdown(): Promise<void> {
+    this.#shutDown = true
     if (!this.#subscriber) {
       return
     }
@@ -217,6 +223,9 @@ export class PubSubService implements OnApplicationShutdown {
    */
   private ensureSubscriber(): Redis | Cluster {
     if (!this.#subscriber) {
+      if (this.#shutDown) {
+        throw new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'shutdown' })
+      }
       this.#subscriber = this.connection.createSubscriberClient()
     }
     return this.#subscriber

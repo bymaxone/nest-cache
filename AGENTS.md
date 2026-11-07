@@ -53,7 +53,7 @@ public, MIT, zero-runtime-dependency package.
 - `Symbol` injection tokens; **explicit `@Inject(TOKEN)`** on every provider and
   factory `inject: []` (tsup builds without `emitDecoratorMetadata`).
 - Singletons only — no `Scope.REQUEST`. Connection lifecycle via `OnModuleInit` /
-  `OnModuleDestroy`.
+  `OnApplicationShutdown`.
 - Errors via `CacheException` + `CACHE_ERROR_CODES` (namespaced `cache.*`,
   append-only).
 - Generics (`get<T>`, `set<T>`) with a pluggable `ISerializer`; keys always built

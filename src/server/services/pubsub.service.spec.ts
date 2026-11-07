@@ -8,6 +8,7 @@
  */
 import { applyDefaults } from '../config/default-options'
 import { ConnectionManager } from '../connection/connection.manager'
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { KeyBuilder } from '../utils/key-builder'
 import { PubSubService } from './pubsub.service'
 
@@ -329,6 +330,21 @@ describe('PubSubService', () => {
   // onApplicationShutdown must be a safe no-op when no subscriber was ever opened.
   it('is a no-op on destroy when no subscriber exists', async () => {
     await expect(pubsub.onApplicationShutdown()).resolves.toBeUndefined()
+  })
+
+  // Scenario: a caller subscribes after the Pub/Sub service has shut down.
+  // Rule: it is refused instead of opening a subscriber connection nothing would close, even
+  // when the connection manager has not shut down yet.
+  it('refuses to subscribe after shutdown without opening a subscriber', async () => {
+    const createSubSpy = jest.spyOn(connection, 'createSubscriberClient')
+    await pubsub.onApplicationShutdown()
+
+    await expect(pubsub.subscribe('events', () => undefined)).rejects.toMatchObject({
+      code: CACHE_ERROR_CODES.CONNECTION_LOST,
+      details: { reason: 'shutdown' }
+    })
+
+    expect(createSubSpy).not.toHaveBeenCalled()
   })
 
   // When the subscriber fails to quit gracefully, destroy must force a disconnect.
