@@ -1,8 +1,8 @@
 # @bymax-one/nest-cache — Complete Technical Specification
 
-> **Version:** 1.2.9
+> **Version:** 1.2.10
 > **Last updated:** 2026-10-29 (reflects v1.2.3; the §0 overrides remain normative)
-> **Status:** Implemented (v1.2.9)
+> **Status:** Implemented (v1.2.10)
 > **Type:** Public npm package (`@bymax-one/nest-cache`)
 
 ---
@@ -92,7 +92,7 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 1. **Configuration over convention.** Everything goes through `forRoot`/`forRootAsync`. Sensible defaults when applicable.
 2. **Zero opinion on environment.** The lib reads no configuration from `process.env` — the app injects the options. The single read is `NODE_ENV` in `flushNamespace`, the production guard (§5.5).
 3. **Singleton by default.** One command connection, plus an on-demand subscriber.
-4. **Correct lifecycle.** `OnModuleInit` to connect, `OnModuleDestroy` for graceful `quit()` with timeout.
+4. **Correct lifecycle.** `OnModuleInit` to connect, `OnApplicationShutdown` (after the HTTP server has stopped) for graceful `quit()` with timeout.
 5. **Typed helpers.** Generic `<T>` API with default JSON serialization and a hook for custom serializers.
 6. **Strict namespace.** Every key passes through `KeyBuilder(prefix, id)` — raw strings are discouraged.
 7. **Lua-first for atomicity.** Other libs register scripts via `ScriptManager.register(name, lua)` and invoke them by name.
@@ -143,7 +143,7 @@ In a multi-tenant SaaS architecture, Redis appears as the foundation of nearly a
 2. **`OnModuleInit`** — `ConnectionManager` creates `Redis()` and, unless `lazyConnect` is set, waits for `'ready'`. Registered Lua scripts are preloaded at `OnApplicationBootstrap` (skipped when `lazyConnect` is set).
 3. **Normal operation** — `CacheService` delegates to `ConnectionManager.getClient()`.
 4. **Events** (`connect`, `ready`, `error`, `close`, `reconnecting`, `end`) propagated to the `events.onEvent` callback.
-5. **`OnModuleDestroy`** — `quit()` with `shutdownTimeoutMs`; if it exceeds, force `disconnect()`.
+5. **`OnApplicationShutdown`** — runs after the HTTP server has stopped, so requests in flight keep their connection; `quit()` with `shutdownTimeoutMs`; if it exceeds, force `disconnect()`.
 
 ### 2.3 Client Multiplexing
 
@@ -914,7 +914,7 @@ export type IPubSubHandler<T> = (message: T, channel: string) => void | Promise<
 export type IPubSubPatternHandler<T> = (message: T, channel: string, pattern: string) => void | Promise<void>
 
 @Injectable()
-export class PubSubService implements OnModuleDestroy {
+export class PubSubService implements OnApplicationShutdown {
   constructor(
     @Inject(BYMAX_CACHE_OPTIONS) options: ResolvedOptions,
     @Inject(ConnectionManager) connection: ConnectionManager,
@@ -933,7 +933,7 @@ export class PubSubService implements OnModuleDestroy {
   psubscribe<T>(pattern: string, handler: IPubSubPatternHandler<T>): Promise<Unsubscribe>
 
   /** Quits the subscriber connection; forces disconnect() if quit fails. */
-  onModuleDestroy(): Promise<void>
+  onApplicationShutdown(): Promise<void>
 }
 ```
 
@@ -1133,7 +1133,7 @@ BymaxCacheModule.forRoot({
 
 ```typescript
 @Injectable()
-export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
+export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   #client: Redis | Cluster | null = null // private (#): an ioredis instance carries options.password as a field
 
   constructor(
@@ -1155,7 +1155,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    * On timeout or failure: emits onEvent('error', { role: 'main', reason: 'forced_disconnect', shutdownTimeoutMs })
    * and calls disconnect().
    */
-  onModuleDestroy(): Promise<void>
+  onApplicationShutdown(): Promise<void>
 }
 ```
 
@@ -1380,7 +1380,7 @@ Zero transitive deps; everything is peer.
 3. `BymaxCacheModule` with `forRoot`/`forRootAsync`
 4. `BymaxCacheModuleOptions` and `BymaxCacheModuleAsyncOptions`
 5. Injection tokens (`Symbol`)
-6. `ConnectionManager` (creation, `OnModuleInit`/`OnModuleDestroy`, listeners)
+6. `ConnectionManager` (creation, `OnModuleInit`/`OnApplicationShutdown`, listeners)
 7. `parseRedisUrl` utility
 8. `ICacheEvents` interface
 9. `CacheException` + `CACHE_ERROR_CODES`

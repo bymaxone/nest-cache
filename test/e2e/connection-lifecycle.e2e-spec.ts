@@ -6,7 +6,10 @@
  * health check) and shuts down gracefully (`close()` quits the client without
  * error) — behaviors tied to a real socket rather than the in-memory mock.
  */
-import { CacheService } from '@bymax-one/nest-cache'
+import { Inject, Injectable, Module } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+
+import { BymaxCacheModule, CacheService } from '@bymax-one/nest-cache'
 
 import { bootCacheApp } from './fixtures/test-cache-app.module'
 import { startRedisContainer, type StartedRedis } from './helpers/start-redis-container'
@@ -43,7 +46,7 @@ describe('Connection lifecycle E2E (real Redis)', () => {
     expect(await cache.ping()).toBe('PONG')
   })
 
-  // close() must run the module's onModuleDestroy and quit the client gracefully
+  // close() must run the module's onApplicationShutdown and quit the client gracefully
   // — no timeout, no thrown error. A dedicated throwaway app (not the shared one,
   // which the suite keeps open until afterAll) keeps this order-independent.
   it('shuts down gracefully', async () => {
@@ -53,5 +56,46 @@ describe('Connection lifecycle E2E (real Redis)', () => {
     })
 
     await expect(throwaway.close()).resolves.toBeUndefined()
+  })
+
+  // Scenario: a shutdown signal arrives while a request that uses the cache is still being served.
+  // Rule: the connection stays open until Nest has stopped the server, so the request completes
+  // with its value. The probe stands in for the server: Nest runs its before-shutdown hook after
+  // the destroy hooks and before the connections close, and it waits for the request there, as
+  // the HTTP server does while it drains.
+  it('serves a request that is in flight when the application closes', async () => {
+    let inFlight: Promise<unknown> = Promise.resolve()
+
+    @Injectable()
+    class DrainingServer {
+      constructor(@Inject(CacheService) private readonly cache: CacheService) {}
+
+      start(): void {
+        inFlight = new Promise((resolve) => setTimeout(resolve, 300)).then(() =>
+          this.cache.get('shutdown', 'in-flight')
+        )
+      }
+
+      async beforeApplicationShutdown(): Promise<void> {
+        await inFlight.catch(() => undefined)
+      }
+    }
+
+    @Module({
+      imports: [
+        BymaxCacheModule.forRoot({ connection: { url: redis.url }, namespace: 'e2e-conn-drain' })
+      ],
+      providers: [DrainingServer]
+    })
+    class DrainingAppModule {}
+
+    const draining = await Test.createTestingModule({ imports: [DrainingAppModule] }).compile()
+    await draining.init()
+    await draining.get(CacheService).set('shutdown', 'in-flight', { served: true })
+    draining.get(DrainingServer).start()
+
+    await draining.close()
+
+    await expect(inFlight).resolves.toEqual({ served: true })
   })
 })

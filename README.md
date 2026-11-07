@@ -46,7 +46,7 @@ so you control exact versions and the supply-chain surface stays minimal.
 - **🔑 Namespaced by design** — every key is composed through a key builder (`{namespace}:{prefix}:{id}`), so tenants and features never collide. Raw, un-namespaced access is a documented anti-pattern.
 - **🧬 Typed get/set** — `get<T>` / `set<T>` go through a pluggable `ISerializer` (JSON by default). Deserialization **fails closed** — a malformed payload throws `CacheException`, never a half-decoded value.
 - **📡 Batteries included** — Pub/Sub on namespaced channels and a Lua script manager (`EVALSHA` + `NOSCRIPT` fallback) ship in the box, on top of the full string/hash/set/numeric command surface.
-- **♻️ Lifecycle done right** — singleton connection with `OnModuleInit` / `OnModuleDestroy`, bounded retry strategy, `READONLY`-failover reconnect, and a graceful `quit()` with shutdown timeout.
+- **♻️ Lifecycle done right** — singleton connection with `OnModuleInit` / `OnApplicationShutdown`, bounded retry strategy, `READONLY`-failover reconnect, and a graceful `quit()` with shutdown timeout.
 - **🔌 Bring your own observability** — connection events and Pub/Sub handler failures surface through an `events.onEvent` callback; plug in [`@bymax-one/nest-logger`](https://github.com/bymaxone/nest-logger) or your metrics layer. No observability peer deps forced on you.
 
 ```
@@ -74,7 +74,7 @@ pnpm add @bymax-one/nest-cache ioredis
 ### ⚙️ Reliability & Topology
 
 - ✅ **Multi-topology** — standalone, Sentinel, and Cluster modes from the same options shape
-- ✅ **Managed lifecycle** — singleton connection via `OnModuleInit` / `OnModuleDestroy`, graceful `quit()` with a shutdown timeout
+- ✅ **Managed lifecycle** — singleton connection via `OnModuleInit` / `OnApplicationShutdown`, graceful `quit()` with a shutdown timeout
 - ✅ **Bounded retries** — `maxRetriesPerRequest` and a reconnect policy that triggers on `READONLY` replica failover
 - ✅ **Connection events** — `connect` / `ready` / `error` / `close` / `reconnecting` / `end` surfaced via `events.onEvent`, which also receives Pub/Sub handler and deserialization failures as `'error'` with `reason: 'handler_error'`
 - ✅ **Health checks** — `isHealthy()` / `ping()` / `info()` for readiness and liveness endpoints
@@ -220,7 +220,7 @@ export class AppModule {}
 ```
 
 > [!IMPORTANT]
-> **Call `app.enableShutdownHooks()` in `main.ts`.** Nest runs `OnModuleDestroy` on `SIGTERM` / `SIGINT` only when shutdown hooks are enabled. Without it the process exits on a signal without quitting the Redis connection gracefully, and `shutdownTimeoutMs` never comes into play.
+> **Call `app.enableShutdownHooks()` in `main.ts`.** Nest runs `OnApplicationShutdown` on `SIGTERM` / `SIGINT` only when shutdown hooks are enabled. Without it the process exits on a signal without quitting the Redis connection gracefully, and `shutdownTimeoutMs` never comes into play. The connections close in that hook, after the HTTP server has stopped, so a request still in flight when the signal arrives keeps its cache.
 
 ```typescript
 const app = await NestFactory.create(AppModule)
@@ -314,7 +314,7 @@ export class SessionStore {
 }
 ```
 
-It takes the same options as `forRoot()` and runs the same validation and defaults, so an invalid set throws the same `CacheException` before any client exists. The manager owns its connection: Nest connects it on `onModuleInit` and quits it on `onModuleDestroy`, with the forced `disconnect()` after `shutdownTimeoutMs`, so you write neither hook. The connection is independent of the one the module registers, and the client you get from `getClient()` applies no namespace: its keys are not prefixed.
+It takes the same options as `forRoot()` and runs the same validation and defaults, so an invalid set throws the same `CacheException` before any client exists. The manager owns its connection: Nest connects it on `onModuleInit` and quits it on `onApplicationShutdown`, with the forced `disconnect()` after `shutdownTimeoutMs`, so you write neither hook. The connection is independent of the one the module registers, and the client you get from `getClient()` applies no namespace: its keys are not prefixed.
 
 ---
 
@@ -659,7 +659,7 @@ DI tokens are `Symbol`s (`BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`, `BYMAX
 | **🔑 Structural Isolation**  | Every key and channel is composed by `KeyBuilder` — namespacing is enforced by the type of the API, not by a convention a caller can forget                       |
 | **🚪 Fail Closed**           | A payload that cannot be decoded throws; it never degrades into `undefined` or a partially-typed object, because a silently wrong cache read is worse than a miss |
 | **🔌 Interface-Driven**      | `ISerializer` and `ICacheEvents` are contracts — MessagePack, a metrics sink, or a logger is a consumer implementation, never a dependency of this package        |
-| **🪶 Singleton Connection**  | One `ioredis` client per module, owned by `ConnectionManager` with `OnModuleInit` / `OnModuleDestroy` — no `Scope.REQUEST`, no per-call connection churn          |
+| **🪶 Singleton Connection**  | One `ioredis` client per module, owned by `ConnectionManager` with `OnModuleInit` / `OnApplicationShutdown` — no `Scope.REQUEST`, no per-call connection churn    |
 | **🌳 Zero Runtime Deps**     | `"dependencies": {}` — every package arrives as a peer dependency, so consumers pin exact versions and the supply-chain surface stays theirs                      |
 | **🧭 Explicit Escape Hatch** | `getClient()` exists, is documented, and is an anti-pattern — un-namespaced access is possible on purpose, and named so a reviewer sees it                        |
 

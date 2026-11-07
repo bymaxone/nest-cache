@@ -39,8 +39,8 @@ describe('PubSubService', () => {
   })
 
   afterEach(async () => {
-    await pubsub.onModuleDestroy()
-    await connection.onModuleDestroy()
+    await pubsub.onApplicationShutdown()
+    await connection.onApplicationShutdown()
   })
 
   // A published message must reach the subscriber's handler deserialized, and the
@@ -98,7 +98,7 @@ describe('PubSubService', () => {
       channel: 'ps:obs',
       error: 'handler boom'
     })
-    await observed.onModuleDestroy()
+    await observed.onApplicationShutdown()
   })
 
   // A non-Error handler throw must still be stringified into the forwarded event
@@ -117,7 +117,7 @@ describe('PubSubService', () => {
       'error',
       expect.objectContaining({ error: 'plain-string-failure' })
     )
-    await observed.onModuleDestroy()
+    await observed.onApplicationShutdown()
   })
 
   // A handler throw that cannot be printed (no prototype, so `String()` throws) must still
@@ -136,7 +136,7 @@ describe('PubSubService', () => {
       'error',
       expect.objectContaining({ reason: 'handler_error', error: 'unprintable error' })
     )
-    await observed.onModuleDestroy()
+    await observed.onApplicationShutdown()
   })
 
   // A throwing observability callback must itself be swallowed — a faulty
@@ -154,7 +154,7 @@ describe('PubSubService', () => {
     await tick()
 
     expect(onEvent).toHaveBeenCalled()
-    await observed.onModuleDestroy()
+    await observed.onApplicationShutdown()
   })
 
   // An events bag without an onEvent must not throw — covers the `onEvent?.`
@@ -167,7 +167,7 @@ describe('PubSubService', () => {
 
     await expect(observed.publish('obs', 'x')).resolves.toEqual(expect.any(Number))
     await tick()
-    await observed.onModuleDestroy()
+    await observed.onApplicationShutdown()
   })
 
   // The unsubscribe returned by subscribe() must detach the listener (by the
@@ -308,7 +308,7 @@ describe('PubSubService', () => {
         error: 'pattern boom'
       })
     )
-    await observed.onModuleDestroy()
+    await observed.onApplicationShutdown()
   })
 
   // The dedicated subscriber connection must be opened once and reused across
@@ -326,9 +326,9 @@ describe('PubSubService', () => {
     expect(createSubSpy).toHaveBeenCalledTimes(1)
   })
 
-  // onModuleDestroy must be a safe no-op when no subscriber was ever opened.
+  // onApplicationShutdown must be a safe no-op when no subscriber was ever opened.
   it('is a no-op on destroy when no subscriber exists', async () => {
-    await expect(pubsub.onModuleDestroy()).resolves.toBeUndefined()
+    await expect(pubsub.onApplicationShutdown()).resolves.toBeUndefined()
   })
 
   // When the subscriber fails to quit gracefully, destroy must force a disconnect.
@@ -348,7 +348,7 @@ describe('PubSubService', () => {
       .mockReturnValue(fakeSubscriber as unknown as Redis)
     await pubsub.subscribe('events', () => undefined)
 
-    await pubsub.onModuleDestroy()
+    await pubsub.onApplicationShutdown()
 
     expect(fakeSubscriber.quit).toHaveBeenCalled()
     expect(fakeSubscriber.disconnect).toHaveBeenCalled()
@@ -372,8 +372,8 @@ describe('PubSubService', () => {
       .mockReturnValue(fakeSubscriber as unknown as Redis)
     await pubsub.subscribe('events', () => undefined)
 
-    await pubsub.onModuleDestroy()
-    await pubsub.onModuleDestroy()
+    await pubsub.onApplicationShutdown()
+    await pubsub.onApplicationShutdown()
 
     expect(fakeSubscriber.quit).toHaveBeenCalledTimes(1)
     expect(fakeSubscriber.disconnect).not.toHaveBeenCalled()

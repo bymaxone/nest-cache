@@ -34,7 +34,7 @@ describe('CacheService ttlSeconds', () => {
   })
 
   afterEach(async () => {
-    await connection.onModuleDestroy()
+    await connection.onApplicationShutdown()
   })
 
   // The write methods refuse a TTL Redis would reject, before anything is sent: no

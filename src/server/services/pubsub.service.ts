@@ -15,7 +15,7 @@
  * @see `docs/technical_specification.md` §8 — Pub/Sub
  */
 import { Inject, Injectable, Optional } from '@nestjs/common'
-import type { OnModuleDestroy } from '@nestjs/common'
+import type { OnApplicationShutdown } from '@nestjs/common'
 import type { Cluster, Redis } from 'ioredis'
 
 import {
@@ -46,7 +46,7 @@ interface SubscriptionRef {
 }
 
 @Injectable()
-export class PubSubService implements OnModuleDestroy {
+export class PubSubService implements OnApplicationShutdown {
   /** Lazily-created dedicated subscriber connection (null until first subscribe). */
   /**
    * The dedicated subscriber connection.
@@ -187,8 +187,11 @@ export class PubSubService implements OnModuleDestroy {
     )
   }
 
-  /** Closes the subscriber connection gracefully, forcing disconnect on failure. */
-  async onModuleDestroy(): Promise<void> {
+  /**
+   * Closes the subscriber connection gracefully, forcing disconnect on failure. Runs on
+   * `onApplicationShutdown`, after the HTTP server has stopped, like the main client.
+   */
+  async onApplicationShutdown(): Promise<void> {
     if (!this.#subscriber) {
       return
     }

@@ -6,6 +6,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-11-06
+
+### Fixed
+
+- The Redis connections now close after the HTTP server has stopped, not before. `ConnectionManager` and
+  `PubSubService` closed their clients in `onModuleDestroy`, which Nest runs first on shutdown, while the
+  server is still answering: every request in flight when a `SIGTERM` arrived lost its cache and failed
+  (a server-sent-events endpoint answered 500 during shutdown). They now close in `onApplicationShutdown`,
+  which Nest runs after it has stopped the server, so those requests complete. The timeout and the forced
+  `disconnect()` after `shutdownTimeoutMs` are unchanged.
+
+#### Apply to a consumer
+
+`onModuleDestroy` is gone from `ConnectionManager` and `PubSubService`, replaced by
+`onApplicationShutdown`. Nest calls the new hook for you on `app.close()`, and on a
+signal when shutdown hooks are enabled (`app.enableShutdownHooks()`), as it did for the old one; code that called
+`connection.onModuleDestroy()` or `pubsub.onModuleDestroy()` itself, in a test for instance, calls
+`onApplicationShutdown()` instead. Other providers that use the cache in their own
+`onModuleDestroy` or `beforeApplicationShutdown` now find it open rather than closed.
+
 ## [1.2.9] - 2026-11-06
 
 ### Fixed
@@ -29,7 +49,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   where editors read the documentation, are untouched). Comments were about half of the server bundle's
   brotli size. The build proves each stripped bundle is the same program before it writes anything.
 - Built with tsup 9. The runtime bundles are byte-identical; the declaration files differ only in how the
-  final export list is spelled (`export { A, type B }` instead of `export { A }; export type { B }`), which
+  final export list is spelled (`export { A }; export type { B }` instead of `export { A, type B }`), which
   `pnpm check:api` reports as no difference.
 
 ### Tests
@@ -561,7 +581,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.9...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.10...HEAD
+[1.2.10]: https://github.com/bymaxone/nest-cache/compare/v1.2.9...v1.2.10
 [1.2.9]: https://github.com/bymaxone/nest-cache/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/bymaxone/nest-cache/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/bymaxone/nest-cache/compare/v1.2.6...v1.2.7

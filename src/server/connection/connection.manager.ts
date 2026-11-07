@@ -5,12 +5,12 @@
  * from the resolved module options (URL parse + defaults), opens the main client
  * on `OnModuleInit`, hands out lazy subscriber clients, forwards lifecycle events
  * to the optional `ICacheEvents.onEvent` callback (swallowing consumer errors),
- * and quits gracefully on `OnModuleDestroy` with a `disconnect()` fallback.
+ * and quits gracefully on `OnApplicationShutdown` with a `disconnect()` fallback.
  *
  * @see `docs/technical_specification.md` §11 — Connection Strategy
  */
 import { Inject, Injectable, Optional } from '@nestjs/common'
-import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
 import { Cluster, Redis } from 'ioredis'
 import type { ClusterOptions, RedisOptions } from 'ioredis'
 
@@ -64,7 +64,7 @@ type OwnedClusterOptions = Omit<ClusterOptions, 'redisOptions'> & {
 type ClientRole = 'main' | 'subscriber'
 
 @Injectable()
-export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
+export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   /**
    * The live Redis client.
    *
@@ -128,7 +128,7 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
    * Creates a brand-new dedicated connection for subscriber mode (a subscriber
    * connection cannot run normal commands), inheriting the main options.
    *
-   * Ownership of the returned client transfers to the caller: `onModuleDestroy`
+   * Ownership of the returned client transfers to the caller: `onApplicationShutdown`
    * quits only the main client, so a subscriber client must be quit/disconnected
    * by its owner (the Pub/Sub service).
    *
@@ -146,8 +146,14 @@ export class ConnectionManager implements OnModuleInit, OnModuleDestroy {
     return client
   }
 
-  /** Quits the main client gracefully, forcing `disconnect()` on timeout. */
-  async onModuleDestroy(): Promise<void> {
+  /**
+   * Quits the main client gracefully, forcing `disconnect()` on timeout.
+   *
+   * Runs on `onApplicationShutdown`, after Nest has stopped the HTTP server: the destroy
+   * hooks run first, while requests are still in flight, and a client closed there fails
+   * every one of them.
+   */
+  async onApplicationShutdown(): Promise<void> {
     const client = this.#client
     if (!client) {
       return

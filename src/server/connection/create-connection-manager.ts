@@ -15,7 +15,7 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
  * set throws the same `CacheException` before any client exists.
  *
  * The manager owns its connection. Register it as a provider and Nest connects it on
- * `onModuleInit` and quits it on `onModuleDestroy`, with the forced `disconnect()` after
+ * `onModuleInit` and quits it on `onApplicationShutdown`, with the forced `disconnect()` after
  * `shutdownTimeoutMs`; the caller writes neither hook. Reach the client with
  * `manager.getClient()`. This connection is independent of the one `BymaxCacheModule`
  * registers, and it applies no namespace: keys written through its client are not
