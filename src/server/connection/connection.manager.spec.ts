@@ -440,9 +440,8 @@ describe('ConnectionManager', () => {
       expect(redisInstances).toHaveLength(0)
     })
 
-    // The happy path: destroy quits the client and nulls it, so a later
-    // getClient() must create a brand-new instance.
-    it('quits the client and clears the reference', async () => {
+    // The happy path: shutdown quits the client, once.
+    it('quits the client', async () => {
       const manager = makeManager({})
       manager.getClient()
       const client = redisInstances[0]
@@ -450,9 +449,48 @@ describe('ConnectionManager', () => {
       await manager.onApplicationShutdown()
 
       expect(client?.quit).toHaveBeenCalledTimes(1)
-      const next = manager.getClient()
-      expect(next).not.toBe(client)
-      expect(redisInstances).toHaveLength(2)
+    })
+
+    // Scenario: something asks for the client after shutdown has run.
+    // Rule: it is refused rather than given a new client, because nothing would ever close that
+    // one: it would keep reconnecting and keep the process alive.
+    it('refuses getClient after shutdown instead of opening a client nothing closes', async () => {
+      const manager = makeManager({})
+      manager.getClient()
+      await manager.onApplicationShutdown()
+
+      let thrown: unknown
+      try {
+        manager.getClient()
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(CacheException)
+      expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_LOST)
+      expect((thrown as CacheException).details).toEqual({ reason: 'shutdown' })
+      expect(redisInstances).toHaveLength(1)
+    })
+
+    // Scenario: shutdown runs on a manager that never opened a client (lazy connect, never used).
+    // Rule: the manager is still shut down, so a later getClient does not open one.
+    it('refuses getClient after a shutdown that had no client to close', async () => {
+      const manager = makeManager({})
+
+      await manager.onApplicationShutdown()
+
+      expect(() => manager.getClient()).toThrow(CacheException)
+      expect(redisInstances).toHaveLength(0)
+    })
+
+    // Scenario: a subscriber client is requested after shutdown.
+    // Rule: refused for the same reason, and no instance is created.
+    it('refuses a subscriber client after shutdown', async () => {
+      const manager = makeManager({})
+      await manager.onApplicationShutdown()
+
+      expect(() => manager.createSubscriberClient()).toThrow(CacheException)
+      expect(redisInstances).toHaveLength(0)
     })
 
     // On a quit that exceeds the shutdown timeout, the manager must fall back to
