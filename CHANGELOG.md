@@ -10,19 +10,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- `ConnectionManager.getClient()` and `createSubscriberClient()`, and so every `CacheService` and
-  `PubSubService` call, no longer open a new Redis client once shutdown has begun. The first call after
+- `ConnectionManager.getClient()` and `createSubscriberClient()`, and so the `CacheService` and
+  `PubSubService` calls that reach Redis, no longer open a new Redis client once shutdown has begun. The first call after
   `onApplicationShutdown` quietly built a client that nothing closed: it kept reconnecting and could keep
   the process alive. The call now fails with a `CacheException` whose code is `cache.connection_lost` and
   whose `details.reason` is `'shutdown'`; `PubSubService.subscribe` and `psubscribe` reject the same way
-  once the service itself has shut down.
+  once the service itself has shut down. `CacheService.isHealthy()` resolves `false` instead.
 
 #### Apply to a consumer
 
 A cache call made after the application has shut down used to succeed against a fresh connection and now
-rejects (`getClient()` throws). Work that still touches the cache from its own shutdown hook must run
+rejects; `CacheService.pipeline()` and `getClient()` throw synchronously. Work that still touches the cache from its own shutdown hook must run
 before the library's `onApplicationShutdown` closes the client; a hook ordered after it has to treat the
-cache as gone. The declarations gain only a private member on `ConnectionManager`.
+cache as gone. The declarations gain only a private method on `ConnectionManager`.
 
 ## [1.2.10] - 2026-11-06
 
