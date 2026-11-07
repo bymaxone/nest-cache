@@ -15,12 +15,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `onApplicationShutdown` quietly built a client that nothing closed: it kept reconnecting and could keep
   the process alive. The call now fails with a `CacheException` whose code is `cache.connection_lost` and
   whose `details.reason` is `'shutdown'`; `PubSubService.subscribe` and `psubscribe` reject the same way
-  once the service itself has shut down. `CacheService.isHealthy()` resolves `false` instead.
+  once the service itself has shut down.
 
 #### Apply to a consumer
 
 A cache call made after the application has shut down used to succeed against a fresh connection and now
-rejects; `CacheService.pipeline()` and `getClient()` throw synchronously. Work that still touches the cache from its own shutdown hook must run
+rejects, and `pipeline()` and `getClient()` throw. Work that still touches the cache from its own shutdown hook must run
 before the library's `onApplicationShutdown` closes the client; a hook ordered after it has to treat the
 cache as gone. The declarations gain only a private method on `ConnectionManager`.
 
