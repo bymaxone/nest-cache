@@ -89,7 +89,7 @@ const makeManager = (
  * namespace binding the source also imports) and returns the array it fills with
  * every instance the system under test constructs — including exceptions the
  * manager swallows internally (e.g. the shutdown-timeout exception caught by
- * `onModuleDestroy`). Lets a test assert the raw `details` of an otherwise
+ * `onApplicationShutdown`). Lets a test assert the raw `details` of an otherwise
  * unobservable throw. Restore with `jest.restoreAllMocks()` in `afterEach`.
  */
 const captureCacheExceptions = (): CacheException[] => {
@@ -177,7 +177,7 @@ describe('ConnectionManager', () => {
     // onModuleInit by module depth, and `app.get()` works between
     // `NestFactory.create()` and `app.init()`. Init must then ADOPT that client:
     // assigning a fresh one would leave the first socket open with no reference
-    // left to close it, since onModuleDestroy quits only the current client.
+    // left to close it, since onApplicationShutdown quits only the current client.
     it('adopts a client opened before init instead of stranding its socket', async () => {
       nextRedisStatus = 'ready'
       const manager = makeManager({})
@@ -190,7 +190,7 @@ describe('ConnectionManager', () => {
       expect(redisInstances).toHaveLength(1)
 
       // The single client is the one that gets quit — nothing is left behind.
-      await manager.onModuleDestroy()
+      await manager.onApplicationShutdown()
       expect(client?.quit).toHaveBeenCalledTimes(1)
       expect(client?.disconnect).not.toHaveBeenCalled()
     })
@@ -430,13 +430,13 @@ describe('ConnectionManager', () => {
     })
   })
 
-  describe('onModuleDestroy', () => {
+  describe('onApplicationShutdown', () => {
     // Destroying a manager that never created a client must resolve quietly and
     // never call quit — the early-return guard.
     it('resolves and skips quit when no client exists', async () => {
       const manager = makeManager({})
 
-      await expect(manager.onModuleDestroy()).resolves.toBeUndefined()
+      await expect(manager.onApplicationShutdown()).resolves.toBeUndefined()
       expect(redisInstances).toHaveLength(0)
     })
 
@@ -447,7 +447,7 @@ describe('ConnectionManager', () => {
       manager.getClient()
       const client = redisInstances[0]
 
-      await manager.onModuleDestroy()
+      await manager.onApplicationShutdown()
 
       expect(client?.quit).toHaveBeenCalledTimes(1)
       const next = manager.getClient()
@@ -473,7 +473,7 @@ describe('ConnectionManager', () => {
         const client = redisInstances[0]
         client?.quit.mockReturnValue(new Promise<string>(() => {}))
 
-        const destroy = manager.onModuleDestroy()
+        const destroy = manager.onApplicationShutdown()
         await jest.advanceTimersByTimeAsync(100)
         await destroy
 
@@ -503,7 +503,7 @@ describe('ConnectionManager', () => {
       const client = redisInstances[0]
       client?.quit.mockRejectedValue(new Error('quit failed'))
 
-      await manager.onModuleDestroy()
+      await manager.onApplicationShutdown()
 
       expect(client?.disconnect).toHaveBeenCalledTimes(1)
       expect(onEvent).toHaveBeenCalledWith('error', {

@@ -56,7 +56,7 @@ describe('CacheService', () => {
   })
 
   afterEach(async () => {
-    await connection.onModuleDestroy()
+    await connection.onApplicationShutdown()
   })
 
   describe('a stored value that is not JSON', () => {
