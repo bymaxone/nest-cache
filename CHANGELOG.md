@@ -20,17 +20,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 #### Apply to a consumer
 
 `onModuleDestroy` is gone from `ConnectionManager` and `PubSubService`, replaced by
-`onApplicationShutdown`. Nest calls the new hook for you, but only when shutdown hooks are enabled
-(`app.enableShutdownHooks()`), as it already did for the old one; code that called
+`onApplicationShutdown`. Nest calls the new hook for you on `app.close()`, and on a
+signal when shutdown hooks are enabled (`app.enableShutdownHooks()`), as it did for the old one; code that called
 `connection.onModuleDestroy()` or `pubsub.onModuleDestroy()` itself, in a test for instance, calls
 `onApplicationShutdown()` instead. Other providers that use the cache in their own
 `onModuleDestroy` or `beforeApplicationShutdown` now find it open rather than closed.
-
-### Changed
-
-- Correction to the 1.2.9 entry about tsup 9: the declaration files spell the final export list as
-  `export { A }; export type { B }`, where tsup 8 wrote `export { A, type B }`. `pnpm check:api` still
-  reports no difference.
 
 ## [1.2.9] - 2026-11-06
 
