@@ -54,10 +54,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // server's, the externalisation has broken and DI is about to fail at a
 // consumer's runtime.
 //
+// 1.2.12: server raised 8.10 -> 9.20 kB. The key escape (token writer and decoder, the escape
+// sets, and the new `KeyBuilder` methods) brought it to 8.28 kB, so 9.20 leaves the same
+// ~11% of headroom as the other budgets.
+//
 // Budgets are measured on the bundle after the comments are stripped: server 7.29,
 // admin 4.80 and shared 0.45 kB, each with about 11% of headroom.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 8.1 * 1024 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 9.2 * 1024 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5.3 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }
 ]
