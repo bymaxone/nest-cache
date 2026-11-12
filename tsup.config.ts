@@ -43,6 +43,34 @@ export default defineConfig([
     treeshake: true,
     sourcemap: false
   },
+  // Metrics entry — publishes the connection lifecycle on the application's registry.
+  //
+  // `@bymax-one/nest-core` and `prom-client` are optional peers and EXTERNAL: this is the only entry
+  // that imports either, so a consumer that never imports it never loads them. `@bymax-one/nest-cache`
+  // is external for the reason the admin entry gives: one copy of the types per install.
+  {
+    entry: { 'metrics/index': 'src/metrics/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({
+      js: format === 'esm' ? '.mjs' : '.cjs'
+    }),
+    external: [
+      /^@nestjs\//,
+      'reflect-metadata',
+      'ioredis',
+      '@bymax-one/nest-cache',
+      '@bymax-one/nest-core',
+      'prom-client'
+    ],
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
+  },
   // Shared entry — types + constants (zero deps)
   {
     entry: { 'shared/index': 'src/shared/index.ts' },

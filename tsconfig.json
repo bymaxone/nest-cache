@@ -25,7 +25,8 @@
     "paths": {
       "@bymax-one/nest-cache": ["./src/server/index.ts"],
       "@bymax-one/nest-cache/shared": ["./src/shared/index.ts"],
-      "@bymax-one/nest-cache/admin": ["./src/admin/index.ts"]
+      "@bymax-one/nest-cache/admin": ["./src/admin/index.ts"],
+      "@bymax-one/nest-cache/metrics": ["./src/metrics/index.ts"]
     }
   },
   "include": ["src/**/*"],

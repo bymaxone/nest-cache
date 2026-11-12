@@ -72,9 +72,13 @@ function publicImport(entry, specifier) {
   return `import { ${parts.join(', ')} } from '${specifier}'`
 }
 
-/** The server and `./admin` entry points, both imported in full. */
+/** The server, `./admin` and `./metrics` entry points, each imported in full. */
 function publicImports() {
-  return `${publicImport('server', PKG.name)}\n${publicImport('admin', `${PKG.name}/admin`)}`
+  return [
+    publicImport('server', PKG.name),
+    publicImport('admin', `${PKG.name}/admin`),
+    publicImport('metrics', `${PKG.name}/metrics`)
+  ].join('\n')
 }
 
 /** One `import ... from '...'` statement, as the README writes it. */
