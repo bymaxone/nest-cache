@@ -39,7 +39,13 @@ const EXPECTED_DIST_FILES = [
   'dist/shared/index.mjs',
   'dist/shared/index.cjs',
   'dist/shared/index.d.ts',
-  'dist/shared/index.d.cts'
+  'dist/shared/index.d.cts',
+  'dist/admin/index.mjs',
+  'dist/admin/index.cjs',
+  'dist/metrics/index.mjs',
+  'dist/metrics/index.cjs',
+  'dist/metrics/index.d.ts',
+  'dist/metrics/index.d.cts'
 ]
 
 const EXPECTED_SERVER_EXPORTS = [
@@ -134,6 +140,48 @@ for (const name of EXPECTED_SHARED_EXPORTS) {
     pass(`cjs export ${name}`)
   } else {
     fail(`Missing CJS export (shared): ${name}`)
+  }
+}
+
+// ── 4c. Optional peers stay out of every entry but `./metrics` ───────────────
+
+section('4c. Optional peers load only through ./metrics')
+const OPTIONAL_PEERS = ['@bymax-one/nest-core', 'prom-client']
+// A resolve hook records every specifier the loader is asked for, in ESM and CJS alike, so the
+// check holds for the entry's whole import graph rather than for its top-level imports.
+const PROBE = `
+import { registerHooks } from 'node:module'
+const seen = new Set()
+registerHooks({ resolve(specifier, context, next) { seen.add(specifier); return next(specifier, context) } })
+const [mode, file] = process.argv.slice(1)
+if (mode === 'esm') await import(file); else (await import('node:module')).createRequire(import.meta.url)(file)
+process.stdout.write(JSON.stringify([...seen]))
+`
+for (const entry of ['server', 'admin', 'shared', 'metrics']) {
+  for (const [mode, ext] of [
+    ['esm', 'mjs'],
+    ['cjs', 'cjs']
+  ]) {
+    const run = spawnSync(
+      process.execPath,
+      ['--input-type=module', '-e', PROBE, mode, resolve(ROOT, `dist/${entry}/index.${ext}`)],
+      { cwd: ROOT, encoding: 'utf8' }
+    )
+    if (run.status !== 0) {
+      fail(`${entry} (${mode}) did not load: ${run.stderr.trim().split('\n')[0]}`)
+      continue
+    }
+    const loaded = OPTIONAL_PEERS.filter((peer) =>
+      JSON.parse(run.stdout).some((id) => id === peer || id.startsWith(`${peer}/`))
+    )
+    const expected = entry === 'metrics' ? OPTIONAL_PEERS : []
+    if (JSON.stringify(loaded) === JSON.stringify(expected)) {
+      pass(
+        `${entry} (${mode}) loads ${loaded.length === 0 ? 'neither optional peer' : 'both optional peers'}`
+      )
+    } else {
+      fail(`${entry} (${mode}) loaded [${loaded.join(', ')}], expected [${expected.join(', ')}]`)
+    }
   }
 }
 

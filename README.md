@@ -97,21 +97,26 @@ pnpm add @bymax-one/nest-cache ioredis
 
 ## 📦 Subpath Exports
 
-One package, three entry points — import only what your app needs:
+One package, four entry points — import only what your app needs:
 
-| Subpath    | Import                         | Purpose                                                                                                  |              Dependencies              |
-| ---------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- | :------------------------------------: |
-| **Server** | `@bymax-one/nest-cache`        | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException` | NestJS 11, ioredis 6, reflect-metadata |
-| **Admin**  | `@bymax-one/nest-cache/admin`  | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal     | NestJS 11, ioredis 6, the server entry |
-| **Shared** | `@bymax-one/nest-cache/shared` | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                  |                  None                  |
+| Subpath     | Import                          | Purpose                                                                                                  |                                     Dependencies                                     |
+| ----------- | ------------------------------- | -------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------: |
+| **Server**  | `@bymax-one/nest-cache`         | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException` |                        NestJS 11, ioredis 6, reflect-metadata                        |
+| **Admin**   | `@bymax-one/nest-cache/admin`   | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal     |                        NestJS 11, ioredis 6, the server entry                        |
+| **Metrics** | `@bymax-one/nest-cache/metrics` | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core` | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
+| **Shared**  | `@bymax-one/nest-cache/shared`  | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                  |                                         None                                         |
 
 ```
 shared (zero deps)
      ↑
   server  ←  admin
+     ↑
+          metrics
 ```
 
 `/admin` is a **privileged** surface and is kept out of the main entry on purpose: importing it is a greppable, reviewable act, a consumer who never wires it cannot resolve a reveal service from DI by accident, and it never lands in the main bundle.
+
+`/metrics` is the only entry that loads `@bymax-one/nest-core` or `prom-client`, both optional peers: `.`, `/admin` and `/shared` never import either.
 
 The `/shared` subpath is safe to import in isomorphic code, test helpers, CLI scripts, or shared packages that must not pull in NestJS or ioredis.
 
@@ -480,6 +485,52 @@ export class HealthController {
   }
 }
 ```
+
+---
+
+## 📊 Connection metrics (`/metrics`)
+
+The readiness probe says whether the cache answers _now_. It cannot see a connection that drops and
+recovers between two probes, which is the failure worth seeing. `/metrics` counts the lifecycle
+events of each connection and reports whether each is ready, on the `prom-client` registry that
+[`@bymax-one/nest-core`](https://www.npmjs.com/package/@bymax-one/nest-core) already serves, with
+nothing to wire beyond two providers. It needs `@bymax-one/nest-core` `^1.1.0` and `prom-client`
+`^15`, both optional peers.
+
+```typescript
+import { BymaxCacheModule } from '@bymax-one/nest-cache'
+import {
+  CACHE_CONNECTION_TALLY,
+  CacheConnectionMetrics,
+  CacheConnectionTally
+} from '@bymax-one/nest-cache/metrics'
+
+const tally = new CacheConnectionTally()
+
+@Module({
+  imports: [BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, events: tally.events })],
+  providers: [{ provide: CACHE_CONNECTION_TALLY, useValue: tally }, CacheConnectionMetrics]
+})
+export class ObservabilityModule {}
+```
+
+| Metric                                | Type    | Labels          | Meaning                                                 |
+| ------------------------------------- | ------- | --------------- | ------------------------------------------------------- |
+| `bymax_cache_connection_events_total` | counter | `role`, `event` | Lifecycle events since start, per connection            |
+| `bymax_cache_connection_ready`        | gauge   | `role`          | `1` while the connection's latest transition is `ready` |
+
+- **Everything is per role.** The module runs a main client and a dedicated subscriber, and both
+  emit the same events. Alert on `role="main"`; the subscriber is control-plane traffic whose
+  loss costs Pub/Sub delivery, not cache reads.
+- **An `error` carrying a `reason` is not a socket failure.** `forced_disconnect` (graceful
+  shutdown) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
+  Only an `error` carrying the driver's message does.
+- **Labels come from a closed set.** `role` is `main` or `subscriber`; anything else is recorded as
+  `unknown`. No part of an error message is ever a label, since a driver message can carry a host or
+  a credential. To record a connection of your own under its own role, declare it with
+  `new CacheConnectionTally({ roles: ['auth'] })` and pass `tally.eventsAs('auth')` as its `events`.
+- Events recorded before the registry exists are published too: the tally records from the first
+  event, and each scrape reads it.
 
 ---
 

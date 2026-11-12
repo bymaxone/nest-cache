@@ -21,9 +21,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   A key separator containing `%` is rejected under `'strict'`, and only there; `escapePart` refuses it in either
   mode, since the escape character would reappear as the separator.
 
+- `@bymax-one/nest-cache/metrics`, a new subpath that publishes the cache connections' lifecycle on the `prom-client`
+  registry that `@bymax-one/nest-core` serves. `CacheConnectionTally` records each connection event per role
+  (`main`, `subscriber`) and hands `BymaxCacheModule` its `events`; `CacheConnectionMetrics` is a
+  nest-core metrics contributor that registers `bymax_cache_connection_events_total` (by `role` and `event`) and
+  `bymax_cache_connection_ready` (by `role`). An `error` event carrying a `reason` (a forced disconnect at shutdown, a
+  subscriber handler that threw) is counted but never moves readiness. Labels come from a closed set, and no part
+  of an error message is ever a label. `@bymax-one/nest-core` (`^1.1.0`) and `prom-client` (`^15`) are optional
+  peers, and no other entry loads either.
+
 #### Apply to a consumer
 
-Nothing changes unless you set `keyEscaping: 'strict'`: the default keeps every key byte-identical.
+Nothing changes unless you set `keyEscaping: 'strict'` or import `@bymax-one/nest-cache/metrics`: the default keeps every key byte-identical.
 
 Switching to `'strict'` changes the key of every part the escape rewrites, that is, a part holding the key
 separator, `%`, an unpaired surrogate, or (in the prefix) `*`, `?`, `[` or `\`. A part holding none of those
