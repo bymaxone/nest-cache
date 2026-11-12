@@ -32,7 +32,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 #### Apply to a consumer
 
-Nothing changes unless you set `keyEscaping: 'strict'` or import `@bymax-one/nest-cache/metrics`: the default keeps every key byte-identical, and no other entry loads the new optional peers.
+Nothing changes unless you set `keyEscaping: 'strict'` or import `@bymax-one/nest-cache/metrics`: the default keeps every key byte-identical.
 
 Switching to `'strict'` changes the key of every part the escape rewrites, that is, a part holding the key
 separator, `%`, an unpaired surrogate, or (in the prefix) `*`, `?`, `[` or `\`. A part holding none of those

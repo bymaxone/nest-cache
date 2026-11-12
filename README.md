@@ -116,7 +116,7 @@ shared (zero deps)
 
 `/admin` is a **privileged** surface and is kept out of the main entry on purpose: importing it is a greppable, reviewable act, a consumer who never wires it cannot resolve a reveal service from DI by accident, and it never lands in the main bundle.
 
-`/metrics` is the only entry that loads `@bymax-one/nest-core` or `prom-client`, both optional peers: `.`, `/admin` and `/shared` never import either, which the release gate proves from the built files in ESM and CJS.
+`/metrics` is the only entry that loads `@bymax-one/nest-core` or `prom-client`, both optional peers: `.`, `/admin` and `/shared` never import either.
 
 The `/shared` subpath is safe to import in isomorphic code, test helpers, CLI scripts, or shared packages that must not pull in NestJS or ioredis.
 
@@ -520,7 +520,7 @@ export class ObservabilityModule {}
 | `bymax_cache_connection_ready`        | gauge   | `role`          | `1` while the connection's latest transition is `ready` |
 
 - **Everything is per role.** The module runs a main client and a dedicated subscriber, and both
-  emit the same six events. Alert on `role="main"`; the subscriber is control-plane traffic whose
+  emit the same events. Alert on `role="main"`; the subscriber is control-plane traffic whose
   loss costs Pub/Sub delivery, not cache reads.
 - **An `error` carrying a `reason` is not a socket failure.** `forced_disconnect` (graceful
   shutdown) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
