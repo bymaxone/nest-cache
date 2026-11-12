@@ -636,7 +636,7 @@ Every arm except `unsupported` carries `isComplete`; `false` means the value was
 - `sampledCount` / `sampledBytes` are sums over a capped `SCAN`, not measurements of the keyspace; `isComplete` is the fact.
 - A page may carry slightly more than `scanLimit` entries: `SCAN` returns whole batches, so the limit stops the loop rather than trimming the result.
 - Sizing is opt-in (`includeSize`), and every pipeline batch is bounded in commands, not keys, because a large pipeline blocks the single-threaded server for the whole burst.
-- `connection.url` is never read into the admin subpath; the config payload carries host, port and a TLS flag.
+- The config payload carries a connection's host, port and a TLS flag, never its URL or credentials.
 - `mem_fragmentation_ratio` is reported raw; turning it into a verdict is deployment policy.
 
 ### Cluster

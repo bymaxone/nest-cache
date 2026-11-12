@@ -18,8 +18,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - README: the build-tool badge now says tsup 9, the `@bymax-one/nest-queue` entry says it takes this module's
-  connection (its Mode A) instead of owning its own, and "zero runtime dependencies" is worded as no runtime
-  dependencies. Maintainer notes, measurement notes, mentions of libraries that do not exist, links to the
+  connection (its Mode A) instead of owning its own. Maintainer notes, measurement notes, mentions of libraries that do not exist, links to the
   specification and repeated sections (the admin rationale, the security table, the design principles) are
   removed, so the page documents the package rather than its history.
 
