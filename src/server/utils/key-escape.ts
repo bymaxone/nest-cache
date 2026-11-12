@@ -23,11 +23,8 @@ export const GLOB_CHARS = '*?[\\'
 /** One escape token: `%XX` (ASCII) or `%uXXXX` (any other code unit). */
 const TOKEN = /(%[0-9A-F]{2}|%u[0-9A-F]{4})/
 
-/** Whether the code unit is a UTF-16 high (leading) surrogate. */
-const isHigh = (unit: number): boolean => unit >= 0xd800 && unit <= 0xdbff
-
-/** Whether the code unit is a UTF-16 low (trailing) surrogate. */
-const isLow = (unit: number): boolean => unit >= 0xdc00 && unit <= 0xdfff
+/** Whether the code unit is a UTF-16 surrogate, which on its own has no UTF-8 encoding. */
+const isSurrogate = (unit: number): boolean => unit >= 0xd800 && unit <= 0xdfff
 
 /**
  * Writes one code unit as its token.
@@ -74,21 +71,28 @@ export function buildEscapeSet(separator: string, escapeGlob: boolean): Readonly
  */
 export function escapeKeyPart(part: string, special: ReadonlySet<string>): string {
   let out = ''
-  for (let i = 0; i < part.length; i += 1) {
-    const unit = part.charCodeAt(i)
-    const next = part.charCodeAt(i + 1)
-    if (isHigh(unit) && isLow(next)) {
-      const whole = part.slice(i, i + 2)
-      out +=
-        special.has(whole.charAt(0)) || special.has(whole.charAt(1))
-          ? token(unit) + token(next)
-          : whole
-      i += 1
-    } else if (special.has(part.charAt(i)) || isHigh(unit) || isLow(unit)) {
-      out += token(unit)
+  // Iterating a string yields code points: a valid pair arrives as one two-unit string and an
+  // unpaired surrogate as a single unit, so no index is advanced by hand.
+  for (const char of part) {
+    if (char.length === 2) {
+      out += special.has(char.charAt(0)) || special.has(char.charAt(1)) ? escapeUnits(char) : char
     } else {
-      out += part.charAt(i)
+      out += special.has(char) || isSurrogate(char.charCodeAt(0)) ? token(char.charCodeAt(0)) : char
     }
+  }
+  return out
+}
+
+/**
+ * Writes every code unit of `chars` as its token.
+ *
+ * @param chars - The characters to rewrite.
+ * @returns The concatenated tokens.
+ */
+function escapeUnits(chars: string): string {
+  let out = ''
+  for (let i = 0; i < chars.length; i += 1) {
+    out += token(chars.charCodeAt(i))
   }
   return out
 }
