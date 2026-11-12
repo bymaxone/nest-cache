@@ -350,7 +350,7 @@ keys.escapePart('tenant:7') // 'tenant%3A7', safe to join several fields into on
 keys.parse('app:a%3Ab:c') // { prefix: 'a:b', id: 'c' }, or null for a key it could not have written
 ```
 
-**Turning `'strict'` on changes the key of every part that holds the separator or `%`.** A host that
+**Turning `'strict'` on changes the key of every part the escape rewrites.** A host that
 followed the earlier advice and encoded each field with `encodeURIComponent` is in that group: a
 field it encoded to `a%3Ab` is now escaped again to `a%253Ab`, so drop the per-field encoding when
 you switch, and expect those entries to miss once. `KeyBuilder.buildLegacy(prefix, id)` returns the
@@ -358,7 +358,7 @@ old key, for a host that reads the old key and writes the new one. A key with a 
 same in both modes.
 
 Every instance sharing a Redis must run one mode. During a rolling deploy the two modes compose the
-same lock or rate-limit key differently **only for a part that holds the separator or `%`**: such a
+same lock or rate-limit key differently **only for a part the escape rewrites**: such a
 lock can be held once per mode, and such a counter splits in two until the older instances are gone.
 Quiesce locks and limits on those prefixes while you switch, or accept up to twice the budget for the
 counter's TTL. `CacheStatusService.config().keyEscaping` (from `./admin`) shows what an instance runs.

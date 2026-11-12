@@ -918,7 +918,7 @@ export class KeyBuilder {
 - ❌ Composing the key manually at the call site
 - ❌ A `prefix` or `id` that contains the key separator under `keyEscaping: 'legacy'` (the default). The library does **not** enforce this: `KeyBuilder.build` rejects only an empty `prefix` or `id`, and keys collide silently: `build('a', 'b:c') === build('a:b', 'c') === 'app:a:b:c'`. Under `'strict'` they do not.
 - ❌ A `prefix` that contains Redis glob metacharacters (`*`, `?`, `[`, `\`) under `'legacy'`: `keys()` and `scan()` compose the `prefix` into their match pattern, so the pattern widens, escapes or matches nothing. Under `'strict'` the prefix is a literal.
-- ✅ Set `keyEscaping: 'strict'`. To join several fields into one `id`, escape each with `KeyBuilder.escapePart` and join them with the separator. Switching changes the key of every part holding the separator or `%` (see README, Key Namespacing, for the migration and the mixed-version window); under `'legacy'` the caller must reject or escape the separator and glob characters itself.
+- ✅ Set `keyEscaping: 'strict'`. To join several fields into one `id`, escape each with `KeyBuilder.escapePart` and join them with the separator. Switching changes the key of every part the escape rewrites (see README, Key Namespacing, for the migration and the mixed-version window); under `'legacy'` the caller must reject or escape the separator and glob characters itself.
 
 ---
 
