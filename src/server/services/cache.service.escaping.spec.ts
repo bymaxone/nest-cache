@@ -94,4 +94,21 @@ describe('CacheService under strict key escaping', () => {
 
     expect(await made.cache.keys('u*', '*')).toEqual(['test:u%2A:x'])
   })
+
+  // An unpaired `]` is a literal to Redis and is deliberately not rewritten, so it must not widen
+  // either. Pinned because dropping it from the escape set is only safe while that stays true.
+  it('does not let an unpaired ] in the prefix widen the scan', async () => {
+    const made = await setup('strict')
+    connection = made.connection
+    await made.cache.set('a]', 'x', 'one')
+    await made.cache.set('a', 'x', 'two')
+    await made.cache.set('ab', 'x', 'three')
+
+    expect(await made.cache.keys('a]', '*')).toEqual(['test:a]:x'])
+    const scanned: string[] = []
+    for await (const key of made.cache.scan('a]', '*')) {
+      scanned.push(key)
+    }
+    expect(scanned).toEqual(['test:a]:x'])
+  })
 })
