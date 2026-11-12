@@ -314,6 +314,21 @@ describe('validateOptions', () => {
     )
   })
 
+  // A host that meets this refusal at boot sees only the error's message, so the message itself
+  // must name the rule, not only the `details` payload.
+  it('names the percent-separator rule in the boot error message', () => {
+    let caught: unknown
+    try {
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '%' })
+    } catch (error) {
+      caught = error
+    }
+
+    expect((caught as Error).message).toContain(
+      "a separator containing '%' is rejected under keyEscaping 'strict'"
+    )
+  })
+
   // The same separator boots under legacy: a patch must not start failing a configuration that
   // passes today.
   it('accepts a separator containing % under legacy escaping, explicit or default', () => {

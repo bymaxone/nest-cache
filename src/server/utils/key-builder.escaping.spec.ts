@@ -264,6 +264,21 @@ describe('KeyBuilder key escaping', () => {
       })
     })
 
+    // The refusal's message names the rule, since that is all a host reads when it is thrown.
+    it('escapePart names the percent-separator rule in its error message', () => {
+      const builder = makeBuilder({ keySeparator: '%' })
+      let caught: unknown
+      try {
+        builder.escapePart('a')
+      } catch (error) {
+        caught = error
+      }
+
+      expect((caught as Error).message).toContain(
+        "a separator containing '%' is rejected under keyEscaping 'strict'"
+      )
+    })
+
     // A malformed or foreign part must decline, never decode to something the escape did not write.
     it.each(['a%', '%zz', '%u12', '%u12G4', '%FF', '%3a', '%u00e9', 'a%2'])(
       'unescapePart returns null for %j',
