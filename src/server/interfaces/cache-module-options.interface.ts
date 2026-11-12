@@ -106,6 +106,9 @@ export interface BymaxCacheClusterConnection {
   options?: ClusterOptions
 }
 
+/** How `prefix` and `id` are joined into a key; see {@link BymaxCacheModuleOptions.keyEscaping}. */
+export type KeyEscaping = 'legacy' | 'strict'
+
 /**
  * Synchronous configuration for `BymaxCacheModule.forRoot()`.
  *
@@ -124,6 +127,18 @@ export interface BymaxCacheModuleOptions {
   namespace?: string
   /** Separator between namespace/prefix/id segments. Default: `':'`. */
   keySeparator?: string
+  /**
+   * How `prefix` and `id` are joined into a key. Default: `'legacy'`.
+   *
+   * - `'legacy'` joins them as given, so `('a', 'b:c')` and `('a:b', 'c')` name one key.
+   * - `'strict'` escapes each part (`%`, the separator, glob metacharacters in the prefix, unpaired
+   *   surrogates), so no two distinct tuples share a key. A part holding none of those keeps its key.
+   *   A separator containing `%` is rejected under `'strict'`.
+   *
+   * Every instance sharing a Redis must use one mode: two modes compose different keys for a part
+   * that holds a separator or `%`.
+   */
+  keyEscaping?: KeyEscaping
   /** Custom serializer. Default: `JsonSerializer`. */
   serializer?: ISerializer
   /** Connection lifecycle event hooks — plug a logger or metrics sink here. */

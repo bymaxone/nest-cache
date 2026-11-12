@@ -11,7 +11,7 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
 
 /**
  * Module options after defaults are merged. The defaulted fields
- * (`mode`, `namespace`, `keySeparator`, `shutdownTimeoutMs`,
+ * (`mode`, `namespace`, `keySeparator`, `keyEscaping`, `shutdownTimeoutMs`,
  * `allowFlushInProduction`, `isGlobal`) are guaranteed present; the
  * mode/connection blocks are present keys whose value may be `undefined`.
  */
@@ -21,6 +21,7 @@ export type ResolvedOptions = Required<
     | 'mode'
     | 'namespace'
     | 'keySeparator'
+    | 'keyEscaping'
     | 'shutdownTimeoutMs'
     | 'allowFlushInProduction'
     | 'isGlobal'

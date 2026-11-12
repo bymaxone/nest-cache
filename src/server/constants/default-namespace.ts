@@ -13,6 +13,12 @@ export const DEFAULT_NAMESPACE = 'app' as const
 export const DEFAULT_KEY_SEPARATOR = ':' as const
 
 /**
+ * Default key composition: parts are joined as given, so a host that does nothing keeps every key
+ * it wrote under an earlier release.
+ */
+export const DEFAULT_KEY_ESCAPING = 'legacy' as const
+
+/**
  * The port Redis listens on when a connection URL does not name one.
  *
  * Shared by the URL parser that builds connect options and by the admin surface

@@ -268,6 +268,7 @@ Keys resolve to `app:user-profile:<userId>` — namespaced automatically.
 | `scripts`                | `IScriptDefinition[]`                     | —                | Lua scripts to preload on init                                                                                                                                                             |
 | `shutdownTimeoutMs`      | `number`                                  | `5000`           | Graceful `quit()` timeout before forced `disconnect()` (minimum `100`)                                                                                                                     |
 | `keySeparator`           | `string`                                  | `':'`            | Separator between namespace, prefix and id segments                                                                                                                                        |
+| `keyEscaping`            | `'legacy' \| 'strict'`                    | `'legacy'`       | How prefix and id are joined; `'strict'` escapes each part so no two tuples share a key (see Key Namespacing)                                                                              |
 | `allowFlushInProduction` | `boolean`                                 | `false`          | Allows `flushNamespace()` when `NODE_ENV=production`                                                                                                                                       |
 | `isGlobal`               | `boolean`                                 | `true`           | Register the module globally                                                                                                                                                               |
 | `sentinel`               | `{ sentinels, name, ... }`                | —                | Sentinel connection block; required when `mode: 'sentinel'`                                                                                                                                |
@@ -326,25 +327,41 @@ keeps tenants and features isolated and makes `flushNamespace()` surgical. Reach
 `getClient()` to set raw, un-namespaced keys is supported as an escape hatch but documented as an
 anti-pattern.
 
-`prefix` and `id` are supplied by the caller and the library validates them only for emptiness
-(`INVALID_KEY`); it does **not** reject the separator or glob characters inside them. Two
-consequences follow:
+`prefix` and `id` are supplied by the caller, and the library always rejects an empty one
+(`INVALID_KEY`). What it does with a separator or a glob character inside them depends on
+`keyEscaping`:
 
-- **Separator collision.** `build('a', 'b:c')` and `build('a:b', 'c')` both produce `app:a:b:c`, so
-  two different `(prefix, id)` pairs address the same key.
-- **Glob widening.** `keys(prefix, pattern)` and `scan(prefix, pattern)` pass the composed key to
-  Redis as a match pattern, so a glob metacharacter (`*`, `?`, `[`, `\`) in `prefix` can match keys
-  outside that prefix, still within the namespace. Single-key commands (`get`, `set`, `del`, ...)
-  treat the key literally and are not affected; `flushNamespace()` uses only the validated namespace.
+| `keyEscaping`        | `build('a', 'b:c')` | `build('a:b', 'c')` | Glob character in `prefix`                      |
+| -------------------- | ------------------- | ------------------- | ----------------------------------------------- |
+| `'legacy'` (default) | `app:a:b:c`         | `app:a:b:c`         | widens `keys()` / `scan()` within the namespace |
+| `'strict'`           | `app:a:b%3Ac`       | `app:a%3Ab:c`       | a literal                                       |
 
-This is documentation only; behavior is unchanged. When a `prefix` or `id` comes from untrusted
-input, encode each field, for example `cache.get(encodeURIComponent(prefix), encodeURIComponent(id))`.
-Keys are unambiguous only when `keySeparator` is a single character that appears in neither `prefix`
-nor `id`. Per-field encoding guarantees that for a separator `encodeURIComponent` escapes and never
-emits: the default `':'` qualifies; `%` and `- _ . ! ~ * ' ( )` do not, so for them reject the
-separator in the fields. A multi-character separator can straddle a field boundary (with `'aa'`,
-`('ba', 'c')` and `('b', 'ac')` build the same key), so keep a single character. A `prefix` used with
-`keys()` / `scan()` must also avoid glob characters (`*`, `?`, `[`, `\`).
+Under `'strict'` each part is escaped, so **no two distinct `(prefix, id)` tuples compose one key**.
+The escape rewrites `%`, every character of the separator, glob metacharacters (`*`, `?`, `[`, `\`)
+in the `prefix`, and unpaired surrogates as `%XX` (ASCII) or `%uXXXX` tokens. A part holding none of
+those keeps its bytes, so most keys do not change. `keys()` and `scan()` escape only the `prefix` and
+pass the pattern through as a glob. A separator containing `%` is rejected under `'strict'`.
+
+```ts
+BymaxCacheModule.forRoot({ connection, keyEscaping: 'strict' })
+
+const keys = app.get(KeyBuilder)
+keys.escapePart('tenant:7') // 'tenant%3A7', safe to join several fields into one id
+keys.parse('app:a%3Ab:c') // { prefix: 'a:b', id: 'c' }, or null for a key it could not have written
+```
+
+**Turning `'strict'` on changes the key of every part that holds the separator or `%`.** A host that
+followed the earlier advice and encoded each field with `encodeURIComponent` is in that group: a
+field it encoded to `a%3Ab` is now escaped again to `a%253Ab`, so drop the per-field encoding when
+you switch, and expect those entries to miss once. `KeyBuilder.buildLegacy(prefix, id)` returns the
+old key, for a host that reads the old key and writes the new one. A key with a plain part is the
+same in both modes.
+
+Every instance sharing a Redis must run one mode. During a rolling deploy the two modes compose the
+same lock or rate-limit key differently **only for a part that holds the separator or `%`**: such a
+lock can be held once per mode, and such a counter splits in two until the older instances are gone.
+Quiesce locks and limits on those prefixes while you switch, or accept up to twice the budget for the
+counter's TTL. `CacheStatusService.config().keyEscaping` (from `./admin`) shows what an instance runs.
 
 ---
 
@@ -685,7 +702,7 @@ The namespace itself is validated at module bootstrap, not at call time:
 
 A namespace containing the separator is rejected because `namespace: 'a:b'` and `namespace: 'a'` with prefix `b` would resolve to the same keyspace — a tenant boundary that reads as isolated but is not.
 
-The same collision exists below the namespace and is **not** enforced by the library: `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Behavior is unchanged; keys are unambiguous only for a single-character `keySeparator` that appears in neither `prefix` nor `id`: encode untrusted values per field with `encodeURIComponent` only when the separator is one it escapes and never emits (the default `':'` is; `%` and `- _ . ! ~ * ' ( )` are not), otherwise reject the separator in them; a multi-character separator can straddle a field boundary, so keep a single character; reject glob characters in `prefix`.
+The same collision exists below the namespace: under `keyEscaping: 'legacy'` (the default) `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Set `keyEscaping: 'strict'` and the composition is injective: no two distinct `(prefix, id)` tuples share a key, and a `prefix` is always a literal. See Key Namespacing for what changes when you switch.
 
 ### Deserialization fails closed
 
@@ -724,7 +741,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 - `namespace` is distinct per tenant or per application — it is the isolation boundary, and a shared value makes every other guarantee moot
 - `allowFlushInProduction` stays unset; if it is on, the reason belongs in a security review
 - `getClient()` and `pipeline()` call sites are audited — they are the only paths that bypass namespacing
-- `prefix` and `id` that derive from untrusted input are encoded per field (`encodeURIComponent`) — the library checks them only for emptiness, so a separator inside either collides keys and a glob character in `prefix` widens `keys()` / `scan()`; keys are unambiguous only for a single-character `keySeparator` absent from both fields; per-field `encodeURIComponent` provides that only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), otherwise the separator must be rejected, and a multi-character separator cannot be made safe that way; glob characters in `prefix` must be rejected
+- `keyEscaping: 'strict'` is set, so a separator inside `prefix` or `id` cannot collide two keys and a glob character in `prefix` cannot widen `keys()` / `scan()`; under the default `'legacy'`, `prefix` and `id` that derive from untrusted input must be rejected or escaped by the caller (`KeyBuilder.escapePart`)
 - Connection credentials come from the environment (`config.getOrThrow('REDIS_URL')`), never from a URL literal in module options in source control
 - `rediss://` (or an explicit `connection.tls`) is used for any Redis reachable off-host
 - Values that must not be readable by whoever can read Redis are encrypted by the application (or a custom `ISerializer`) before they are cached — the library stores what you hand it

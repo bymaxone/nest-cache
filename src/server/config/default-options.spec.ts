@@ -283,6 +283,56 @@ describe('validateOptions', () => {
     )
   })
 
+  // keyEscaping accepts exactly its two modes. A typo such as `'Strict'` must not fall through to
+  // either mode silently: a host that meant strict would run legacy and never know.
+  it('rejects an unknown keyEscaping value naming it', () => {
+    expectCode(
+      () =>
+        validateOptions({
+          connection: { host: 'h' },
+          keyEscaping: 'Strict' as unknown as 'strict'
+        }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      { reason: 'unknown keyEscaping', keyEscaping: 'Strict' }
+    )
+  })
+
+  // Under strict the escape character becomes part of every escaped part, so a separator holding it
+  // could reappear inside a part and make the composition ambiguous again.
+  it('rejects a separator containing % under strict escaping', () => {
+    expectCode(
+      () =>
+        validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '%' }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      { reason: 'key separator contains the escape character', separator: '%' }
+    )
+    expectCode(
+      () =>
+        validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: 'a%b' }),
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      { reason: 'key separator contains the escape character', separator: 'a%b' }
+    )
+  })
+
+  // The same separator boots under legacy: a patch must not start failing a configuration that
+  // passes today.
+  it('accepts a separator containing % under legacy escaping, explicit or default', () => {
+    expect(() => validateOptions({ connection: { host: 'h' }, keySeparator: '%' })).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'legacy', keySeparator: '%' })
+    ).not.toThrow()
+  })
+
+  // Both documented modes are accepted.
+  it('accepts both keyEscaping modes', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'legacy' })
+    ).not.toThrow()
+  })
+
   // A shutdown timeout below the minimum must throw CONNECTION_FAILED — too short
   // a window risks killing in-flight commands. Pins the `{ reason, value, min }`
   // details payload.
@@ -337,6 +387,7 @@ describe('applyDefaults', () => {
     expect(resolved.namespace).toBe(DEFAULT_NAMESPACE)
     expect(resolved.keySeparator).toBe(DEFAULT_KEY_SEPARATOR)
     expect(resolved.shutdownTimeoutMs).toBe(DEFAULT_SHUTDOWN_TIMEOUT_MS)
+    expect(resolved.keyEscaping).toBe('legacy')
     expect(resolved.allowFlushInProduction).toBe(false)
     expect(resolved.isGlobal).toBe(true)
     expect(resolved.mode).toBe('standalone')

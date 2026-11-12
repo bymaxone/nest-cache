@@ -8,7 +8,11 @@
  * `docs/technical_specification.md` §4.6.
  */
 import type { ResolvedOptions } from './resolved-options'
-import { DEFAULT_KEY_SEPARATOR, DEFAULT_NAMESPACE } from '../constants/default-namespace'
+import {
+  DEFAULT_KEY_ESCAPING,
+  DEFAULT_KEY_SEPARATOR,
+  DEFAULT_NAMESPACE
+} from '../constants/default-namespace'
 import {
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
   MIN_CONNECT_TIMEOUT_MS,
@@ -17,6 +21,7 @@ import {
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
+import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 
 /**
@@ -97,11 +102,13 @@ function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
  *
  * @param namespace - The resolved namespace.
  * @param separator - The resolved key separator.
+ * @param keyEscaping - The resolved key composition mode.
  * @throws {CacheException} `INVALID_NAMESPACE` when the namespace is empty,
- *   the separator is empty, the namespace contains the separator, or the
- *   namespace contains a Redis glob metacharacter.
+ *   the separator is empty, the namespace contains the separator, the
+ *   namespace contains a Redis glob metacharacter, `keyEscaping` is neither mode,
+ *   or the mode is `'strict'` and the separator contains the escape character.
  */
-function validateNamespace(namespace: string, separator: string): void {
+function validateNamespace(namespace: string, separator: string, keyEscaping: string): void {
   if (!namespace || namespace.trim() === '') {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, { namespace })
   }
@@ -113,6 +120,20 @@ function validateNamespace(namespace: string, separator: string): void {
   if (separator === '') {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
       reason: 'empty key separator',
+      separator
+    })
+  }
+  if (keyEscaping !== 'legacy' && keyEscaping !== 'strict') {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+      reason: 'unknown keyEscaping',
+      keyEscaping
+    })
+  }
+  // Only under strict: legacy never rewrites a part, so the escape character cannot reappear inside
+  // one, and a configuration that boots today must keep booting.
+  if (keyEscaping === 'strict' && separator.includes(ESCAPE_CHAR)) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+      reason: 'key separator contains the escape character',
       separator
     })
   }
@@ -160,7 +181,8 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
 
   validateNamespace(
     options.namespace ?? DEFAULT_NAMESPACE,
-    options.keySeparator ?? DEFAULT_KEY_SEPARATOR
+    options.keySeparator ?? DEFAULT_KEY_SEPARATOR,
+    options.keyEscaping ?? DEFAULT_KEY_ESCAPING
   )
 
   const shutdown = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
@@ -202,6 +224,7 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     cluster: options.cluster,
     namespace: options.namespace ?? DEFAULT_NAMESPACE,
     keySeparator: options.keySeparator ?? DEFAULT_KEY_SEPARATOR,
+    keyEscaping: options.keyEscaping ?? DEFAULT_KEY_ESCAPING,
     serializer: options.serializer,
     events: options.events,
     shutdownTimeoutMs: options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,

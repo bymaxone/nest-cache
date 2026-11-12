@@ -511,7 +511,7 @@ export class CacheService {
    * ```
    */
   async keys(prefix: string, pattern: string): Promise<string[]> {
-    const fullPattern = this.keyBuilder.build(prefix, pattern)
+    const fullPattern = this.keyBuilder.buildPattern(prefix, pattern)
     const client = this.connection.getClient()
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'keys' })
@@ -539,7 +539,7 @@ export class CacheService {
    * ```
    */
   async *scan(prefix: string, pattern: string, count = SCAN_COUNT): AsyncIterable<string> {
-    const fullPattern = this.keyBuilder.build(prefix, pattern)
+    const fullPattern = this.keyBuilder.buildPattern(prefix, pattern)
     const client = this.connection.getClient()
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'scan' })

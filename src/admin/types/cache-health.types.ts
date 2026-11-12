@@ -83,6 +83,11 @@ export interface CacheConfig {
   readonly mode: CacheMode
   readonly namespace: string
   readonly keySeparator: string
+  /**
+   * How `prefix` and `id` are joined into a key. Two instances of one fleet that disagree compose
+   * different keys for a part holding a separator or `%`.
+   */
+  readonly keyEscaping: 'legacy' | 'strict'
   readonly shutdownTimeoutMs: number
   readonly isFlushAllowedInProduction: boolean
   /** The serializer's constructor name, or `null` when it does not report one. */
