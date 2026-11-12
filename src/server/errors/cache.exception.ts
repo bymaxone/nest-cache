@@ -56,16 +56,14 @@ export class CacheException extends HttpException {
    *   status is 500.
    */
   constructor(code: CacheErrorCode, details?: Record<string, unknown>, statusCode?: HttpStatus) {
+    const message = CACHE_ERROR_MESSAGES.get(code) ?? 'Cache error'
     super(
-      {
-        error: {
-          code,
-          message: CACHE_ERROR_MESSAGES.get(code) ?? 'Cache error',
-          details: details ?? null
-        }
-      },
+      { error: { code, message, details: details ?? null } },
       statusCode ?? CACHE_ERROR_STATUS.get(code) ?? HttpStatus.INTERNAL_SERVER_ERROR
     )
+    // An object response leaves `Error.message` as the class-name default, which is all a log line
+    // or an uncaught boot failure prints. The catalog text is the readable message.
+    this.message = message
     this.code = code
     this.details = details ?? null
   }

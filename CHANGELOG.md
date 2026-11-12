@@ -6,6 +6,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.13] - 2026-11-12
+
+### Fixed
+
+- The message of a `CacheException` is now the catalog text for its code. An object response left `Error.message`
+  as the class-name default, so a refusal at boot surfaced only as "Cache Exception". The `cache.invalid_namespace`
+  text now names its rules, including that a separator containing `%` is rejected under `keyEscaping: 'strict'`
+  (and by `escapePart` in either mode). The serialized body is unchanged except for that catalog text.
+
+#### Apply to a consumer
+
+Code that matched on `error.message` to equal "Cache Exception" must match on `error.code` instead; the code and
+the `details` are unchanged. The `message` field in a serialized `cache.invalid_namespace` body now carries the
+longer text. The declarations do not change.
+
 ## [1.2.12] - 2026-11-12
 
 ### Added
@@ -644,7 +659,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.12...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.13...HEAD
+[1.2.13]: https://github.com/bymaxone/nest-cache/compare/v1.2.12...v1.2.13
 [1.2.12]: https://github.com/bymaxone/nest-cache/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/bymaxone/nest-cache/compare/v1.2.10...v1.2.11
 [1.2.10]: https://github.com/bymaxone/nest-cache/compare/v1.2.9...v1.2.10

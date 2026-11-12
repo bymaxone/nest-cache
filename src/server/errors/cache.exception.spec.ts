@@ -19,6 +19,17 @@ describe('CacheException', () => {
     })
   })
 
+  // The error's own `message` is what a log line or an uncaught boot failure prints. It must carry
+  // the catalog text, not the class-name default an object response would otherwise produce.
+  it('uses the catalog message as the error message', () => {
+    expect(new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED).message).toBe(
+      'Could not connect to Redis after retries.'
+    )
+    expect(new CacheException('cache.not_a_real_code' as CacheErrorCode).message).toBe(
+      'Cache error'
+    )
+  })
+
   // An unknown code must fall back to the generic message, never `undefined`.
   it('falls back to a generic message for an unknown code', () => {
     const ex = new CacheException('cache.not_a_real_code' as CacheErrorCode)
