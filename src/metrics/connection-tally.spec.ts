@@ -92,7 +92,27 @@ describe('CacheConnectionTally', () => {
     expect(tally.readiness()).toEqual([['auth', true]])
   })
 
+  // With no roles declared the set is exactly the library's own: a role is not recognised just
+  // because some default list happens to name it.
+  it('recognises no role beyond the library own when none are declared', () => {
+    const tally = new CacheConnectionTally()
+
+    tally.record('ready', { role: 'Stryker was here' })
+
+    expect(tally.entries()).toEqual([['unknown', 'ready', 1]])
+  })
+
   describe('readiness', () => {
+    // The `reason` carve-out is for `error` only: any other event moves readiness whatever else its
+    // payload carries.
+    it('a non-error event moves readiness even when its payload carries a reason', () => {
+      const tally = new CacheConnectionTally()
+
+      tally.record('ready', { role: 'main', reason: 'whatever' })
+
+      expect(tally.readiness()).toEqual([['main', true]])
+    })
+
     // A role is ready when its latest connection transition is `ready`.
     it('is ready after ready and not ready after any later transition', () => {
       const tally = new CacheConnectionTally()
