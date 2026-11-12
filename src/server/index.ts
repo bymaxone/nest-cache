@@ -32,6 +32,7 @@ export type {
   BymaxCacheStandaloneConnection,
   ClusterNode,
   ClusterOptions,
+  KeyEscaping,
   RedisOptions,
   SentinelAddress
 } from './interfaces/cache-module-options.interface'

@@ -190,6 +190,7 @@ export class CacheStatusService {
       mode: this.options.mode,
       namespace: this.options.namespace,
       keySeparator: this.options.keySeparator,
+      keyEscaping: this.options.keyEscaping,
       shutdownTimeoutMs: this.options.shutdownTimeoutMs,
       isFlushAllowedInProduction: this.options.allowFlushInProduction,
       serializer: this.serializer.constructor.name,

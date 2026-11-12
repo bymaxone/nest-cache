@@ -420,6 +420,7 @@ export interface BymaxCacheModuleOptions {
 
   /** Default: ':' (universal Redis convention) */
   keySeparator?: string
+  keyEscaping?: 'legacy' | 'strict'
 
   /** Custom serializer. Default: JsonSerializer */
   serializer?: ISerializer
@@ -494,6 +495,7 @@ export interface BymaxCacheModuleAsyncOptions {
 | `cluster.options`                 | `ClusterOptions`                          | No       | —                        |
 | `namespace`                       | `string`                                  | No       | `'app'`                  |
 | `keySeparator`                    | `string`                                  | No       | `':'`                    |
+| `keyEscaping`                     | `'legacy' \| 'strict'`                    | No       | `'legacy'`               |
 | `serializer`                      | `ISerializer`                             | No       | JSON                     |
 | `events.onEvent`                  | `function`                                | No       | —                        |
 | `shutdownTimeoutMs`               | `number`                                  | No       | `5000`                   |
@@ -571,6 +573,7 @@ export class AppModule {}
 - `connection.url` is not a parseable Redis URL (`CONNECTION_FAILED`, `reason: 'invalid connection.url'`; the URL is omitted from `details`)
 - `namespace` is empty or whitespace-only, contains `keySeparator`, or contains a Redis glob metacharacter (`*`, `?`, `[`, `\`); `]` is accepted (`INVALID_NAMESPACE`)
 - `keySeparator` is empty (`INVALID_NAMESPACE`)
+- `keyEscaping` is neither `'legacy'` nor `'strict'`, or is `'strict'` and `keySeparator` contains `%` (`INVALID_NAMESPACE`)
 - `shutdownTimeoutMs < 100` (`CONNECTION_FAILED`)
 - `connection.connectTimeout < 100` (`CONNECTION_FAILED`)
 
@@ -855,7 +858,7 @@ With defaults `namespace = 'app'` and `separator = ':'`:
 app:users:550e8400-e29b-41d4-a716-446655440000
 ```
 
-The namespace and the separator are validated at registration (§4.6). `prefix` and `id` are not validated beyond being non-empty (§7.5).
+The namespace and the separator are validated at registration (§4.6). Under `keyEscaping: 'legacy'` (the default) `prefix` and `id` are joined as given and validated only for emptiness (§7.5). Under `'strict'` each is escaped first, so no two distinct `(prefix, id)` tuples share a key: `%`, every separator character, glob metacharacters (`*`, `?`, `[`, `\`) in the prefix and unpaired surrogates become `%XX` (ASCII) or `%uXXXX` tokens, and a part holding none of them is unchanged.
 
 ### 7.2 Implementation — `KeyBuilder`
 
@@ -866,6 +869,21 @@ export class KeyBuilder {
 
   /** Composes {namespace}{sep}{prefix}{sep}{id}. Throws INVALID_KEY when prefix or id is empty. */
   build(prefix: string, id: string): string
+
+  /** The unescaped composition, whatever the mode: reads a key an earlier release wrote. */
+  buildLegacy(prefix: string, id: string): string
+
+  /** A SCAN/KEYS pattern: under 'strict' the prefix is escaped (glob included), the pattern is a glob. */
+  buildPattern(prefix: string, pattern: string): string
+
+  /** Escapes one part so it can be joined with the separator unambiguously, in any position. Throws INVALID_NAMESPACE when the separator contains %. */
+  escapePart(part: string): string
+
+  /** Reverses escapePart; null for a malformed part (a % that starts no valid token). */
+  unescapePart(part: string): string | null
+
+  /** Splits a 'strict' key back into its parts; null for a key with another namespace, a missing part or a malformed escape, and always under 'legacy'. */
+  parse(key: string): { prefix: string; id: string } | null
 
   /** Applies only the namespace (used for Pub/Sub channels and Lua keys). Throws INVALID_KEY when empty. */
   applyNamespace(keyWithoutNamespace: string): string
@@ -898,9 +916,9 @@ export class KeyBuilder {
 - ❌ `getClient().set('raw_key', value)` — bypasses the namespace
 - ❌ `cache.get('users', `${userId}:profile`)` — separator character inside `id`
 - ❌ Composing the key manually at the call site
-- ❌ A `prefix` or `id` that contains the key separator. The library does **not** enforce this: it validates the separator in the namespace only, and `KeyBuilder.build` rejects only an empty `prefix` or `id`. Keys collide silently: `build('a', 'b:c') === build('a:b', 'c') === 'app:a:b:c'`.
-- ❌ A `prefix` that contains Redis glob metacharacters (`*`, `?`, `[`, `]`, `\`). The library does **not** enforce this either, and `keys()` and `scan()` compose the `prefix` into their match pattern, so the pattern widens, escapes or matches nothing.
-- ✅ Encode each field before building the key: `cache.get(encodeURIComponent(prefix), encodeURIComponent(id))`. Keys are unambiguous only for a single-character `keySeparator` that appears in neither field; per-field `encodeURIComponent` provides that only for a separator it escapes and never emits (the default `':'`; not `%` or `- _ . ! ~ * ' ( )`), otherwise the separator must be rejected, and a multi-character separator can straddle a field boundary (with `'aa'`, `('ba', 'c')` and `('b', 'ac')` build the same key). Glob characters in `prefix` must be rejected.
+- ❌ A `prefix` or `id` that contains the key separator under `keyEscaping: 'legacy'` (the default). The library does **not** enforce this: `KeyBuilder.build` rejects only an empty `prefix` or `id`, and keys collide silently: `build('a', 'b:c') === build('a:b', 'c') === 'app:a:b:c'`. Under `'strict'` they do not.
+- ❌ A `prefix` that contains Redis glob metacharacters (`*`, `?`, `[`, `\`) under `'legacy'`: `keys()` and `scan()` compose the `prefix` into their match pattern, so the pattern widens, escapes or matches nothing. Under `'strict'` the prefix is a literal.
+- ✅ Set `keyEscaping: 'strict'`. To join several fields into one `id`, escape each with `KeyBuilder.escapePart` and join them with the separator. Switching changes the key of every part the escape rewrites (see README, Key Namespacing, for the migration and the mixed-version window); under `'legacy'` the caller must reject or escape the separator and glob characters itself.
 
 ---
 

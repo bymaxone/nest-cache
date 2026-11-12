@@ -389,6 +389,19 @@ describe('CacheStatusService.config', () => {
     expect(build({ ping: jest.fn(), info: jest.fn() }).config().scripts).toEqual([])
   })
 
+  // The escaping mode is part of the wiring: two instances of one fleet that disagree on it compose
+  // different keys for the same part, and an operator needs to see that.
+  it('reports the key escaping mode, legacy by default and strict when set', () => {
+    const legacy = build({ ping: jest.fn(), info: jest.fn() }, { connection: { host: 'h' } })
+    const strict = build(
+      { ping: jest.fn(), info: jest.fn() },
+      { connection: { host: 'h' }, keyEscaping: 'strict' }
+    )
+
+    expect(legacy.config().keyEscaping).toBe('legacy')
+    expect(strict.config().keyEscaping).toBe('strict')
+  })
+
   // The remaining wiring an operator asks about, passed through from the
   // resolved options.
   it('reports the namespace wiring and flush policy', () => {
