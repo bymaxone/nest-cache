@@ -343,12 +343,11 @@ those keeps its bytes, so most keys do not change. `keys()` and `scan()` escape 
 pass the pattern through as a glob. A separator containing `%` is rejected under `'strict'`.
 
 ```ts
-BymaxCacheModule.forRoot({ connection, keyEscaping: 'strict' })
-
-const keys = app.get(KeyBuilder)
-keys.escapePart('tenant:7') // 'tenant%3A7', safe to join several fields into one id
-keys.parse('app:a%3Ab:c') // { prefix: 'a:b', id: 'c' }, or null for a key it could not have written
+BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'strict' })
 ```
+
+Inject `KeyBuilder` for the helpers: `escapePart('tenant:7')` returns `'tenant%3A7'`, safe to join several
+fields into one `id`, and `parse('app:a%3Ab:c')` returns `{ prefix: 'a:b', id: 'c' }`, or `null` for a key with another namespace, a missing part or a malformed escape.
 
 **Turning `'strict'` on changes the key of every part the escape rewrites.** A host that
 followed the earlier advice and encoded each field with `encodeURIComponent` is in that group: a

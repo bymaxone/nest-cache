@@ -6,6 +6,42 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-11-12
+
+### Added
+
+- `keyEscaping: 'legacy' | 'strict'` module option (default `'legacy'`). Under `'strict'`, `KeyBuilder.build`
+  escapes each part, so no two distinct `(prefix, id)` tuples compose one Redis key: `build('a', 'b:c')` and
+  `build('a:b', 'c')` no longer both give `app:a:b:c`. The escape rewrites `%`, every character of the key
+  separator, glob metacharacters in the prefix, and unpaired surrogates (which ioredis would send as U+FFFD,
+  merging two different parts at the server) as `%XX` / `%uXXXX` tokens; a part holding none of those keeps its
+  key. `keys()` and `scan()` escape only the prefix and keep their pattern a glob, through the new
+  `KeyBuilder.buildPattern`. `KeyBuilder` also gains `buildLegacy` (the unescaped key, to read what an earlier
+  release wrote), `escapePart`, `unescapePart` and `parse`, and the admin `CacheConfig` reports `keyEscaping`.
+  A key separator containing `%` is rejected under `'strict'`, and only there.
+
+#### Apply to a consumer
+
+Nothing changes unless you set `keyEscaping: 'strict'`: the default keeps every key byte-identical.
+
+Switching to `'strict'` changes the key of every part the escape rewrites, that is, a part holding the key
+separator, `%`, an unpaired surrogate, or (in the prefix) `*`, `?`, `[` or `\`. A part holding none of those
+keeps its key. In the libraries and applications of this family that were inspected, no lock or rate-limit key
+is built through `KeyBuilder.build`; that inspection covered the local repositories only, so check your own
+before you switch.
+
+If you followed the earlier advice and encoded each field with `encodeURIComponent`, that encoding is now
+applied twice: a field you encoded to `a%3Ab` is escaped again to `a%253Ab`. Drop the per-field encoding when you
+switch, and expect those entries to miss once. `KeyBuilder.buildLegacy(prefix, id)` returns the old key, for a
+host that reads the old key and writes the new one. To join several fields into one `id`, escape each with
+`KeyBuilder.escapePart` and join them with the separator.
+
+Every instance sharing a Redis must run one mode. During a rolling deploy the two modes compose a different key
+for a part the escape rewrites, so a lock on such a part can be held once per mode and a counter on it splits in
+two until the older instances are gone. Quiesce locks and limits on those prefixes while you switch, or accept up
+to twice the budget for the counter's TTL. A key with no such part is the same in both modes, so its lock and
+counter hold across the rollout. `CacheStatusService.config().keyEscaping` shows what an instance runs.
+
 ## [1.2.11] - 2026-11-09
 
 ### Fixed
@@ -599,7 +635,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.11...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.12...HEAD
+[1.2.12]: https://github.com/bymaxone/nest-cache/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/bymaxone/nest-cache/compare/v1.2.10...v1.2.11
 [1.2.10]: https://github.com/bymaxone/nest-cache/compare/v1.2.9...v1.2.10
 [1.2.9]: https://github.com/bymaxone/nest-cache/compare/v1.2.8...v1.2.9

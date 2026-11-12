@@ -113,7 +113,7 @@ export class KeyBuilder {
    * Reverses {@link KeyBuilder.escapePart}.
    *
    * @param part - An escaped part.
-   * @returns The original part, or `null` when `part` is not one the escape could have written.
+   * @returns The original part, or `null` when `part` is malformed: a `%` that starts no valid token.
    */
   unescapePart(part: string): string | null {
     return unescapeKeyPart(part)
@@ -123,9 +123,9 @@ export class KeyBuilder {
    * Splits a key this builder composed back into its parts.
    *
    * @param key - A full key as returned by {@link KeyBuilder.build}.
-   * @returns The prefix and id, or `null` when the key is not one `'strict'` composition could have
-   *   produced, and always under `'legacy'`, where the composition is ambiguous and cannot be
-   *   inverted.
+   * @returns The prefix and id, or `null` when the key has another namespace, is not two parts, or
+   *   holds a malformed escape, and always under `'legacy'`, where the composition is ambiguous and
+   *   cannot be inverted. A well-formed token the escape would not write (`%u0041` for `A`) decodes.
    */
   parse(key: string): { prefix: string; id: string } | null {
     const head = this.getNamespacePrefix()

@@ -102,7 +102,7 @@ function escapeUnits(chars: string): string {
  *
  * @param part - An escaped part.
  * @returns The original part, or `null` when `part` holds a `%` that starts no valid token or a
- *   `%XX` token naming a non-ASCII unit: such a part was not written by the escape.
+ *   `%XX` token naming a non-ASCII unit: such a part is malformed. A well-formed token decodes to the unit it names, canonical or not.
  */
 export function unescapeKeyPart(part: string): string | null {
   const pieces = part.split(TOKEN)

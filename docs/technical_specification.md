@@ -879,10 +879,10 @@ export class KeyBuilder {
   /** Escapes one part so it can be joined with the separator unambiguously, in any position. */
   escapePart(part: string): string
 
-  /** Reverses escapePart; null for a part the escape could not have written. */
+  /** Reverses escapePart; null for a malformed part (a % that starts no valid token). */
   unescapePart(part: string): string | null
 
-  /** Splits a 'strict' key back into its parts; null for any other key, and always under 'legacy'. */
+  /** Splits a 'strict' key back into its parts; null for a key with another namespace, a missing part or a malformed escape, and always under 'legacy'. */
   parse(key: string): { prefix: string; id: string } | null
 
   /** Applies only the namespace (used for Pub/Sub channels and Lua keys). Throws INVALID_KEY when empty. */
