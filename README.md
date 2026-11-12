@@ -340,7 +340,7 @@ Under `'strict'` each part is escaped, so **no two distinct `(prefix, id)` tuple
 The escape rewrites `%`, every character of the separator, glob metacharacters (`*`, `?`, `[`, `\`)
 in the `prefix`, and unpaired surrogates as `%XX` (ASCII) or `%uXXXX` tokens. A part holding none of
 those keeps its bytes, so most keys do not change. `keys()` and `scan()` escape only the `prefix` and
-pass the pattern through as a glob. A separator containing `%` is rejected under `'strict'`.
+pass the pattern through as a glob. A separator containing `%` is rejected under `'strict'`, and `escapePart` refuses it in either mode.
 
 ```ts
 BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'strict' })

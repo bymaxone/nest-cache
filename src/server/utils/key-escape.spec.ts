@@ -5,7 +5,7 @@
  * each token, the surrogate range edges and what the decoder accepts, so none of them can move
  * without a test failing.
  */
-import { buildEscapeSet, escapeKeyPart, unescapeKeyPart } from './key-escape'
+import { buildEscapeSet, escapeKeyPart, splitEscapedParts, unescapeKeyPart } from './key-escape'
 
 /** Escapes `part` with the default separator and no glob characters. */
 const escape = (part: string, separator = ':', glob = false): string =>
@@ -108,5 +108,52 @@ describe('unescapeKeyPart', () => {
   // A stray escape character between two valid tokens is still refused.
   it('refuses a stray % between tokens', () => {
     expect(unescapeKeyPart('%3A%%3A')).toBeNull()
+  })
+})
+
+describe('splitEscapedParts', () => {
+  // The boundary is the separator between the tokens, however many tokens each part holds.
+  it('splits at the one separator and keeps the tokens with their part', () => {
+    expect(splitEscapedParts('a%3Ab:c%25', ':')).toEqual({ prefix: 'a%3Ab', id: 'c%25' })
+    expect(splitEscapedParts('%u00E9:%3A', ':')).toEqual({ prefix: '%u00E9', id: '%3A' })
+  })
+
+  // A separator that is a token character is not a boundary inside a token.
+  it('does not find the separator inside a token', () => {
+    expect(splitEscapedParts('p2%25', '2')).toEqual({ prefix: 'p', id: '%25' })
+    expect(splitEscapedParts('%25p2x', '2')).toEqual({ prefix: '%25p', id: 'x' })
+    expect(splitEscapedParts('%uD83D2%uDE00', '2')).toEqual({ prefix: '%uD83D', id: '%uDE00' })
+  })
+
+  // Exactly one boundary: none, or a second one, is refused, wherever the second one sits.
+  it('refuses zero boundaries and more than one', () => {
+    expect(splitEscapedParts('abc', ':')).toBeNull()
+    expect(splitEscapedParts('a:b:c', ':')).toBeNull()
+    expect(splitEscapedParts('a:%3A:c', ':')).toBeNull()
+    expect(splitEscapedParts('a%3A:b:c', ':')).toBeNull()
+    // Two boundaries in one run of text, with a later run that holds one more.
+    expect(splitEscapedParts('a:b:c%3A:d', ':')).toBeNull()
+  })
+
+  // Both parts must be non-empty.
+  it('refuses an empty prefix or id', () => {
+    expect(splitEscapedParts(':b', ':')).toBeNull()
+    expect(splitEscapedParts('a:', ':')).toBeNull()
+    expect(splitEscapedParts('', ':')).toBeNull()
+  })
+
+  // A `%` outside a complete token is malformed wherever it sits, including after a valid token and
+  // when a valid token follows it later in the text.
+  it('refuses a % that starts no complete token', () => {
+    expect(splitEscapedParts('p%x%41:i', ':')).toBeNull()
+    expect(splitEscapedParts('p%uD80:i', ':')).toBeNull()
+    expect(splitEscapedParts('p:i%', ':')).toBeNull()
+    expect(splitEscapedParts('p%3A%:i', ':')).toBeNull()
+  })
+
+  // A multi-character separator is matched whole.
+  it('matches a multi-character separator whole', () => {
+    expect(splitEscapedParts('a%61ab', 'ab')).toBeNull()
+    expect(splitEscapedParts('xabz', 'ab')).toEqual({ prefix: 'x', id: 'z' })
   })
 })

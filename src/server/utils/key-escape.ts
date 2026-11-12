@@ -123,3 +123,48 @@ export function unescapeKeyPart(part: string): string | null {
   }
   return out
 }
+
+/**
+ * Splits `rest`, the key after the namespace and its separator, into the escaped prefix and id.
+ *
+ * Looks for the separator only in the text between escape tokens, so a separator whose characters
+ * also occur inside a token (a hex digit, `u`) is never matched in the middle of one. Raw text never
+ * holds a separator character, because the escape rewrites them all.
+ *
+ * @param rest - The key without its namespace prefix.
+ * @param separator - The configured key separator.
+ * @returns The two escaped parts, or `null` unless there is exactly one boundary, both parts are
+ *   non-empty, and every `%` starts a complete token.
+ */
+export function splitEscapedParts(
+  rest: string,
+  separator: string
+): { prefix: string; id: string } | null {
+  let prefix = ''
+  let id = ''
+  let found = false
+  for (const [index, piece] of rest.split(TOKEN).entries()) {
+    if (index % 2 === 1) {
+      // An escape token: never searched for the separator, only carried into the part it sits in.
+      found ? (id += piece) : (prefix += piece)
+      continue
+    }
+    if (piece.includes(ESCAPE_CHAR)) {
+      return null
+    }
+    const halves = piece.split(separator)
+    if (halves.length > 2 || (found && halves.length > 1)) {
+      return null
+    }
+    if (halves.length === 2) {
+      prefix += halves[0]
+      id += halves[1]
+      found = true
+    } else if (found) {
+      id += piece
+    } else {
+      prefix += piece
+    }
+  }
+  return found && prefix !== '' && id !== '' ? { prefix, id } : null
+}

@@ -18,7 +18,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   key. `keys()` and `scan()` escape only the prefix and keep their pattern a glob, through the new
   `KeyBuilder.buildPattern`. `KeyBuilder` also gains `buildLegacy` (the unescaped key, to read what an earlier
   release wrote), `escapePart`, `unescapePart` and `parse`, and the admin `CacheConfig` reports `keyEscaping`.
-  A key separator containing `%` is rejected under `'strict'`, and only there.
+  A key separator containing `%` is rejected under `'strict'`, and only there; `escapePart` refuses it in either
+  mode, since the escape character would reappear as the separator.
 
 #### Apply to a consumer
 

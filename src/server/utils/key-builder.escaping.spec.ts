@@ -55,22 +55,23 @@ const PARTS: readonly string[] = (() => {
 
 describe('KeyBuilder key escaping', () => {
   describe('keyEscaping: legacy (the default)', () => {
-    // The default must keep every key byte-identical to the previous release; a patch changes none.
+    // The default composes the plain join: a host that sets nothing gets the keys it already has.
     it('composes the unescaped key by default', () => {
       const builder = makeBuilder()
 
       expect(builder.build('a', 'b:c')).toBe('app:a:b:c')
     })
 
-    // The collision this release exists to fix is still reachable under legacy, and the legacy
-    // escape hatch must say so honestly rather than pretend the key is unambiguous.
+    // The plain join is ambiguous, and the default mode must not pretend otherwise: this is why
+    // strict exists.
     it('still collides under legacy, which is why strict exists', () => {
       const builder = makeBuilder()
 
       expect(builder.build('a', 'b:c')).toBe(builder.build('a:b', 'c'))
     })
 
-    // buildLegacy is the old composition on demand, so a host can read a key an earlier release wrote.
+    // buildLegacy is the plain join on demand, whatever the mode, so a key written without escaping
+    // can still be addressed.
     it('buildLegacy composes the unescaped key', () => {
       expect(makeBuilder().buildLegacy('a:b', 'c')).toBe('app:a:b:c')
     })
@@ -96,7 +97,7 @@ describe('KeyBuilder key escaping', () => {
       expect(builder.build('users', 'u_1')).toBe(builder.buildLegacy('users', 'u_1'))
     })
 
-    // The ticket's own collision: the two tuples must resolve to two keys.
+    // Distinct tuples stay distinct: the two the plain join merges resolve to two keys.
     it('separates the tuples the legacy composition merged', () => {
       const builder = makeStrict()
 
@@ -104,8 +105,8 @@ describe('KeyBuilder key escaping', () => {
       expect(builder.build('a:b', 'c')).toBe('app:a%3Ab:c')
     })
 
-    // A host that followed the old advice and encoded each field gets a second layer, which is what
-    // keeps the composition injective whatever the caller did before.
+    // A part the caller already percent-encoded gets a second layer, which is what keeps the
+    // composition injective whatever the caller did before.
     it('escapes the escape character itself', () => {
       expect(makeStrict().build('p', 'a%3Ab')).toBe('app:p:a%253Ab')
     })
@@ -153,59 +154,68 @@ describe('KeyBuilder key escaping', () => {
     // Each of these separators exercises a distinct risk: the default, a different single character,
     // a multi-character one that can straddle a field boundary, and an astral one made of two code
     // units that another astral character partly shares.
-    describe.each([':', '|', 'aa', '\u{1F600}'])('separator %j', (separator) => {
-      // The load-bearing property. Exhaustive over every tuple of the alphabet, so a counterexample
-      // cannot hide in an unsampled corner.
-      it('composes no two distinct tuples to one key, and the key survives the wire', () => {
-        const builder = makeStrict({ keySeparator: separator })
-        const seen = new Map<string, string>()
+    // The last four are separators whose characters also occur inside an escape token (a hex digit,
+    // `u`, and a run of two digits): the boundary must be found by skipping whole tokens.
+    describe.each([':', '|', 'aa', '\u{1F600}', '2', 'u', 'A', '25'])(
+      'separator %j',
+      (separator) => {
+        // The load-bearing property. Exhaustive over every tuple of the alphabet, so a counterexample
+        // cannot hide in an unsampled corner.
+        it('composes no two distinct tuples to one key, and the key survives the wire', () => {
+          const builder = makeStrict({ keySeparator: separator })
+          const seen = new Map<string, string>()
 
-        for (const prefix of PARTS) {
-          for (const id of PARTS) {
-            const key = builder.build(prefix, id)
-            const tuple = JSON.stringify([prefix, id])
-            const previous = seen.get(key)
+          for (const prefix of PARTS) {
+            for (const id of PARTS) {
+              const key = builder.build(prefix, id)
+              const tuple = JSON.stringify([prefix, id])
+              const previous = seen.get(key)
 
-            expect(previous === undefined || previous === tuple).toBe(true)
-            seen.set(key, tuple)
-            // ioredis writes a key as UTF-8, where an unpaired surrogate becomes U+FFFD. A key that
-            // does not survive that round trip would collide at the server whatever the string says.
-            expect(Buffer.from(key, 'utf8').toString('utf8')).toBe(key)
+              expect(previous === undefined || previous === tuple).toBe(true)
+              seen.set(key, tuple)
+              // ioredis writes a key as UTF-8, where an unpaired surrogate becomes U+FFFD. A key that
+              // does not survive that round trip would collide at the server whatever the string says.
+              expect(Buffer.from(key, 'utf8').toString('utf8')).toBe(key)
+            }
           }
-        }
-        expect(seen.size).toBe(PARTS.length * PARTS.length)
-      })
+          expect(seen.size).toBe(PARTS.length * PARTS.length)
+        })
 
-      // The decoder inverts the composition for every tuple, lone surrogates included.
-      it('parse returns the exact tuple for every composed key', () => {
-        const builder = makeStrict({ keySeparator: separator })
+        // The decoder inverts the composition for every tuple, lone surrogates included.
+        it('parse returns the exact tuple for every composed key', () => {
+          const builder = makeStrict({ keySeparator: separator })
 
-        for (const prefix of PARTS) {
-          for (const id of PARTS) {
-            expect(builder.parse(builder.build(prefix, id))).toEqual({ prefix, id })
+          for (const prefix of PARTS) {
+            for (const id of PARTS) {
+              expect(builder.parse(builder.build(prefix, id))).toEqual({ prefix, id })
+            }
           }
-        }
-      })
+        })
 
-      // escapePart and unescapePart are inverses on their own, which is what a host composing a
-      // multi-field id relies on.
-      it('unescapePart inverts escapePart for every part', () => {
-        const builder = makeStrict({ keySeparator: separator })
+        // escapePart and unescapePart are inverses on their own, which is what a host composing a
+        // multi-field id relies on.
+        it('unescapePart inverts escapePart for every part', () => {
+          const builder = makeStrict({ keySeparator: separator })
 
-        for (const part of PARTS) {
-          expect(builder.unescapePart(builder.escapePart(part))).toBe(part)
-        }
-      })
+          for (const part of PARTS) {
+            expect(builder.unescapePart(builder.escapePart(part))).toBe(part)
+          }
+        })
 
-      // An escaped part never carries a separator code unit, which is what makes the join unambiguous.
-      it('escapePart output holds no separator', () => {
-        const builder = makeStrict({ keySeparator: separator })
+        // Outside its tokens an escaped part never carries the separator, which is what makes the join
+        // unambiguous. A separator that is itself a hex digit appears inside tokens, and only there.
+        it('escapePart output holds no separator outside a token', () => {
+          const builder = makeStrict({ keySeparator: separator })
 
-        for (const part of PARTS) {
-          expect(builder.escapePart(part).includes(separator)).toBe(false)
-        }
-      })
-    })
+          for (const part of PARTS) {
+            const outsideTokens = builder
+              .escapePart(part)
+              .replace(/%(?:[0-9A-F]{2}|u[0-9A-F]{4})/g, '')
+            expect(outsideTokens.includes(separator)).toBe(false)
+          }
+        })
+      }
+    )
 
     // The concrete shapes of the escape, so a change to the token format is a deliberate change.
     it('escapes ASCII as %XX and anything else as %uXXXX per code unit', () => {
@@ -223,6 +233,35 @@ describe('KeyBuilder key escaping', () => {
     // escapePart is safe in any position, so it escapes glob metacharacters too.
     it('escapePart escapes glob metacharacters', () => {
       expect(makeStrict().escapePart('*?[]\\')).toBe('%2A%3F%5B]%5C')
+    })
+
+    // A separator that is a character of the escape token, here the `2` of `%25`, must not make parse
+    // cut inside a token.
+    it('parse does not cut inside an escape token', () => {
+      const builder = makeStrict({ keySeparator: '2' })
+
+      expect(builder.build('p', '%')).toBe('app2p2%25')
+      expect(builder.parse('app2p2%25')).toEqual({ prefix: 'p', id: '%' })
+      expect(builder.parse('app2%25p2x')).toEqual({ prefix: '%p', id: 'x' })
+    })
+
+    // escapePart joins fields safely only when the escape character cannot reappear as the separator.
+    // Legacy mode accepts a `%` separator at registration, so the helper refuses it instead.
+    it('escapePart rejects a separator that contains the escape character', () => {
+      const builder = makeBuilder({ keySeparator: '%' })
+      let caught: unknown
+      try {
+        builder.escapePart('a')
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+      expect((caught as CacheException).details).toEqual({
+        reason: 'key separator contains the escape character',
+        separator: '%'
+      })
     })
 
     // A malformed or foreign part must decline, never decode to something the escape did not write.
@@ -247,7 +286,9 @@ describe('KeyBuilder key escaping', () => {
       ['an extra separator', 'app:p:i:j'],
       ['the namespace alone', 'app:'],
       ['a malformed prefix escape', 'app:p%:i'],
-      ['a malformed id escape', 'app:p:i%zz']
+      ['a malformed id escape', 'app:p:i%zz'],
+      ['a short token naming a non-ASCII unit in the prefix', 'app:%80:i'],
+      ['a short token naming a non-ASCII unit in the id', 'app:p:%80']
     ])('parse returns null for %s', (_name, key) => {
       expect(makeStrict().parse(key)).toBeNull()
     })

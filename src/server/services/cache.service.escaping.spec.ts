@@ -35,8 +35,8 @@ describe('CacheService under strict key escaping', () => {
     await connection.onApplicationShutdown()
   })
 
-  // The ticket's collision, end to end through the service: the second write used to replace the
-  // first.
+  // Two tuples the plain join merges stay two entries through the service: the second write does
+  // not replace the first.
   it('keeps two tuples the legacy composition merged as two entries', async () => {
     const made = await setup('strict')
     connection = made.connection
@@ -48,7 +48,7 @@ describe('CacheService under strict key escaping', () => {
     expect(await made.cache.get('a:b', 'c')).toBe('second')
   })
 
-  // The same two writes under legacy do collide, which pins that the default did not move.
+  // The same two writes under legacy do collide: the default composes the plain join.
   it('still merges them under legacy, the default', async () => {
     const made = await setup('legacy')
     connection = made.connection
@@ -84,8 +84,8 @@ describe('CacheService under strict key escaping', () => {
     expect(await made.cache.keys('users', '*')).toEqual(['test:users:u%3A1'])
   })
 
-  // A glob metacharacter in the prefix is a literal under strict, so a prefix of `u*` no longer
-  // widens a scan to every group that starts with `u`.
+  // A glob metacharacter in the prefix is a literal under strict, so a prefix of `u*` does not
+  // widen a scan to every group that starts with `u`.
   it('does not let a glob character in the prefix widen the scan', async () => {
     const made = await setup('strict')
     connection = made.connection

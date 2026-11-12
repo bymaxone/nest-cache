@@ -876,7 +876,7 @@ export class KeyBuilder {
   /** A SCAN/KEYS pattern: under 'strict' the prefix is escaped (glob included), the pattern is a glob. */
   buildPattern(prefix: string, pattern: string): string
 
-  /** Escapes one part so it can be joined with the separator unambiguously, in any position. */
+  /** Escapes one part so it can be joined with the separator unambiguously, in any position. Throws INVALID_NAMESPACE when the separator contains %. */
   escapePart(part: string): string
 
   /** Reverses escapePart; null for a malformed part (a % that starts no valid token). */

@@ -8,7 +8,13 @@
 import { Inject, Injectable } from '@nestjs/common'
 
 import { BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
-import { buildEscapeSet, escapeKeyPart, unescapeKeyPart } from './key-escape'
+import {
+  ESCAPE_CHAR,
+  buildEscapeSet,
+  escapeKeyPart,
+  splitEscapedParts,
+  unescapeKeyPart
+} from './key-escape'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
@@ -104,8 +110,16 @@ export class KeyBuilder {
    *
    * @param part - The caller-owned part.
    * @returns The escaped part.
+   * @throws {CacheException} `INVALID_NAMESPACE` when the separator contains `%`: the escape
+   *   character would then reappear as the separator and the join could not be undone.
    */
   escapePart(part: string): string {
+    if (this.separator.includes(ESCAPE_CHAR)) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+        reason: 'key separator contains the escape character',
+        separator: this.separator
+      })
+    }
     return escapeKeyPart(part, this.prefixEscapes)
   }
 
@@ -132,14 +146,12 @@ export class KeyBuilder {
     if (!this.strict || !key.startsWith(head)) {
       return null
     }
-    const rest = key.slice(head.length)
-    const cut = rest.indexOf(this.separator)
-    const rawId = rest.slice(cut + this.separator.length)
-    if (cut < 1 || rawId === '' || rawId.includes(this.separator)) {
+    const parts = splitEscapedParts(key.slice(head.length), this.separator)
+    if (parts === null) {
       return null
     }
-    const prefix = unescapeKeyPart(rest.slice(0, cut))
-    const id = unescapeKeyPart(rawId)
+    const prefix = unescapeKeyPart(parts.prefix)
+    const id = unescapeKeyPart(parts.id)
     return prefix === null || id === null ? null : { prefix, id }
   }
 
