@@ -347,7 +347,7 @@ BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'stri
 ```
 
 Inject `KeyBuilder` for the helpers: `escapePart('tenant:7')` returns `'tenant%3A7'`, safe to join several
-fields into one `id`, and `parse('app:a%3Ab:c')` returns `{ prefix: 'a:b', id: 'c' }`, or `null` for a key with another namespace, a missing part or a malformed escape.
+fields into one `id`, and `parse('app:a%3Ab:c')` returns `{ prefix: 'a:b', id: 'c' }` under `'strict'`.
 
 **Turning `'strict'` on changes the key of every part the escape rewrites.** A host that
 followed the earlier advice and encoded each field with `encodeURIComponent` is in that group: a
