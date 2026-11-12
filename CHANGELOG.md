@@ -26,9 +26,8 @@ Nothing changes unless you set `keyEscaping: 'strict'`: the default keeps every 
 
 Switching to `'strict'` changes the key of every part the escape rewrites, that is, a part holding the key
 separator, `%`, an unpaired surrogate, or (in the prefix) `*`, `?`, `[` or `\`. A part holding none of those
-keeps its key. In the libraries and applications of this family that were inspected, no lock or rate-limit key
-is built through `KeyBuilder.build`; that inspection covered the local repositories only, so check your own
-before you switch.
+keeps its key. The library cannot see which of your locks or rate-limit counters pass such a part, so
+check your own before you switch.
 
 If you followed the earlier advice and encoded each field with `encodeURIComponent`, that encoding is now
 applied twice: a field you encoded to `a%3Ab` is escaped again to `a%253Ab`. Drop the per-field encoding when you
