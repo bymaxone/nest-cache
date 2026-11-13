@@ -41,18 +41,6 @@ lifecycle, reconnection, and graceful shutdown are handled for you.
 The library has **zero direct dependencies** — `ioredis` and NestJS arrive as peer dependencies,
 so you control exact versions and the supply-chain surface stays minimal.
 
-### Why nest-cache?
-
-- **🔑 Namespaced by design** — every key is composed through a key builder (`{namespace}:{prefix}:{id}`), so tenants and features never collide. Raw, un-namespaced access is a documented anti-pattern.
-- **🧬 Typed get/set** — `get<T>` / `set<T>` go through a pluggable `ISerializer` (JSON by default). Deserialization **fails closed** — a malformed payload throws `CacheException`, never a half-decoded value.
-- **📡 Batteries included** — Pub/Sub on namespaced channels and a Lua script manager (`EVALSHA` + `NOSCRIPT` fallback) ship in the box, on top of the full string/hash/set/numeric command surface.
-- **♻️ Lifecycle done right** — singleton connection with `OnModuleInit` / `OnApplicationShutdown`, bounded retry strategy, `READONLY`-failover reconnect, and a graceful `quit()` with shutdown timeout.
-- **🔌 Bring your own observability** — connection events and Pub/Sub handler failures surface through an `events.onEvent` callback; plug in [`@bymax-one/nest-logger`](https://github.com/bymaxone/nest-logger) or your metrics layer. No observability peer deps forced on you.
-
-```
-pnpm add @bymax-one/nest-cache ioredis
-```
-
 ---
 
 ## 🔥 Features
@@ -91,7 +79,7 @@ pnpm add @bymax-one/nest-cache ioredis
 - ✅ **Dynamic module** — `forRoot()` and `forRootAsync()` via `ConfigurableModuleBuilder`; registered globally by default (`isGlobal`)
 - ✅ **Lua script manager** — register scripts up front, execute by name with transparent `NOSCRIPT` reload + retry
 - ✅ **Structured errors** — every failure is a `CacheException` with a stable `cache.*` code and an HTTP status
-- ✅ **Zero runtime dependencies** — everything is a peer dependency; `dependencies: {}`
+- ✅ **No runtime dependencies** — everything is a peer dependency
 
 ---
 
@@ -146,7 +134,7 @@ yarn add @bymax-one/nest-cache ioredis
 
 ### 2. Register the Module
 
-Pick the topology that matches your deployment. All four forms share the same options shape.
+Pick the topology that matches your deployment. All forms share the same options shape.
 
 #### Scenario 1 — Standalone (dev / single node)
 
@@ -165,9 +153,10 @@ import { BymaxCacheModule } from '@bymax-one/nest-cache'
 export class AppModule {}
 ```
 
-#### Scenario 2 — Sentinel (high availability)
+#### Scenario 2 — Sentinel or Cluster
 
 ```typescript
+// Sentinel (high availability)
 BymaxCacheModule.forRoot({
   mode: 'sentinel',
   sentinel: {
@@ -180,11 +169,8 @@ BymaxCacheModule.forRoot({
   },
   namespace: 'app'
 })
-```
 
-#### Scenario 3 — Cluster (sharded)
-
-```typescript
+// Cluster (sharded)
 BymaxCacheModule.forRoot({
   mode: 'cluster',
   cluster: {
@@ -198,7 +184,7 @@ BymaxCacheModule.forRoot({
 })
 ```
 
-#### Scenario 4 — forRootAsync with ConfigService
+#### Scenario 3 — forRootAsync with ConfigService
 
 ```typescript
 import { Module } from '@nestjs/common'
@@ -354,18 +340,7 @@ BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'stri
 Inject `KeyBuilder` for the helpers: `escapePart('tenant:7')` returns `'tenant%3A7'`, safe to join several
 fields into one `id`, and `parse('app:a%3Ab:c')` returns `{ prefix: 'a:b', id: 'c' }` under `'strict'`.
 
-**Turning `'strict'` on changes the key of every part the escape rewrites.** A host that
-followed the earlier advice and encoded each field with `encodeURIComponent` is in that group: a
-field it encoded to `a%3Ab` is now escaped again to `a%253Ab`, so drop the per-field encoding when
-you switch, and expect those entries to miss once. `KeyBuilder.buildLegacy(prefix, id)` returns the
-old key, for a host that reads the old key and writes the new one. A key with a plain part is the
-same in both modes.
-
-Every instance sharing a Redis must run one mode. During a rolling deploy the two modes compose the
-same lock or rate-limit key differently **only for a part the escape rewrites**: such a
-lock can be held once per mode, and such a counter splits in two until the older instances are gone.
-Quiesce locks and limits on those prefixes while you switch, or accept up to twice the budget for the
-counter's TTL. `CacheStatusService.config().keyEscaping` (from `./admin`) shows what an instance runs.
+Turning `'strict'` on changes the key of every part the escape rewrites; a key with plain parts is the same in both modes, and `KeyBuilder.buildLegacy(prefix, id)` returns the unescaped key. Every instance sharing a Redis must run one mode: during a rolling deploy a lock or counter on a rewritten part is held once per mode. `CacheStatusService.config().keyEscaping` (from `./admin`) shows what an instance runs.
 
 ---
 
@@ -546,7 +521,7 @@ import { BymaxCacheModule } from '@bymax-one/nest-cache'
 import { BymaxCacheAdminModule } from '@bymax-one/nest-cache/admin'
 
 // `config` is a ConfigService reachable where the module is declared; see
-// Scenario 4 above for the forRootAsync form that injects it properly.
+// Scenario 3 above for the forRootAsync form that injects it properly.
 @Module({
   imports: [
     BymaxCacheModule.forRoot({
@@ -607,38 +582,19 @@ await this.admin.revealValue('auth', 'auth:sess:1')  // { status: 'withheld', or
 
 Every threshold must be a positive integer; one that is not fails the boot with `cache.invalid_scope`. `CacheAdminService` also has `listScopes()` and `describeKey(scope, key)`, which returns a key's type, TTL and whether its value is readable, without the value.
 
-### What the library owns, and what you own
+The library owns the mechanism (validating the allowlist, scanning against it, describing keys, withholding values). The application owns which keyspaces exist, their `origin` text, the routes and the guards.
 
-The library owns the **mechanism**: validating the allowlist, scanning against it, describing keys, withholding values. The application owns **which keyspaces exist**, the `origin` prose that explains them, the routes, and the guards. A cache library cannot know that another library writes at Redis root through `getClient()`, and making it depend on that library to find out would invert two packages to save an application from stating one thing about itself.
+### Scopes
 
-### `isReadable: false` withholds the value — and nothing else
+A scope pattern is a literal prefix, optionally ending in `*`: `auth:*`, `my-app:*` and exact keys are accepted; `app:*:v1`, `*`, `a?b` and `a[bc]` are refused at wiring. Key membership is therefore exact: a caller names a key and the library checks it against the named scope by prefix, never with a glob matcher.
 
-Listing, types, TTLs and sizes stay available on an unreadable scope. Only the value is refused, and the refusal is returned _before_ the value is read.
+`isReadable: false` withholds the value only. Listing, types, TTLs and sizes stay available, and the refusal is returned before the value is read. A withheld value is not an authorization failure, since the deployment declared the keyspace unreadable at wiring and no credential changes that, so do not serve it as `403`.
 
-This is the easy thing to get wrong, because "unreadable" reads like "return nothing" — and the unreadable scope is typically the one that holds the most interesting keys. A surface that renders it as empty tells an operator the region holds nothing while it is full, which is the same defect as a blank log page during an outage: a reading meaning _"I may not tell you"_ drawn identically to one meaning _"there is nothing here"_.
-
-### Scope patterns: a literal prefix, optionally ending in `*`
-
-`auth:*`, `my-app:*` and exact keys are accepted. `app:*:v1`, `*`, `a?b` and `a[bc]` are refused at wiring.
-
-The restriction exists because a caller names a **key**, so the library must decide whether that key belongs to the named scope — otherwise a caller names the readable scope and passes a key from the credential-bearing one. Deciding that for arbitrary globs means reimplementing Redis's `stringmatchlen` — greedy `*` with backtracking, `[a-z]` classes, `^` negation, escapes, and the unterminated-class case where `ten[ant` matches nothing at all — and **a matcher even slightly more permissive than the server's is a silent cross-scope leak that no happy-path test would show.** With this shape, membership is exact by construction, and the E2E suite checks it differentially against a real server's own `KEYS`.
-
-Do not relax this to be helpful. Widening it later is compatible; a leak is not un-shippable.
-
-### Readings that would carry two meanings are unions, not nullables
-
-| Reading      | Type                                                      | Why                                                                                                                                                                                            |
-| ------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxmemory`  | `unbounded \| limited \| unreported`                      | Redis spells "no ceiling" as `maxmemory:0`; read as a literal ceiling it draws a full saturation bar on the least constrained server there is — and "unbounded" is not "the server didn't say" |
-| `TTL`        | `expiring \| persistent \| missing`                       | `-1` and `-2` are different facts, and the key that expired between the scan and the read is the one an operator is watching                                                                   |
-| `aofEnabled` | `boolean \| null`                                         | `false` for an absent field is a durability claim made without evidence                                                                                                                        |
-| health       | `{ up \| degraded, latencyMs } \| { down, reason, code }` | A latency exists if and only if the ping answered — expressed as `latencyMs: number \| null` that is a convention a future `catch` can break; as a union it does not compile                   |
-
-`mode`, `isScanSupported` and `degradedAboveMs` sit **outside** the health union: a cluster deployment that is down should still report that scanning was never going to work.
+Readings that would carry two meanings are unions, not nullables: `maxmemory` is `unbounded | limited | unreported`, a TTL is `expiring | persistent | missing`, `aofEnabled` is `boolean | null`, and health is `{ up | degraded, latencyMs } | { down, reason, code }`. `mode`, `isScanSupported` and `degradedAboveMs` sit outside the health union.
 
 ### Reading a value: `revealed` / `withheld` / `missing`
 
-`revealValue()` answers with a discriminated union, not a nullable value, because **"I may not tell you" and "there is nothing here" are different answers** and rendering them identically is the defect this whole surface exists to avoid.
+`revealValue()` answers with a discriminated union, because "I may not tell you" and "there is nothing here" are different answers.
 
 ```ts
 import type { CacheAdminService } from '@bymax-one/nest-cache/admin'
@@ -660,8 +616,6 @@ async function describeValue(admin: CacheAdminService, scope: string, key: strin
 }
 ```
 
-A withheld value is **not an authorization failure**. The caller is allowed to ask; the deployment declared the keyspace unreadable at wiring, and no credential changes that — so serving it as `403` would tell a client that some other permission would unlock it, which is false.
-
 The revealed value is shaped by the key's type:
 
 | `value.kind`  | Shape                              | Notes                                                                                    |
@@ -672,18 +626,18 @@ The revealed value is shaped by the key's type:
 | `scored`      | `{ members: { member, score }[] }` | Sorted sets. `score` is a **string**: parsing to a number would round large integers     |
 | `unsupported` | `{ type: RedisKeyType }`           | Streams and module types — says so, rather than returning an empty value                 |
 
-Every arm except `unsupported` carries `isComplete`. It is deliberately **positive polarity**: an absent boolean reads as `false`, and under a name like `truncated` that default would be the _reassuring_ answer — a value silently claiming nothing was cut.
+Every arm except `unsupported` carries `isComplete`; `false` means the value was cut.
 
 > [!IMPORTANT]
-> **List order is meaningful; set order is not**, and both arrive in the same `members` array. Nothing in the type stops a renderer from sorting either one. Sorting a set for display is fine; sorting a list is a lie about the data — an `LPUSH` queue shown alphabetically misreports what pops next. Gate any client-side ordering on `type === 'set'`.
+> **List order is meaningful; set order is not**, and both arrive in the same `members` array. Sort for display only when `type === 'set'`.
 
-### Costs the surface does not hide
+### Costs
 
-- **`sampledCount` / `sampledBytes`** are sums over a capped `SCAN`, not measurements of the keyspace. `isComplete` is the fact; the names are the guard.
-- **A page may carry slightly more than `scanLimit` entries.** `SCAN` returns whole batches and the cursor has already moved past them, so the limit stops the loop rather than trimming the result — trimming would drop keys no later page could reach.
-- **Sizing is opt-in** (`includeSize`), and every pipeline batch is bounded in **commands**, not keys. Redis is single-threaded, so a pipeline converts a network cost into a server-blocking one: one flush of N keys × 3 commands blocks every other client for the whole burst, on a server someone is inspecting precisely because it is unwell.
-- **`connection.url` is never on the wire.** The config payload carries host, port and a TLS flag; the URL is never read into the admin subpath at all.
-- **`mem_fragmentation_ratio` is reported raw.** On an instance holding very little, allocator and copy-on-write overhead dominate and the figure reads far above 1 without indicating a problem — 9.07 was measured on an instance holding 1.1 MiB. Turning it into a verdict is deployment policy.
+- `sampledCount` / `sampledBytes` are sums over a capped `SCAN`, not measurements of the keyspace; `isComplete` is the fact.
+- A page may carry slightly more than `scanLimit` entries: `SCAN` returns whole batches, so the limit stops the loop rather than trimming the result.
+- Sizing is opt-in (`includeSize`), and every pipeline batch is bounded in commands, not keys, because a large pipeline blocks the single-threaded server for the whole burst.
+- The config payload carries a connection's host, port and a TLS flag, never its URL or credentials.
+- `mem_fragmentation_ratio` is reported raw; turning it into a verdict is deployment policy.
 
 ### Cluster
 
@@ -693,42 +647,11 @@ Every scan-based operation throws `UNSUPPORTED_IN_CLUSTER`, inherited from `Cach
 
 ## 🏗️ Architecture
 
-The package runs **inside** your NestJS application as a dynamic module — not as a separate service:
-
-```
-┌─────────────────────────────────────────────────────┐
-│               Your NestJS Application               │
-│                                                     │
-│  ┌───────────────────────────────────────────────┐  │
-│  │             @bymax-one/nest-cache             │  │
-│  │                                               │  │
-│  │  CacheService ←→ ConnectionManager ←→ Redis   │  │
-│  │  PubSubService ←→ lazy subscriber conn        │  │
-│  │  ScriptManagerService ←→ EVALSHA + NOSCRIPT   │  │
-│  │  KeyBuilder → {namespace}:{prefix}:{id}       │  │
-│  └─────────────┬─────────────────┬───────────────┘  │
-│                │                 │                  │
-│        ┌───────▼──────┐  ┌───────▼──────┐           │
-│        │ ISerializer  │  │ ICacheEvents │           │
-│        │ (yours)      │  │ (yours)      │           │
-│        └──────────────┘  └──────────────┘           │
-└─────────────────────────────────────────────────────┘
-```
+The package runs **inside** your NestJS application as a dynamic module, not as a separate service: `CacheService` and `PubSubService` sit on a `ConnectionManager` (the Pub/Sub subscriber connection is created lazily), `ScriptManagerService` runs scripts with `EVALSHA` and a `NOSCRIPT` fallback, and `KeyBuilder` composes every key and channel as `{namespace}{sep}{prefix}{sep}{id}`.
 
 Both consumer-facing contracts are optional: omit `serializer` and you get `JsonSerializer`; omit `events.onEvent` and connection events are simply not forwarded anywhere.
 
 DI tokens are `Symbol`s (`BYMAX_CACHE_OPTIONS`, `BYMAX_CACHE_CONNECTION`, `BYMAX_CACHE_SCRIPT_REGISTRY`, `BYMAX_CACHE_EVENTS`, `BYMAX_CACHE_SERIALIZER`, `BYMAX_CACHE_KEY_BUILDER`); all providers are singletons. The module is built with `ConfigurableModuleBuilder` and registers globally by default via the `isGlobal` extra (which sets `DynamicModule.global`) — there is no `@Global()` decorator.
-
-### Design Principles
-
-| Principle                    | Description                                                                                                                                                       |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **🔑 Structural Isolation**  | Every key and channel is composed by `KeyBuilder` — namespacing is enforced by the type of the API, not by a convention a caller can forget                       |
-| **🚪 Fail Closed**           | A payload that cannot be decoded throws; it never degrades into `undefined` or a partially-typed object, because a silently wrong cache read is worse than a miss |
-| **🔌 Interface-Driven**      | `ISerializer` and `ICacheEvents` are contracts — MessagePack, a metrics sink, or a logger is a consumer implementation, never a dependency of this package        |
-| **🪶 Singleton Connection**  | One `ioredis` client per module, owned by `ConnectionManager` with `OnModuleInit` / `OnApplicationShutdown` — no `Scope.REQUEST`, no per-call connection churn    |
-| **🌳 Zero Runtime Deps**     | `"dependencies": {}` — every package arrives as a peer dependency, so consumers pin exact versions and the supply-chain surface stays theirs                      |
-| **🧭 Explicit Escape Hatch** | `getClient()` exists, is documented, and is an anti-pattern — un-namespaced access is possible on purpose, and named so a reviewer sees it                        |
 
 ---
 
@@ -740,25 +663,13 @@ A cache sits between your application and every value it has ever computed, so t
 
 Every key and every Pub/Sub channel is composed through `KeyBuilder`, which prepends `{namespace}{separator}` before the command reaches Redis. With fixed literals, `CacheService.get('user-profile', '42')` reads `app:user-profile:42` — there is no code path through the typed API that emits a bare key. The namespace is the isolation boundary; the library does not constrain `prefix` and `id` beyond non-emptiness.
 
-The namespace itself is validated at module bootstrap, not at call time:
-
-| Violation                               | Result                                                           |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| Empty or whitespace-only namespace      | `CacheException(INVALID_NAMESPACE)` — the module fails to start  |
-| Namespace containing the key separator  | `CacheException(INVALID_NAMESPACE)` — prevents prefix collisions |
-| Empty key separator                     | `CacheException(INVALID_NAMESPACE)` — the module fails to start  |
-| Namespace containing `*`, `?`, `[`, `\` | `CacheException(INVALID_NAMESPACE)` — see the glob section below |
-| Empty `prefix` or `id` at the call site | `CacheException(INVALID_KEY)` — no key is sent to Redis          |
-
-A namespace containing the separator is rejected because `namespace: 'a:b'` and `namespace: 'a'` with prefix `b` would resolve to the same keyspace — a tenant boundary that reads as isolated but is not.
+The namespace is validated at module bootstrap, not at call time: an empty or whitespace-only namespace, one containing the key separator, or one containing a glob metacharacter fails with `INVALID_NAMESPACE`, and an empty `prefix` or `id` at the call site fails with `INVALID_KEY` before any command is sent. A namespace containing the separator is rejected because `namespace: 'a:b'` and `namespace: 'a'` with prefix `b` would resolve to the same keyspace.
 
 The same collision exists below the namespace: under `keyEscaping: 'legacy'` (the default) `prefix` and `id` are validated only for emptiness, so `build('a', 'b:c')` and `build('a:b', 'c')` both give `app:a:b:c`, and a glob metacharacter in `prefix` widens `keys()` / `scan()` within the namespace. Set `keyEscaping: 'strict'` and the composition is injective: no two distinct `(prefix, id)` tuples share a key, and a `prefix` is always a literal. See Key Namespacing for what changes when you switch.
 
 ### Deserialization fails closed
 
-`JsonSerializer.deserialize` throws `CacheException(DESERIALIZATION_FAILED)` on any payload that is not valid JSON. It never returns `undefined`, never returns a partial object, and never lets a corrupted entry masquerade as a valid `T`. The same contract is required of any custom `ISerializer` — fail-closed is the invariant, not the default implementation's private choice.
-
-Serialization is symmetric: a top-level `undefined`, function, or `symbol` is rejected up front, because `JSON.stringify` returns the JS value `undefined` for those **without throwing**, which would otherwise escape the try/catch and break the `string` return contract.
+`JsonSerializer.deserialize` throws `CacheException(DESERIALIZATION_FAILED)` on any payload that is not valid JSON; it never returns `undefined` or a partial object. The same contract is required of any custom `ISerializer`. Serialization is symmetric: a top-level `undefined`, function or `symbol` is rejected up front, because `JSON.stringify` returns `undefined` for those without throwing.
 
 ### Secrets stay out of error payloads
 
@@ -774,11 +685,11 @@ Error `details` are built to be safe to log:
 
 ### Lua scripts are registered, never interpolated
 
-Scripts are declared up front — through `options.scripts` or `ScriptManagerService.register(name, lua)` — and executed **by name**. A call site passes `eval(scriptName, keys, args)`; it has no way to pass a script body. Keys are namespaced before execution and arguments arrive as Redis `ARGV[]`, which Lua treats as data, so request input cannot become script source. Standalone and Sentinel use `EVALSHA` with a `NOSCRIPT` reload-and-retry; Cluster sends the full body via `EVAL`, because `EVALSHA` routes by key slot and a keyless reload would not reach the node that reported `NOSCRIPT`.
+Scripts are declared up front (through `options.scripts` or `ScriptManagerService.register(name, lua)`) and executed by name: a call site passes `eval(scriptName, keys, args)` and cannot pass a script body. Keys are namespaced before execution and arguments arrive as `ARGV[]`, which Lua treats as data. Standalone and Sentinel use `EVALSHA` with a `NOSCRIPT` reload-and-retry; Cluster sends the full body via `EVAL`, because `EVALSHA` routes by key slot.
 
 ### The namespace cannot widen a destructive pattern
 
-`validateOptions` rejects a namespace containing a Redis glob metacharacter (`*`, `?`, `[`, `\`). The namespace is composed into `flushNamespace()`'s match pattern, so a metacharacter there is not cosmetic — measured against Redis 8.10.0, `*` and `?` **widen** the pattern into other keyspaces, `\` **escapes** into a different one while sparing its own keys, and `[` opens a character class that never closes so the pattern matches **nothing** and the flush reports success having removed no keys. `]` is accepted: measured to be a literal that neither widens nor silences. This matters most when the namespace is derived from input — multi-tenant wiring using a tenant slug reads like isolation and would otherwise be one unsanitised character from a cross-tenant delete.
+`validateOptions` rejects a namespace containing a Redis glob metacharacter (`*`, `?`, `[`, `\`), because the namespace is composed into `flushNamespace()`'s match pattern: `*` and `?` widen it into other keyspaces, `\` escapes into a different one while sparing its own keys, and `[` opens a class that never closes, so the flush matches nothing and reports success. `]` is accepted, since an unpaired one is a literal. This matters most when the namespace is derived from input, such as a tenant slug.
 
 ### Cluster mode refuses commands it cannot honor safely
 
@@ -802,30 +713,6 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 
 ---
 
-## 🛡️ Security Table
-
-| Layer                 | Implementation                                                                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tenant Isolation      | Every key and channel composed by `KeyBuilder` as `{namespace}{sep}{prefix}{sep}{id}` — no bare-key path in the API                                              |
-| Namespace Validation  | Empty, separator-containing, or glob-metacharacter namespace rejected at bootstrap (`INVALID_NAMESPACE`)                                                         |
-| Admin Scope Allowlist | Scopes declared at wiring, validated and frozen; a caller names a scope by id and can never supply a match pattern                                               |
-| Admin Read-Only       | The `/admin` subpath issues no mutating command — enforced by the `check:admin-readonly` build gate, not by convention                                           |
-| Key Validation        | Empty `prefix` / `id` rejected before the command is issued (`INVALID_KEY`); emptiness only — separators and glob characters in `prefix` / `id` are not rejected |
-| Deserialization       | Fails closed — `DESERIALIZATION_FAILED`; never a partial or wrongly-typed value                                                                                  |
-| Serialization         | Top-level `undefined` / function / symbol rejected; the value is never echoed into `details`                                                                     |
-| Error Payloads        | Connection URLs omitted (may embed credentials); a stored value is never echoed (a fixed text and its length only)                                               |
-| Destructive Ops       | `flushNamespace()` blocked under `NODE_ENV=production` unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped                                      |
-| Lua Execution         | Scripts registered by name; call sites pass keys/args only — request input never reaches a script body                                                           |
-| Cluster Safety        | `scan` / `keys` / `flushNamespace` / `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on a single node                                               |
-| Transport             | `rediss://` sets TLS on the client; explicit `connection.tls` supported for custom CA / mTLS                                                                     |
-| Connection Resilience | Bounded `maxRetriesPerRequest`, `READONLY`-failover reconnect, graceful `quit()` with a shutdown timeout                                                         |
-| Supply Chain          | `"dependencies": {}` — no transitive runtime packages of the library's own choosing; published with npm provenance                                               |
-
-> [!IMPORTANT]
-> The namespace is the isolation boundary. Anything reached through `getClient()` or `pipeline()` sits outside it — those call sites are where cross-tenant reads get introduced.
-
----
-
 ## 🧱 Tech Stack
 
 [![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com)
@@ -835,7 +722,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 [![Jest](https://img.shields.io/badge/Jest-30-C21325?style=flat-square&logo=jest)](https://jestjs.io)
 [![Stryker](https://img.shields.io/badge/Stryker-Mutation_Testing-red?style=flat-square)](https://stryker-mutator.io)
 [![pnpm](https://img.shields.io/badge/pnpm-11-F69220?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io)
-[![tsup](https://img.shields.io/badge/tsup-8-orange?style=flat-square)](https://tsup.egoist.dev)
+[![tsup](https://img.shields.io/badge/tsup-9-orange?style=flat-square)](https://tsup.egoist.dev)
 
 ---
 
@@ -845,21 +732,8 @@ A cache is consulted on the hot path of every request that touches it, so the su
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced by `jest.coverage.config.ts` as a pre-publish gate, not a target
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) at `break: 100` and `ignoreStatic: false`, **0 survived**, and [documented in full](./docs/mutation_testing_results.md)
-- ✅ **One documented equivalent** — the production source carries a single `// Stryker disable` directive, on `configurable: false` of the withheld connection accessor, genuinely equivalent because the resolved options are frozen on the way out (freezing already makes every property non-configurable); `check:mutants` proves it parses and carries its reason, so the score is an accounting rather than a number
 - ✅ **No real Redis in unit tests** — `ioredis-mock` throughout; e2e tests exercise the wired module through `@nestjs/testing` and Testcontainers against a real Redis for connection lifecycle, Pub/Sub, and Lua scripts
 - ✅ **Published-package smoke test** — `scripts/dogfood-smoke-test.mjs` validates exports, tarball shape, and a consumer install before tagging
-
-```bash
-pnpm test          # unit tests (Jest)
-pnpm test:e2e      # end-to-end tests (@nestjs/testing + Testcontainers)
-pnpm test:cov:all  # full coverage gate (100% statements/branches/functions/lines)
-pnpm mutation      # Stryker mutation testing (100% break gate)
-pnpm typecheck     # tsc strict check
-pnpm lint          # ESLint
-```
-
-> [!NOTE]
-> Line coverage proves a line _executed_ under test; mutation testing proves a test _would fail_ if that line were wrong. The full methodology and per-area breakdown are in [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
 ---
 
@@ -945,55 +819,25 @@ All errors are instances of `CacheException` and carry a stable `code` string fr
 | `cache.scope_not_readable`           | 500  | Reserved, never thrown today (unreadable scopes return `withheld`)                                                                                                                                                                                     |
 | `cache.key_not_in_scope`             | 500  | `/admin` call named a key outside the named scope                                                                                                                                                                                                      |
 
-Full catalog and HTTP status mapping: [`docs/technical_specification.md §12`](./docs/technical_specification.md).
-
 ---
 
 ## 🚫 What This Library Does NOT Do
 
 Reliable atomic primitives are in scope; opinionated policies are not. By design, the following are out of scope:
 
-- ❌ **Rate limiting** — compose `incr` + `expire`, a custom Lua script, or a future `@bymax-one/nest-rate-limit`
-- ❌ **Distributed locks** — `setNx` + a release script covers the common case; a future `@bymax-one/nest-lock` would own the edge cases
-- ❌ **BullMQ wiring** — [`@bymax-one/nest-queue`](https://github.com/bymaxone/nest-queue) owns its own connection
+- ❌ **Rate limiting** — compose `incr` + `expire` or a custom Lua script
+- ❌ **Distributed locks** — `setNx` + a release script covers the common case
+- ❌ **BullMQ wiring** — [`@bymax-one/nest-queue`](https://github.com/bymaxone/nest-queue) takes this module's `ConnectionManager` client instead (its Mode A, standalone)
 - ❌ **Cache-aside / read-through patterns** — that policy belongs in your repositories, not in the client
 - ❌ **Compression and at-rest encryption** — implement a custom `ISerializer`
 - ❌ **Tag-based invalidation** — namespaces and prefixes are the invalidation unit
 - ❌ **Redis Streams** — a different consumption model than Pub/Sub; out of scope for this package
 
-See §13 of the [technical specification](./docs/technical_specification.md) for the rationale.
-
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome. Development follows the Bymax coding standards:
-
-- TypeScript strict (`noImplicitAny`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`)
-- TDD with a 100% coverage gate and a 100% mutation break threshold
-- Conventional Commits enforced by commitlint + husky
-- No direct dependencies — peer deps only
-- All boolean identifiers prefixed with `is / has / should / can`
-
-```bash
-# Clone the repository
-git clone https://github.com/bymaxone/nest-cache.git
-cd nest-cache
-
-# Install dependencies
-pnpm install
-
-# Run tests
-pnpm test
-
-# Build
-pnpm build
-
-# Type check
-pnpm typecheck
-```
-
-Run the full gate before opening a PR:
+Contributions are welcome. TypeScript strict, TDD with a 100% coverage gate and a 100% mutation break threshold, Conventional Commits, peer dependencies only. Run the full gate before opening a PR:
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports

@@ -15,6 +15,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   text now names its rules, including that a separator containing `%` is rejected under `keyEscaping: 'strict'`
   (and by `escapePart` in either mode). The serialized body is unchanged except for that catalog text.
 
+### Changed
+
+- README: the build-tool badge now says tsup 9, the `@bymax-one/nest-queue` entry says it takes this module's
+  connection (its Mode A) instead of owning its own. Maintainer notes, measurement notes, mentions of libraries that do not exist, links to the
+  specification and repeated sections (the admin rationale, the security table, the design principles) are
+  removed, so the page documents the package rather than its history.
+
 #### Apply to a consumer
 
 Code that matched on `error.message` to equal "Cache Exception" must match on `error.code` instead; the code and
