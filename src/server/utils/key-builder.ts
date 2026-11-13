@@ -128,7 +128,7 @@ export class KeyBuilder {
    * escaped, so no glob character of its own survives and the trailing `*` is the only wildcard.
    * Both modes escape the fields; only `'strict'` also escapes the joined id, as `build()` does.
    * Under `'legacy'` a separator that is a glob character (`*`, `?`, `[`, `\`) makes every
-   * boundary of the composed pattern a wildcard, so it is refused: use `keyEscaping: 'strict'`.
+   * boundary of the composed pattern glob syntax, so it is refused: use `keyEscaping: 'strict'`.
    *
    * @param segments - The leading fields of the composite id, at least one, none empty.
    * @returns The glob to pass to `scan()` or `keys()` as `pattern`.
@@ -148,7 +148,7 @@ export class KeyBuilder {
     }
     // Legacy stores the joined id as it is, and `compose()` leaves the namespace and prefix boundaries
     // of every pattern as the raw separator, so a separator that is a glob character would turn those
-    // boundaries into wildcards that eat into the owner field. Escaping only this part cannot fix that.
+    // boundaries into glob syntax that reaches into the owner field. Escaping only this part cannot fix that.
     const glob = this.separator.split('').find((unit) => GLOB_CHARS.includes(unit))
     if (glob !== undefined) {
       throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
