@@ -728,7 +728,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 | Lua Execution         | Scripts are registered by name; call sites pass keys and arguments, never a script body                          |
 | Cluster Safety        | `scan`, `keys`, `flushNamespace` and `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on one node    |
 | Transport             | `rediss://` sets TLS on the client; `connection.tls` covers a custom CA or mTLS                                  |
-| Supply Chain          | No runtime dependencies; published with npm provenance                                                           |
+| Supply Chain          | Nothing is bundled and every dependency is a peer you pin; published with npm provenance                         |
 
 > [!IMPORTANT]
 > The namespace is the isolation boundary. Anything reached through `getClient()` or `pipeline()` sits outside it.
