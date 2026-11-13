@@ -176,14 +176,38 @@ export function splitEscapedParts(
 }
 
 /**
- * Whether `text` holds any code unit of `units`.
+ * Whether a glob pattern spells any code unit of `units` as a literal.
  *
- * @param text - The text to search.
+ * A literal is a unit outside every character class (`[...]`), escaped with a backslash or not.
+ * Inside a class a unit is a member or, after `^`, an excluded one, and such a class can match text
+ * that holds none of it, so it does not count. A class ends at its first unescaped `]`, an unfinished
+ * one runs to the end of the pattern, and a backslash makes the next unit a plain character in and
+ * out of a class.
+ *
+ * @param pattern - The glob pattern.
  * @param units - The code units to look for, one character each.
- * @returns True when at least one code unit of `text` is in the set.
+ * @returns True when the pattern spells one of them outside a class.
  */
-export function holdsAnyUnit(text: string, units: ReadonlySet<string>): boolean {
-  return text.split('').some((unit) => units.has(unit))
+export function holdsLiteralUnit(pattern: string, units: ReadonlySet<string>): boolean {
+  let inClass = false
+  let escaped = false
+  for (const unit of pattern.split('')) {
+    if (escaped) {
+      escaped = false
+      if (!inClass && units.has(unit)) {
+        return true
+      }
+    } else if (unit === '\\') {
+      escaped = true
+    } else if (inClass) {
+      inClass = unit !== ']'
+    } else if (unit === '[') {
+      inClass = true
+    } else if (units.has(unit)) {
+      return true
+    }
+  }
+  return false
 }
 
 /**

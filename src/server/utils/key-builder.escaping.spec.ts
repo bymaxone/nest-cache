@@ -111,6 +111,21 @@ describe('KeyBuilder key escaping', () => {
       expect((caught as CacheException).message).toContain('separator')
     })
 
+    // A glob can match ids that do not hold the separator character it spells: a class that contains it
+    // or negates it, and a class that the separator itself closes. Those are not refused.
+    it.each([
+      [':', '[a:]*'],
+      [':', '[^:]*'],
+      [']', '[ab]*'],
+      ['|', '[|a]*']
+    ])('does not refuse a class pattern %j: %j', (separator, pattern) => {
+      const builder = makeStrict({ keySeparator: separator })
+
+      expect(builder.buildPattern('users', pattern)).toBe(
+        `app${separator}users${separator}${pattern}`
+      )
+    })
+
     // A separator character that is also a character of an escape token (a digit, A-F, u) is spelled
     // inside tokens, so a pattern holding it can legitimately match: only characters outside the token
     // alphabet are refused. The sweep helper must stay usable for such a separator.

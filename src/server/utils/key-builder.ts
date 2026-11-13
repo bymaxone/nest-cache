@@ -12,7 +12,7 @@ import {
   ESCAPE_CHAR,
   buildEscapeSet,
   escapeKeyPart,
-  holdsAnyUnit,
+  holdsLiteralUnit,
   splitEscapedParts,
   unescapeKeyPart,
   unmatchableUnits
@@ -92,8 +92,9 @@ export class KeyBuilder {
    *
    * Under `'strict'` the prefix is escaped, glob metacharacters included, so it cannot widen the
    * match; the pattern is a glob over the escaped id and is passed through otherwise untouched.
-   * A stored id holds no separator character under `'strict'`, so a pattern that does can never
-   * match and is refused instead of returning nothing; use {@link KeyBuilder.idPrefixPattern} to
+   * A stored id holds no separator character under `'strict'`, so a pattern that spells one as a
+   * literal can never match and is refused instead of returning nothing (a character class that
+   * contains or excludes it can still match, and is accepted); use {@link KeyBuilder.idPrefixPattern} to
    * sweep a composite id. A separator character that is also spelled inside escape tokens (a digit,
    * `A`-`F`, `u`) cannot be told apart from a token and is never refused. Under `'legacy'` both are
    * joined as given.
@@ -109,7 +110,7 @@ export class KeyBuilder {
     if (!this.strict) {
       return this.compose(prefix, pattern)
     }
-    if (holdsAnyUnit(pattern, this.separatorUnits)) {
+    if (holdsLiteralUnit(pattern, this.separatorUnits)) {
       throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, {
         reason: 'pattern_contains_separator'
       })

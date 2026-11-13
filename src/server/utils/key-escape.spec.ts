@@ -8,7 +8,7 @@
 import {
   buildEscapeSet,
   escapeKeyPart,
-  holdsAnyUnit,
+  holdsLiteralUnit,
   splitEscapedParts,
   unescapeKeyPart,
   unmatchableUnits
@@ -189,16 +189,45 @@ describe('unmatchableUnits', () => {
   })
 })
 
-describe('holdsAnyUnit', () => {
-  // Any code unit of the text in the set counts, and an empty set or empty text holds none.
-  it('finds a code unit of the set anywhere in the text', () => {
-    const units = new Set([':'])
+describe('holdsLiteralUnit', () => {
+  const colon = new Set([':'])
 
-    expect(holdsAnyUnit(':', units)).toBe(true)
-    expect(holdsAnyUnit('a:b', units)).toBe(true)
-    expect(holdsAnyUnit('ab:', units)).toBe(true)
-    expect(holdsAnyUnit('ab', units)).toBe(false)
-    expect(holdsAnyUnit('', units)).toBe(false)
-    expect(holdsAnyUnit(':', new Set())).toBe(false)
+  // A unit outside any character class, escaped or not, is a literal the pattern spells.
+  it.each(['u1:*', ':', 'a:b', 'ab:', 'x[a]:*', '\\[:]', 'a\\:b', '[a]\\]:'])(
+    'finds a literal : in %j',
+    (pattern) => {
+      expect(holdsLiteralUnit(pattern, colon)).toBe(true)
+    }
+  )
+
+  // Inside a character class the unit is a member or the negated set, and a class can match ids that
+  // hold none of it, so the pattern is accepted: only a pattern that can never match is refused.
+  it.each(['[a:]*', '[^:]*', '[:]', '[a-z:]x*', '[a\\]:]*', 'ab', '', '[a:', '[', '\\', 'a\\'])(
+    'does not count the : in %j',
+    (pattern) => {
+      expect(holdsLiteralUnit(pattern, colon)).toBe(false)
+    }
+  )
+
+  // A class ends at the first unescaped closing bracket, so what follows it is outside, and a
+  // separator that is itself the closing bracket does not count inside its own class.
+  it('ends an escape after one unit, so the next unit keeps its glob meaning', () => {
+    expect(holdsLiteralUnit('\\x[a:]*', colon)).toBe(false)
+    expect(holdsLiteralUnit('\\x[a]:', colon)).toBe(true)
+    expect(holdsLiteralUnit('\\\\[a:]', colon)).toBe(false)
+  })
+
+  it('ends a class at its first unescaped closing bracket', () => {
+    expect(holdsLiteralUnit('[ab]:', colon)).toBe(true)
+    expect(holdsLiteralUnit('[ab]]', new Set([']']))).toBe(true)
+    expect(holdsLiteralUnit('[ab]*', new Set([']']))).toBe(false)
+    expect(holdsLiteralUnit('[a\\]b]*', new Set([']']))).toBe(false)
+    expect(holdsLiteralUnit('\\]', new Set([']']))).toBe(true)
+  })
+
+  // An empty set holds nothing, and the count is per code unit.
+  it('holds nothing for an empty set and counts each code unit', () => {
+    expect(holdsLiteralUnit(':', new Set())).toBe(false)
+    expect(holdsLiteralUnit('a\u{1F600}', new Set(['\uD83D']))).toBe(true)
   })
 })
