@@ -669,7 +669,7 @@ The same collision exists below the namespace: under `keyEscaping: 'legacy'` (th
 
 ### Deserialization fails closed
 
-`JsonSerializer.deserialize` throws `CacheException(DESERIALIZATION_FAILED)` on any payload that is not valid JSON; it never returns `undefined` or a partial object. The same contract is required of any custom `ISerializer`. Serialization is symmetric: a top-level `undefined`, function or `symbol` is rejected up front, because `JSON.stringify` returns `undefined` for those without throwing.
+`JsonSerializer.deserialize` throws `CacheException(DESERIALIZATION_FAILED)` on any payload that is not valid JSON; it never returns `undefined` or a partial object. It does not check valid JSON against `T`, so validate the shape of untrusted data in your application. The same contract is required of any custom `ISerializer`. Serialization is symmetric: a top-level `undefined`, function or `symbol` is rejected up front, because `JSON.stringify` returns `undefined` for those without throwing.
 
 ### Secrets stay out of error payloads
 
@@ -722,7 +722,7 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 | Key Validation        | An empty `prefix` or `id` is rejected (`INVALID_KEY`); `keyEscaping: 'strict'` makes the composition injective   |
 | Admin Scope Allowlist | Scopes are declared at wiring and frozen; a caller names a scope by id and never supplies a pattern              |
 | Admin Read-Only       | `/admin` issues no mutating command, enforced by the `check:admin-readonly` build gate                           |
-| Deserialization       | Fails closed with `DESERIALIZATION_FAILED`; never a partial or wrongly-typed value                               |
+| Deserialization       | A payload that is not valid JSON throws `DESERIALIZATION_FAILED`; valid JSON is not checked against `T`          |
 | Error Payloads        | Connection URLs and stored values never appear in error `details`                                                |
 | Destructive Ops       | `flushNamespace()` is blocked in production unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped |
 | Lua Execution         | Scripts are registered by name; call sites pass keys and arguments, never a script body                          |
