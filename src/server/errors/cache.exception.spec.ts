@@ -30,6 +30,17 @@ describe('CacheException', () => {
     )
   })
 
+  // The original error of a wrapped failure is kept as `cause`, and absent when none is given.
+  it('carries the cause it is given, and none otherwise', () => {
+    const original = new Error('original')
+
+    expect(
+      new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED, undefined, undefined, original)
+        .cause
+    ).toBe(original)
+    expect(new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED).cause).toBeUndefined()
+  })
+
   // An unknown code must fall back to the generic message, never `undefined`.
   it('falls back to a generic message for an unknown code', () => {
     const ex = new CacheException('cache.not_a_real_code' as CacheErrorCode)

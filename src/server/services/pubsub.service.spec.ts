@@ -102,6 +102,31 @@ describe('PubSubService', () => {
     await observed.onApplicationShutdown()
   })
 
+  // A custom serializer's decode error is wrapped, so the event the host observes carries the catalog
+  // text and nothing the codec's own message quoted from the payload.
+  it('forwards a wrapped custom-serializer error without the codec message', async () => {
+    const onEvent = jest.fn()
+    const codec = {
+      serialize: (value: unknown): string => String(value),
+      deserialize: (): never => {
+        throw new Error('cannot decode secret-token-123')
+      }
+    }
+    const observed = new PubSubService(options, connection, keyBuilder, codec, { onEvent })
+    await observed.subscribe('wrapped', () => undefined)
+
+    await observed.publish('wrapped', 'x')
+    await tick()
+
+    expect(onEvent).toHaveBeenCalledWith('error', {
+      role: 'subscriber',
+      reason: 'handler_error',
+      channel: 'ps:wrapped',
+      error: 'Failed to deserialize the cached value.'
+    })
+    await observed.onApplicationShutdown()
+  })
+
   // A non-Error handler throw must still be stringified into the forwarded event
   // (the non-Error branch of describeError).
   it('stringifies a non-Error handler throw for the events callback', async () => {

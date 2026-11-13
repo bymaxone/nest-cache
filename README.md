@@ -405,6 +405,8 @@ BymaxCacheModule.forRoot({
 })
 ```
 
+Whatever a custom serializer throws reaches the caller as a `CacheException` (`SERIALIZATION_FAILED` or `DESERIALIZATION_FAILED`) whose `details` hold a fixed text and never the value, with the original error on `cause`. An error that is already a `CacheException` passes through unchanged.
+
 ---
 
 ## 🔗 Plug with @bymax-one/nest-logger

@@ -54,12 +54,20 @@ export class CacheException extends HttpException {
    * @param statusCode - HTTP status override. When omitted, defaults to the
    *   canonical status for `code` (§12.2), or 500 for codes whose canonical
    *   status is 500.
+   * @param cause - The original error this one wraps, kept on `cause`. It is never part of the
+   *   serialized body, so it may hold what `details` must not.
    */
-  constructor(code: CacheErrorCode, details?: Record<string, unknown>, statusCode?: HttpStatus) {
+  constructor(
+    code: CacheErrorCode,
+    details?: Record<string, unknown>,
+    statusCode?: HttpStatus,
+    cause?: unknown
+  ) {
     const message = CACHE_ERROR_MESSAGES.get(code) ?? 'Cache error'
     super(
       { error: { code, message, details: details ?? null } },
-      statusCode ?? CACHE_ERROR_STATUS.get(code) ?? HttpStatus.INTERNAL_SERVER_ERROR
+      statusCode ?? CACHE_ERROR_STATUS.get(code) ?? HttpStatus.INTERNAL_SERVER_ERROR,
+      { cause }
     )
     // An object response leaves `Error.message` as the class-name default, which is all a log line
     // or an uncaught boot failure prints. The catalog text is the readable message.
