@@ -14,7 +14,8 @@ import {
   escapeKeyPart,
   holdsAnyUnit,
   splitEscapedParts,
-  unescapeKeyPart
+  unescapeKeyPart,
+  unmatchableUnits
 } from './key-escape'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
@@ -47,7 +48,7 @@ export class KeyBuilder {
     this.strict = options.keyEscaping === 'strict'
     this.partEscapes = buildEscapeSet(options.keySeparator, false)
     this.prefixEscapes = buildEscapeSet(options.keySeparator, true)
-    this.separatorUnits = new Set(options.keySeparator.split(''))
+    this.separatorUnits = unmatchableUnits(options.keySeparator)
   }
 
   /**
@@ -93,7 +94,9 @@ export class KeyBuilder {
    * match; the pattern is a glob over the escaped id and is passed through otherwise untouched.
    * A stored id holds no separator character under `'strict'`, so a pattern that does can never
    * match and is refused instead of returning nothing; use {@link KeyBuilder.idPrefixPattern} to
-   * sweep a composite id. Under `'legacy'` both are joined as given.
+   * sweep a composite id. A separator character that is also spelled inside escape tokens (a digit,
+   * `A`-`F`, `u`) cannot be told apart from a token and is never refused. Under `'legacy'` both are
+   * joined as given.
    *
    * @param prefix - The entity-group prefix.
    * @param pattern - The glob for the id segment, e.g. `'*'`.

@@ -111,6 +111,21 @@ describe('KeyBuilder key escaping', () => {
       expect((caught as CacheException).message).toContain('separator')
     })
 
+    // A separator character that is also a character of an escape token (a digit, A-F, u) is spelled
+    // inside tokens, so a pattern holding it can legitimately match: only characters outside the token
+    // alphabet are refused. The sweep helper must stay usable for such a separator.
+    it.each(['6', 'A', 'u', '25'])(
+      'does not refuse a pattern for the token-character separator %j',
+      (separator) => {
+        const builder = makeStrict({ keySeparator: separator })
+        const pattern = builder.idPrefixPattern([separator])
+
+        expect(builder.buildPattern('sessions', pattern)).toBe(
+          `app${separator}sessions${separator}${pattern}`
+        )
+      }
+    )
+
     // Legacy composes the pattern as given, and that pattern matches there: it is not refused.
     it('accepts a pattern holding the separator under legacy', () => {
       expect(makeBuilder().buildPattern('sessions', 'u1:*')).toBe('app:sessions:u1:*')

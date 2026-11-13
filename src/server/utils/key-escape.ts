@@ -23,6 +23,12 @@ export const GLOB_CHARS = '*?[\\'
 /** One escape token: `%XX` (ASCII) or `%uXXXX` (any other code unit). */
 const TOKEN = /(%[0-9A-F]{2}|%u[0-9A-F]{4})/
 
+/**
+ * The characters an escape token is spelled with: the escape character, the hex digits (uppercase) and
+ * the `u` of the long form. A separator character in this set also occurs inside tokens.
+ */
+const TOKEN_ALPHABET: ReadonlySet<string> = new Set('0123456789ABCDEFu%')
+
 /** Whether the code unit is a UTF-16 surrogate, which on its own has no UTF-8 encoding. */
 const isSurrogate = (unit: number): boolean => unit >= 0xd800 && unit <= 0xdfff
 
@@ -178,4 +184,19 @@ export function splitEscapedParts(
  */
 export function holdsAnyUnit(text: string, units: ReadonlySet<string>): boolean {
   return text.split('').some((unit) => units.has(unit))
+}
+
+/**
+ * The code units of `separator` that no escape token is spelled with.
+ *
+ * Under strict escaping every separator character is rewritten, so a stored id never holds one of
+ * these: a pattern that does can never match. A separator character that is also a token
+ * character (a digit, `A`-`F`, `u`) is spelled inside tokens, so a pattern may hold it and still match,
+ * and it is left out.
+ *
+ * @param separator - The configured key separator.
+ * @returns The code units a stored id cannot hold.
+ */
+export function unmatchableUnits(separator: string): ReadonlySet<string> {
+  return new Set(separator.split('').filter((unit) => !TOKEN_ALPHABET.has(unit)))
 }

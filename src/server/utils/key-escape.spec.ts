@@ -5,7 +5,14 @@
  * each token, the surrogate range edges and what the decoder accepts, so none of them can move
  * without a test failing.
  */
-import { buildEscapeSet, escapeKeyPart, splitEscapedParts, unescapeKeyPart } from './key-escape'
+import {
+  buildEscapeSet,
+  escapeKeyPart,
+  holdsAnyUnit,
+  splitEscapedParts,
+  unescapeKeyPart,
+  unmatchableUnits
+} from './key-escape'
 
 /** Escapes `part` with the default separator and no glob characters. */
 const escape = (part: string, separator = ':', glob = false): string =>
@@ -155,5 +162,43 @@ describe('splitEscapedParts', () => {
   it('matches a multi-character separator whole', () => {
     expect(splitEscapedParts('a%61ab', 'ab')).toBeNull()
     expect(splitEscapedParts('xabz', 'ab')).toEqual({ prefix: 'x', id: 'z' })
+  })
+})
+
+describe('unmatchableUnits', () => {
+  // A separator character outside the token alphabet is spelled only raw, so a pattern holding it
+  // can never match; one inside the alphabet (a digit, uppercase hex, u) is also spelled in tokens.
+  it.each([
+    [':', [':']],
+    ['|', ['|']],
+    ['aa', ['a']],
+    ['G', ['G']],
+    ['v', ['v']],
+    ['/', ['/']],
+    ['6', []],
+    ['0', []],
+    ['9', []],
+    ['A', []],
+    ['F', []],
+    ['u', []],
+    ['25', []],
+    ['%', []],
+    ['6:', [':']]
+  ])('keeps %j as %j', (separator, expected) => {
+    expect([...unmatchableUnits(separator)]).toEqual(expected)
+  })
+})
+
+describe('holdsAnyUnit', () => {
+  // Any code unit of the text in the set counts, and an empty set or empty text holds none.
+  it('finds a code unit of the set anywhere in the text', () => {
+    const units = new Set([':'])
+
+    expect(holdsAnyUnit(':', units)).toBe(true)
+    expect(holdsAnyUnit('a:b', units)).toBe(true)
+    expect(holdsAnyUnit('ab:', units)).toBe(true)
+    expect(holdsAnyUnit('ab', units)).toBe(false)
+    expect(holdsAnyUnit('', units)).toBe(false)
+    expect(holdsAnyUnit(':', new Set())).toBe(false)
   })
 })
