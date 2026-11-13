@@ -39,6 +39,9 @@ describe('CacheException', () => {
         .cause
     ).toBe(original)
     expect(new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED).cause).toBeUndefined()
+    expect(
+      new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED, undefined, undefined, 0).cause
+    ).toBe(0)
   })
 
   // An unknown code must fall back to the generic message, never `undefined`.

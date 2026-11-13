@@ -69,6 +69,13 @@ describe('guardSerializer', () => {
     expect((caught as CacheException).cause).toBe('plain string')
   })
 
+  // A falsy thrown value is a cause like any other: Nest drops a falsy one, so the exception keeps it itself.
+  it.each([0, '', false, null])('keeps a falsy throw %p as the cause', (thrown) => {
+    const caught = thrownBy(() => guardSerializer(throwing(thrown)).deserialize('x'))
+
+    expect((caught as CacheException).cause).toBe(thrown)
+  })
+
   // A CacheException from the serializer (the default JSON one throws these) is not wrapped again.
   it('passes a CacheException through unchanged', () => {
     const own = new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED, { error: 'x' })
