@@ -15,6 +15,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   text now names its rules, including that a separator containing `%` is rejected under `keyEscaping: 'strict'`
   (and by `escapePart` in either mode). The serialized body is unchanged except for that catalog text.
 
+- A custom `ISerializer` that throws now reaches the caller as a `CacheException`, as the `ISerializer` contract
+  says: `SERIALIZATION_FAILED` from a failed encode and `DESERIALIZATION_FAILED` from a failed decode, with a fixed
+  `details` text (plus the stored value's length on decode) and the original error as `cause`. The error a codec
+  throws often quotes its input, so a `Pub/Sub` handler event for a failed decode now carries the catalog text and
+  not that message. `CacheException` accepts an optional fourth argument, `cause`. A `CacheException` thrown by the
+  serializer passes through unchanged, which covers the default JSON serializer.
+- The `JsonSerializer` documentation no longer says a corrupted entry can never pass as a valid `T`: only a payload
+  that is not valid JSON throws, and valid JSON is not checked against `T`.
+
 ### Changed
 
 - README: the build-tool badge now says tsup 9, the `@bymax-one/nest-queue` entry says it takes this module's
@@ -26,7 +35,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 #### Apply to a consumer
 
 Code that matched on `error.message` to equal "Cache Exception" must match on `error.code` instead; the code and
-the `details` are unchanged. The `message` field in a serialized `cache.invalid_namespace` body now carries the
+the `details` are unchanged. Code that caught the raw error a custom serializer threw must catch `CacheException`
+instead, or read the original from its `cause`. The `message` field in a serialized `cache.invalid_namespace` body now carries the
 longer text. The declarations do not change.
 
 ## [1.2.12] - 2026-11-12

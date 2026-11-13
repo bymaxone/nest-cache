@@ -10,7 +10,9 @@
  *
  * Implementations MUST be deterministic and MUST throw on malformed input
  * during `deserialize` — never return `undefined` or a partial value. The cache
- * service catches that throw and wraps it as a `CacheException` so deserialization
+ * and Pub/Sub services catch any throw from either method that is not already a
+ * `CacheException` and wrap it as one (`SERIALIZATION_FAILED` or
+ * `DESERIALIZATION_FAILED`), keeping the original as `cause`, so deserialization
  * fails closed (security invariant — see CLAUDE.md §4).
  */
 export interface ISerializer {

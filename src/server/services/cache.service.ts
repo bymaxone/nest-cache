@@ -25,6 +25,7 @@ import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
 import { assertTtlSeconds, MIN_WRITE_TTL_SECONDS } from '../utils/ttl'
@@ -81,7 +82,7 @@ export class CacheService {
     @Inject(ScriptManagerService)
     private readonly scriptRegistry?: ScriptManagerService
   ) {
-    this.serializer = resolveSerializer(options, injectedSerializer)
+    this.serializer = guardSerializer(resolveSerializer(options, injectedSerializer))
   }
 
   // ─── String / value commands ───────────────────────────────────────────────

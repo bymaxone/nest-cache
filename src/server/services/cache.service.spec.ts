@@ -677,6 +677,44 @@ describe('CacheService', () => {
     })
   })
 
+  describe('a custom serializer that throws', () => {
+    /** A serializer whose methods fail with an error quoting the value, as a codec's often do. */
+    const failing = (original: Error): ISerializer => ({
+      serialize: () => {
+        throw original
+      },
+      deserialize: () => {
+        throw original
+      }
+    })
+
+    // The ISerializer contract says a throw is wrapped as a CacheException, so a host catches one type
+    // and the error envelope keys on its code. The original stays reachable as `cause`.
+    it('reaches the caller as a CacheException on read and on write', async () => {
+      const original = new Error('cannot decode secret-token-123')
+      const guarded = new CacheService(
+        applyDefaults({
+          connection: { host: 'h' },
+          namespace: 'test',
+          serializer: failing(original)
+        }),
+        connection,
+        keyBuilder
+      )
+      await connection.getClient().set('test:p:k', 'stored')
+
+      const onRead = await guarded.get('p', 'k').catch((error: unknown) => error)
+      const onWrite = await guarded.set('p', 'k', { a: 1 }).catch((error: unknown) => error)
+
+      expect(onRead).toBeInstanceOf(CacheException)
+      expect((onRead as CacheException).code).toBe(CACHE_ERROR_CODES.DESERIALIZATION_FAILED)
+      expect((onRead as CacheException).cause).toBe(original)
+      expect(onWrite).toBeInstanceOf(CacheException)
+      expect((onWrite as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
+      expect((onWrite as CacheException).cause).toBe(original)
+    })
+  })
+
   describe('eval', () => {
     // Without a wired ScriptManagerService, eval must fail closed rather than
     // silently no-op — guards a manual instantiation that omitted the registry.

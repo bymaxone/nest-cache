@@ -82,9 +82,10 @@ export class JsonSerializer implements ISerializer {
   /**
    * Decodes a JSON string back into a value.
    *
-   * Fails closed: a malformed payload throws instead of returning `undefined`
-   * or a partial value, so a corrupted cache entry can never masquerade as a
-   * valid `T` (security invariant — CLAUDE.md §4).
+   * Fails closed on malformed input: a payload that is not valid JSON throws
+   * instead of returning `undefined` or a partial value. Valid JSON is returned
+   * as it parses and is not checked against `T`, so validate the shape of
+   * untrusted data where it is used (security invariant — CLAUDE.md §4).
    *
    * @typeParam T - The expected decoded type.
    * @param raw - The JSON string to decode.
