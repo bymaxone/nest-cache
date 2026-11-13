@@ -876,7 +876,7 @@ export class KeyBuilder {
   /** A SCAN/KEYS pattern: under 'strict' the prefix is escaped (glob included), the pattern is a glob. */
   buildPattern(prefix: string, pattern: string): string
 
-  /** Under 'strict', the id-part glob matching every composite id that starts with these leading fields; throws INVALID_KEY for none or an empty one. Under 'legacy', the plain glob. */
+  /** The id-part glob matching every composite id (fields escaped with escapePart, joined with the separator) that starts with these leading fields; throws INVALID_KEY for none or an empty one. Both modes escape the fields; only 'strict' also escapes the joined id, as build() does. */
   idPrefixPattern(segments: readonly string[]): string
 
   /** Escapes one part so it can be joined with the separator unambiguously, in any position. Throws INVALID_NAMESPACE when the separator contains %. */

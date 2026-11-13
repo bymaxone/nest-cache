@@ -170,10 +170,24 @@ describe('KeyBuilder key escaping', () => {
       expect(builder.idPrefixPattern(['u*'])).toBe('u%252A%3A*')
     })
 
-    // Legacy stores the id as joined, so the pattern is the plain glob that works there.
+    // Legacy stores no outer escaping, so a plain field keeps the glob that works there.
     it('builds the plain glob under legacy', () => {
       expect(makeBuilder().idPrefixPattern(['u1'])).toBe('u1:*')
       expect(makeBuilder().idPrefixPattern(['a', 'b'])).toBe('a:b:*')
+    })
+
+    // Legacy stores the id as the fields escaped one by one and joined, with no outer escaping, so
+    // the pattern escapes each field the same way: a field holding the separator or a glob character
+    // stays one literal field, and cannot widen the sweep to another owner.
+    it('escapes each field under legacy and leaves the separator and wildcard raw', () => {
+      const builder = makeBuilder()
+
+      expect(builder.idPrefixPattern(['a:b'])).toBe('a%3Ab:*')
+      expect(builder.idPrefixPattern(['u*'])).toBe('u%2A:*')
+      expect(builder.idPrefixPattern(['a:b', 'c'])).toBe('a%3Ab:c:*')
+      expect(builder.buildLegacy('sessions', builder.escapePart('a:b') + ':s1')).toBe(
+        'app:sessions:a%3Ab:s1'
+      )
     })
 
     // The pattern matches every id that starts with its fields and none that merely resembles them:
