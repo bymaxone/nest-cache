@@ -176,6 +176,27 @@ describe('KeyBuilder key escaping', () => {
       expect(makeBuilder().idPrefixPattern(['a', 'b'])).toBe('a:b:*')
     })
 
+    // Legacy accepts a separator that is a glob character. In the pattern it must stay the literal
+    // delimiter of the owner's boundary, not become a second wildcard that selects another owner.
+    it.each([
+      ['*', 'u1\\**', 'u1*s1', 'u10*s1'],
+      ['?', 'u1\\?*', 'u1?s1', 'u10?s1'],
+      ['[', 'u1\\[*', 'u1[s1', 'u10[s1'],
+      ['\\', 'u1\\\\*', 'u1\\s1', 'u10\\s1']
+    ])(
+      'keeps a glob separator %j literal under legacy: %j',
+      (separator, expected, owned, other) => {
+        const builder = makeBuilder({ keySeparator: separator })
+        const pattern = builder.idPrefixPattern(['u1'])
+
+        expect(pattern).toBe(expected)
+        // The literal prefix, with each backslash escape resolved, starts the owner's id and not the other's.
+        const literal = pattern.slice(0, -1).replace(/\\(.)/g, '$1')
+        expect(owned.startsWith(literal)).toBe(true)
+        expect(other.startsWith(literal)).toBe(false)
+      }
+    )
+
     // Legacy stores the id as the fields escaped one by one and joined, with no outer escaping, so
     // the pattern escapes each field the same way: a field holding the separator or a glob character
     // stays one literal field, and cannot widen the sweep to another owner.

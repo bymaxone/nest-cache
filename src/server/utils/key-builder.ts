@@ -93,8 +93,9 @@ export class KeyBuilder {
    * Under `'strict'` the prefix is escaped, glob metacharacters included, so it cannot widen the
    * match; the pattern is a glob over the escaped id and is passed through otherwise untouched.
    * A stored id holds no separator character under `'strict'`, so a pattern that spells one as a
-   * literal can never match and is refused instead of returning nothing (a character class that
-   * contains or excludes it can still match, and is accepted); use {@link KeyBuilder.idPrefixPattern} to
+   * literal can never match and is refused instead of returning nothing (a character class is
+   * accepted, since one with another member or negated can match; only a class holding nothing but
+   * the separator still matches nothing); use {@link KeyBuilder.idPrefixPattern} to
    * sweep a composite id. A separator character that is also spelled inside escape tokens (a digit,
    * `A`-`F`, `u`) cannot be told apart from a token and is never refused. Under `'legacy'` both are
    * joined as given.
@@ -125,7 +126,8 @@ export class KeyBuilder {
    * {@link KeyBuilder.escapePart}, joined with the separator and passed to `build()`. The trailing
    * separator belongs to the prefix, so `['u1']` matches `u1:s1` and not `u10:s1`. Every field is
    * escaped, so no glob character of its own survives and the trailing `*` is the only wildcard.
-   * Both modes escape the fields; only `'strict'` also escapes the joined id, as `build()` does.
+   * Both modes escape the fields; only `'strict'` also escapes the joined id, as `build()` does. A
+   * separator that is a glob character, which `'legacy'` allows, is backslash-escaped in the pattern.
    *
    * @param segments - The leading fields of the composite id, at least one, none empty.
    * @returns The glob to pass to `scan()` or `keys()` as `pattern`.
@@ -138,11 +140,14 @@ export class KeyBuilder {
     if (segments.includes('')) {
       throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, { reason: 'empty_id' })
     }
-    const joined = segments.map((segment) => this.escapePart(segment)).join(this.separator)
-    // Under strict `build()` escapes the joined id once more, separator included; under legacy it
-    // stores the joined id as it is, so the separator stays raw there.
-    const idPrefix = joined + this.separator
-    return `${this.strict ? escapeKeyPart(idPrefix, this.partEscapes) : idPrefix}*`
+    const fields = segments.map((segment) => this.escapePart(segment))
+    if (this.strict) {
+      return `${escapeKeyPart(fields.join(this.separator) + this.separator, this.partEscapes)}*`
+    }
+    // Legacy stores the joined id as it is, so the separator stays raw in the id; in the pattern a
+    // separator that is a glob character is backslash-escaped, so it is the owner's literal boundary.
+    const separator = this.separator.replace(/[*?[\\]/g, '\\$&')
+    return `${fields.join(separator)}${separator}*`
   }
 
   /**
