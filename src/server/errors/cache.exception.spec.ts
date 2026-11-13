@@ -39,7 +39,7 @@ describe('CacheException', () => {
         .cause
     ).toBe(original)
     expect(new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED).cause).toBeUndefined()
-    // Three-argument construction creates no `cause` property at all, as before.
+    // Construction without a cause must not create an own `cause` property.
     expect(
       Object.hasOwn(new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED), 'cause')
     ).toBe(false)
