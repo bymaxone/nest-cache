@@ -25,7 +25,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   never match, because a stored id holds none, so it silently returned nothing. A sweep that worked under `'legacy'`, such as
   `scan('sessions', `${userId}:*`)` to revoke a user's sessions, was a silent no-op under `'strict'`. That pattern now
   throws `INVALID_KEY` (`details.reason: 'pattern_contains_separator'`; a separator character that escape tokens are also
-  spelled with, a digit, `A`-`F` or `u`, is never refused, and neither is one inside a character class), and the new `KeyBuilder.idPrefixPattern` builds
+  spelled with, a digit, `A`-`F` or `u`, is never refused, and the check stops at a character class), and the new `KeyBuilder.idPrefixPattern` builds
   the pattern that matches the ids of one owner. A separator containing a glob character (`*`, `?`, `[`, `\`) is now
   rejected at registration under `'strict'`, since it widened every pattern built from it, `flushNamespace` included.
 - The `JsonSerializer` documentation no longer says a corrupted entry can never pass as a valid `T`: only a payload

@@ -192,36 +192,54 @@ describe('unmatchableUnits', () => {
 describe('holdsLiteralUnit', () => {
   const colon = new Set([':'])
 
-  // A unit outside any character class, escaped or not, is a literal the pattern spells.
-  it.each(['u1:*', ':', 'a:b', 'ab:', 'x[a]:*', '\\[:]', 'a\\:b', '[a]\\]:'])(
-    'finds a literal : in %j',
+  // Without a character class the pattern is plain literals, `*`, `?` and escapes, so a separator
+  // unit it spells, raw or escaped, can never be matched by a stored id: the pattern is refused.
+  it.each(['u1:*', ':', 'a:b', 'ab:', 'a\\:b', 'x\\y:', 'u1:[a', '*:*'])(
+    'finds a literal : in %j before any class',
     (pattern) => {
       expect(holdsLiteralUnit(pattern, colon)).toBe(true)
     }
   )
 
-  // Inside a character class the unit is a member or the negated set, and a class can match ids that
-  // hold none of it, so the pattern is accepted: only a pattern that can never match is refused.
-  it.each(['[a:]*', '[^:]*', '[:]', '[a-z:]x*', '[a\\]:]*', 'ab', '', '[a:', '[', '\\', 'a\\'])(
-    'does not count the : in %j',
-    (pattern) => {
-      expect(holdsLiteralUnit(pattern, colon)).toBe(false)
-    }
-  )
+  // A class is not parsed. Redis closes it by rules this module does not copy (range endpoints, a
+  // closing bracket as the first member), so a pattern holding one is accepted whatever follows it.
+  it.each([
+    '[a:]*',
+    '[^:]*',
+    '[:]',
+    '[a-z:]x*',
+    '[a-]:]*',
+    '[a\\]:]*',
+    'x[a]:*',
+    '[',
+    'ab[',
+    'u1[a:]'
+  ])('accepts %j, which holds a character class', (pattern) => {
+    expect(holdsLiteralUnit(pattern, colon)).toBe(false)
+  })
 
-  // A class ends at the first unescaped closing bracket, so what follows it is outside, and a
-  // separator that is itself the closing bracket does not count inside its own class.
+  // An escaped bracket is a plain character, not a class, so what follows it is still checked.
+  it('does not take an escaped bracket for a class', () => {
+    expect(holdsLiteralUnit('\\[:', colon)).toBe(true)
+    expect(holdsLiteralUnit('\\[a]:', colon)).toBe(true)
+  })
+
+  // Nothing is refused when the separator is not spelled at all.
+  it.each(['ab', '', '\\', 'a\\'])('finds no : in %j', (pattern) => {
+    expect(holdsLiteralUnit(pattern, colon)).toBe(false)
+  })
+
+  // An escape covers exactly one unit, so the unit after it keeps its meaning.
   it('ends an escape after one unit, so the next unit keeps its glob meaning', () => {
     expect(holdsLiteralUnit('\\x[a:]*', colon)).toBe(false)
-    expect(holdsLiteralUnit('\\x[a]:', colon)).toBe(true)
+    expect(holdsLiteralUnit('\\x:[a]', colon)).toBe(true)
     expect(holdsLiteralUnit('\\\\[a:]', colon)).toBe(false)
   })
 
-  it('ends a class at its first unescaped closing bracket', () => {
-    expect(holdsLiteralUnit('[ab]:', colon)).toBe(true)
-    expect(holdsLiteralUnit('[ab]]', new Set([']']))).toBe(true)
+  // A closing-bracket separator is a plain character outside a class, and refused there.
+  it('refuses a closing-bracket separator spelled outside a class', () => {
+    expect(holdsLiteralUnit('ab]', new Set([']']))).toBe(true)
     expect(holdsLiteralUnit('[ab]*', new Set([']']))).toBe(false)
-    expect(holdsLiteralUnit('[a\\]b]*', new Set([']']))).toBe(false)
     expect(holdsLiteralUnit('\\]', new Set([']']))).toBe(true)
   })
 

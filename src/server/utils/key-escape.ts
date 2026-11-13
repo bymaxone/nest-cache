@@ -176,33 +176,32 @@ export function splitEscapedParts(
 }
 
 /**
- * Whether a glob pattern spells any code unit of `units` as a literal.
+ * Whether a glob pattern spells any code unit of `units` as a literal, before any character class.
  *
- * A literal is a unit outside every character class (`[...]`), escaped with a backslash or not.
- * Inside a class a unit is a member or, after `^`, an excluded one, and such a class can match text
- * that holds none of it, so it does not count. A class ends at its first unescaped `]`, an unfinished
- * one runs to the end of the pattern, and a backslash makes the next unit a plain character in and
- * out of a class.
+ * Up to the first unescaped `[` a pattern is plain characters, `*`, `?` and backslash escapes, so a
+ * unit it spells, raw or escaped, is one a stored id cannot supply. A character class is not parsed:
+ * Redis closes it by rules that include range endpoints and a leading closing bracket, a class can
+ * match text that holds none of its members, and a copy of those rules would be a second
+ * implementation to keep equal to the server's. A pattern with a class is therefore accepted from
+ * the bracket on, which can only let a pattern that matches nothing through, never refuse one that
+ * could match.
  *
  * @param pattern - The glob pattern.
  * @param units - The code units to look for, one character each.
- * @returns True when the pattern spells one of them outside a class.
+ * @returns True when the pattern spells one of them before its first character class.
  */
 export function holdsLiteralUnit(pattern: string, units: ReadonlySet<string>): boolean {
-  let inClass = false
   let escaped = false
   for (const unit of pattern.split('')) {
     if (escaped) {
       escaped = false
-      if (!inClass && units.has(unit)) {
+      if (units.has(unit)) {
         return true
       }
     } else if (unit === '\\') {
       escaped = true
-    } else if (inClass) {
-      inClass = unit !== ']'
     } else if (unit === '[') {
-      inClass = true
+      return false
     } else if (units.has(unit)) {
       return true
     }
