@@ -329,6 +329,48 @@ describe('validateOptions', () => {
     )
   })
 
+  // A separator holding a glob character widens every pattern built from it, flushNamespace's
+  // included, so strict refuses it at registration, naming the character.
+  it.each(['*', '?', '[', '\\', 'a*b'])(
+    'rejects the separator %j under strict escaping',
+    (separator) => {
+      let caught: unknown
+      try {
+        validateOptions({
+          connection: { host: 'h' },
+          keyEscaping: 'strict',
+          keySeparator: separator
+        })
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+      expect((caught as CacheException).details).toEqual({
+        reason: 'key separator contains glob metacharacter',
+        separator,
+        metacharacter: separator.includes('*') ? '*' : separator
+      })
+      expect((caught as Error).message).toContain('glob metacharacter')
+    }
+  )
+
+  // `]` alone is a literal to Redis, as for the namespace, and a plain separator is unaffected.
+  it('accepts a separator with ] or none of the glob characters under strict escaping', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: ']' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '|' })
+    ).not.toThrow()
+  })
+
+  // Legacy never rewrites a part, so a configuration that boots today keeps booting.
+  it('accepts a separator holding a glob character under legacy escaping', () => {
+    expect(() => validateOptions({ connection: { host: 'h' }, keySeparator: '*' })).not.toThrow()
+  })
+
   // The same separator boots under legacy: a patch must not start failing a configuration that
   // passes today.
   it('accepts a separator containing % under legacy escaping, explicit or default', () => {

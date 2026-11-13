@@ -87,6 +87,151 @@ describe('KeyBuilder key escaping', () => {
     })
   })
 
+  describe('a pattern under strict escaping', () => {
+    // Every separator character is escaped in a stored id, so a pattern holding one names a key that
+    // cannot exist. Returning nothing for it would be a silent no-op, so it is refused.
+    it.each([
+      [':', 'u1:*'],
+      ['|', 'a|b'],
+      ['aa', 'xax*'],
+      ['\u{1F600}', '*\u{1F600}'],
+      ['\u{1F600}', '*\u{1F601}']
+    ])('refuses a pattern holding a character of the separator %j: %j', (separator, pattern) => {
+      const builder = makeStrict({ keySeparator: separator })
+      let caught: unknown
+      try {
+        builder.buildPattern('sessions', pattern)
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
+      expect((caught as CacheException).details).toEqual({ reason: 'pattern_contains_separator' })
+      expect((caught as CacheException).message).toContain('separator')
+    })
+
+    // Legacy composes the pattern as given, and that pattern matches there: it is not refused.
+    it('accepts a pattern holding the separator under legacy', () => {
+      expect(makeBuilder().buildPattern('sessions', 'u1:*')).toBe('app:sessions:u1:*')
+    })
+
+    // A pattern with no separator character is a glob over the escaped id and passes through.
+    it('passes a pattern with no separator character through', () => {
+      expect(makeStrict().buildPattern('sessions', 'u1%3A*')).toBe('app:sessions:u1%3A*')
+    })
+  })
+
+  describe('idPrefixPattern', () => {
+    // The id the documented composite convention stores: each field escaped, joined with the
+    // separator, then escaped again by build().
+    const storedId = (builder: KeyBuilder, fields: readonly string[]): string =>
+      builder
+        .build('sessions', fields.map((field) => builder.escapePart(field)).join(':'))
+        .slice('app:sessions:'.length)
+
+    // Under strict the pattern is the escaped leading fields plus the escaped separator and one
+    // trailing wildcard, so the first field cannot run into a longer one.
+    it('builds the escaped leading fields, the escaped separator and a trailing wildcard', () => {
+      const builder = makeStrict()
+
+      expect(builder.idPrefixPattern(['u1'])).toBe('u1%3A*')
+      expect(builder.idPrefixPattern(['a:b', 'c'])).toBe('a%253Ab%3Ac%3A*')
+      expect(builder.idPrefixPattern(['u*'])).toBe('u%252A%3A*')
+    })
+
+    // Legacy stores the id as joined, so the pattern is the plain glob that works there.
+    it('builds the plain glob under legacy', () => {
+      expect(makeBuilder().idPrefixPattern(['u1'])).toBe('u1:*')
+      expect(makeBuilder().idPrefixPattern(['a', 'b'])).toBe('a:b:*')
+    })
+
+    // The pattern matches every id that starts with its fields and none that merely resembles them:
+    // longer fields, and the neighbours whose escaped characters begin like the field.
+    it.each([
+      [
+        'u1',
+        [
+          ['u1', 's1'],
+          ['u1', 's2'],
+          ['u1', 'a:b']
+        ],
+        [
+          ['u10', 's1'],
+          ['u1%', 's1'],
+          ['u1*', 's1'],
+          ['u1:', 's1'],
+          ['u', 's1']
+        ]
+      ],
+      [
+        'a:b',
+        [['a:b', 's1']],
+        [
+          ['a', 'b:s1'],
+          ['a:bc', 's1'],
+          ['a%3Ab', 's1']
+        ]
+      ],
+      [
+        '%',
+        [['%', 's1']],
+        [
+          ['%25', 's1'],
+          ['', 'x'],
+          ['%%', 's1']
+        ]
+      ],
+      [
+        '*',
+        [['*', 's1']],
+        [
+          ['x', 's1'],
+          ['**', 's1'],
+          ['*x', 's1']
+        ]
+      ],
+      [
+        '\uD800',
+        [['\uD800', 's1']],
+        [
+          ['\uD800\uD800', 's1'],
+          ['\uDC00', 's1']
+        ]
+      ]
+    ])('matches the ids of owner %j and not its neighbours', (owner, owned, neighbours) => {
+      const builder = makeStrict()
+      const pattern = builder.idPrefixPattern([owner])
+      const literal = pattern.slice(0, -1)
+
+      expect(pattern.endsWith('*')).toBe(true)
+      expect(literal).not.toContain('*')
+      for (const fields of owned) {
+        expect(storedId(builder, fields).startsWith(literal)).toBe(true)
+      }
+      for (const fields of neighbours.filter((fields) => fields[0] !== '')) {
+        expect(storedId(builder, fields).startsWith(literal)).toBe(false)
+      }
+    })
+
+    // No field, or an empty one, names no key.
+    it.each([
+      [[] as string[], 'empty_segments'],
+      [['u1', ''], 'empty_id']
+    ])('refuses %j (%s)', (segments, reason) => {
+      let caught: unknown
+      try {
+        makeStrict().idPrefixPattern(segments)
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
+      expect((caught as CacheException).details).toEqual({ reason })
+    })
+  })
+
   describe('keyEscaping: strict', () => {
     // A part with no separator, no escape character and no glob metacharacter keeps its bytes, which
     // is why most keys do not change when a host turns strict on.
@@ -125,7 +270,7 @@ describe('KeyBuilder key escaping', () => {
     it('buildPattern escapes the prefix and passes the pattern through', () => {
       const builder = makeStrict()
 
-      expect(builder.buildPattern('u*', 'a:*')).toBe('app:u%2A:a:*')
+      expect(builder.buildPattern('u*', 'a%3A*')).toBe('app:u%2A:a%3A*')
       expect(builder.buildPattern('users', '*')).toBe('app:users:*')
     })
 

@@ -31,9 +31,12 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
   [CACHE_ERROR_CODES.DESERIALIZATION_FAILED, 'Failed to deserialize the cached value.'],
   [
     CACHE_ERROR_CODES.INVALID_NAMESPACE,
-    "Namespace or key separator is invalid: the namespace is empty, contains the separator or a Redis glob metacharacter, or the separator is empty. keyEscaping must be 'legacy' or 'strict', and a separator containing '%' is rejected under keyEscaping 'strict' (and by escapePart in either mode)."
+    "Namespace or key separator is invalid: the namespace is empty, contains the separator or a Redis glob metacharacter, or the separator is empty. keyEscaping must be 'legacy' or 'strict', a separator containing '%' is rejected under keyEscaping 'strict' (and by escapePart in either mode), and so is one containing a glob metacharacter."
   ],
-  [CACHE_ERROR_CODES.INVALID_KEY, 'Cache key prefix or id is empty.'],
+  [
+    CACHE_ERROR_CODES.INVALID_KEY,
+    "Cache key prefix or id is empty, or, under keyEscaping 'strict', a scan or keys pattern contains a character of the key separator, which no stored key holds."
+  ],
   [CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, 'Tried to execute an unregistered Lua script.'],
   [CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, 'Lua script returned a Redis error.'],
   [CACHE_ERROR_CODES.SCRIPT_REGISTRY_MISSING, 'eval called without registering any scripts.'],

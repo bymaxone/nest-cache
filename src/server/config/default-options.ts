@@ -137,6 +137,16 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
       separator
     })
   }
+  // Only under strict, like the `%` rule above. A glob character in the separator widens every
+  // pattern built from it, `flushNamespace`'s `{namespace}{separator}*` included.
+  const separatorGlob = keyEscaping === 'strict' ? findGlobMetacharacter(separator) : null
+  if (separatorGlob !== null) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+      reason: 'key separator contains glob metacharacter',
+      separator,
+      metacharacter: separatorGlob
+    })
+  }
   const metacharacter = findGlobMetacharacter(namespace)
   if (metacharacter !== null) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {

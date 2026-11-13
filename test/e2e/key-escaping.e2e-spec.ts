@@ -5,7 +5,7 @@
  * strict app behave as two instances of one fleet on a single Redis. That is the mixed-version window
  * a rolling deploy opens: the scenarios pin what holds across it and what splits.
  */
-import { CacheService } from '@bymax-one/nest-cache'
+import { CACHE_ERROR_CODES, CacheException, CacheService, KeyBuilder } from '@bymax-one/nest-cache'
 
 import { bootCacheApp } from './fixtures/test-cache-app.module'
 
@@ -89,5 +89,30 @@ describe('keyEscaping E2E (ioredis-mock)', () => {
     }
 
     expect(found).toEqual(['esc:users:u%3A1'])
+  })
+
+  // A revocation-style sweep over a composite id: through idPrefixPattern it finds exactly the keys
+  // of one owner, and the raw-separator pattern that cannot match is refused instead of returning
+  // nothing.
+  it('sweeps a composite id and refuses the pattern that could never match', async () => {
+    const id = (...fields: string[]): string => fields.join(':')
+    for (const fields of [
+      ['u1', 's1'],
+      ['u1', 's2'],
+      ['u10', 's1']
+    ]) {
+      await strict.set('sessions', id(...fields), 'x')
+    }
+    const keys = strictApp.get(KeyBuilder)
+
+    const swept: string[] = []
+    for await (const key of strict.scan('sessions', keys.idPrefixPattern(['u1']))) {
+      swept.push(key)
+    }
+    const refused = await strict.keys('sessions', 'u1:*').catch((error: unknown) => error)
+
+    expect(swept.sort()).toEqual(['esc:sessions:u1%3As1', 'esc:sessions:u1%3As2'])
+    expect(refused).toBeInstanceOf(CacheException)
+    expect((refused as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
   })
 })

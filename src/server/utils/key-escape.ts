@@ -168,3 +168,14 @@ export function splitEscapedParts(
   }
   return found && prefix !== '' && id !== '' ? { prefix, id } : null
 }
+
+/**
+ * Whether `text` holds any code unit of `units`.
+ *
+ * @param text - The text to search.
+ * @param units - The code units to look for, one character each.
+ * @returns True when at least one code unit of `text` is in the set.
+ */
+export function holdsAnyUnit(text: string, units: ReadonlySet<string>): boolean {
+  return text.split('').some((unit) => units.has(unit))
+}

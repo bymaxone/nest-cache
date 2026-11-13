@@ -21,6 +21,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   throws often quotes its input, so a `Pub/Sub` handler event for a failed decode now carries the catalog text and
   not that message. `CacheException` accepts an optional fourth argument, `cause`. A `CacheException` thrown by the
   serializer passes through unchanged, which covers the default JSON serializer.
+- Under `keyEscaping: 'strict'`, a `scan()` or `keys()` pattern holding a character of the separator can never match,
+  because a stored id holds none, so it silently returned nothing. A sweep that worked under `'legacy'`, such as
+  `scan('sessions', `${userId}:*`)` to revoke a user's sessions, was a silent no-op under `'strict'`. That pattern now
+  throws `INVALID_KEY` (`details.reason: 'pattern_contains_separator'`), and the new `KeyBuilder.idPrefixPattern` builds
+  the pattern that matches the ids of one owner. A separator containing a glob character (`*`, `?`, `[`, `\`) is now
+  rejected at registration under `'strict'`, since it widened every pattern built from it, `flushNamespace` included.
 - The `JsonSerializer` documentation no longer says a corrupted entry can never pass as a valid `T`: only a payload
   that is not valid JSON throws, and valid JSON is not checked against `T`.
 
@@ -33,6 +39,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The Security Table is a compact table, one line per control.
 
 #### Apply to a consumer
+
+Under `keyEscaping: 'strict'`, replace a `scan`/`keys` pattern that holds the separator with
+`KeyBuilder.idPrefixPattern`, and use a separator without `*`, `?`, `[` or `\`; nothing changes under `'legacy'`.
 
 Code that matched on `error.message` to equal "Cache Exception" must match on `error.code` instead; the code and
 the `details` are unchanged. Code that caught the raw error a custom serializer threw must catch `CacheException`

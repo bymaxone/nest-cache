@@ -12,6 +12,7 @@ import {
   ESCAPE_CHAR,
   buildEscapeSet,
   escapeKeyPart,
+  holdsAnyUnit,
   splitEscapedParts,
   unescapeKeyPart
 } from './key-escape'
@@ -35,6 +36,7 @@ export class KeyBuilder {
   private readonly strict: boolean
   private readonly partEscapes: ReadonlySet<string>
   private readonly prefixEscapes: ReadonlySet<string>
+  private readonly separatorUnits: ReadonlySet<string>
 
   /**
    * @param options - Resolved module options supplying the namespace, separator and escaping mode.
@@ -45,6 +47,7 @@ export class KeyBuilder {
     this.strict = options.keyEscaping === 'strict'
     this.partEscapes = buildEscapeSet(options.keySeparator, false)
     this.prefixEscapes = buildEscapeSet(options.keySeparator, true)
+    this.separatorUnits = new Set(options.keySeparator.split(''))
   }
 
   /**
@@ -87,18 +90,55 @@ export class KeyBuilder {
    * Builds a `SCAN`/`KEYS` match pattern: the prefix is a literal and the pattern is a glob.
    *
    * Under `'strict'` the prefix is escaped, glob metacharacters included, so it cannot widen the
-   * match; the pattern is passed through untouched. Under `'legacy'` both are joined as given.
+   * match; the pattern is a glob over the escaped id and is passed through otherwise untouched.
+   * A stored id holds no separator character under `'strict'`, so a pattern that does can never
+   * match and is refused instead of returning nothing; use {@link KeyBuilder.idPrefixPattern} to
+   * sweep a composite id. Under `'legacy'` both are joined as given.
    *
    * @param prefix - The entity-group prefix.
    * @param pattern - The glob for the id segment, e.g. `'*'`.
    * @returns `{namespace}{sep}{prefix}{sep}{pattern}`.
-   * @throws {CacheException} `INVALID_KEY` when `prefix` or `pattern` is empty.
+   * @throws {CacheException} `INVALID_KEY` when `prefix` or `pattern` is empty, or under `'strict'`
+   *   when `pattern` holds a character of the separator.
    */
   buildPattern(prefix: string, pattern: string): string {
     this.assertParts(prefix, pattern)
-    return this.strict
-      ? this.compose(escapeKeyPart(prefix, this.prefixEscapes), pattern)
-      : this.compose(prefix, pattern)
+    if (!this.strict) {
+      return this.compose(prefix, pattern)
+    }
+    if (holdsAnyUnit(pattern, this.separatorUnits)) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, {
+        reason: 'pattern_contains_separator'
+      })
+    }
+    return this.compose(escapeKeyPart(prefix, this.prefixEscapes), pattern)
+  }
+
+  /**
+   * Builds the id-part glob that matches every composite id starting with the given leading fields.
+   *
+   * The ids are those composed the documented way: each field escaped with
+   * {@link KeyBuilder.escapePart}, joined with the separator and passed to `build()`. The trailing
+   * separator belongs to the prefix, so `['u1']` matches `u1:s1` and not `u10:s1`. Every field is
+   * escaped, so no glob character of its own survives and the trailing `*` is the only wildcard.
+   * Under `'legacy'` the ids are stored as joined and the pattern is the plain glob.
+   *
+   * @param segments - The leading fields of the composite id, at least one, none empty.
+   * @returns The glob to pass to `scan()` or `keys()` as `pattern`.
+   * @throws {CacheException} `INVALID_KEY` when there is no field or one is empty.
+   */
+  idPrefixPattern(segments: readonly string[]): string {
+    if (segments.length === 0) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, { reason: 'empty_segments' })
+    }
+    if (segments.includes('')) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, { reason: 'empty_id' })
+    }
+    if (!this.strict) {
+      return `${segments.join(this.separator)}${this.separator}*`
+    }
+    const joined = segments.map((segment) => this.escapePart(segment)).join(this.separator)
+    return `${escapeKeyPart(joined + this.separator, this.partEscapes)}*`
   }
 
   /**
