@@ -70,7 +70,9 @@ export class CacheException extends HttpException {
     )
     // Set here rather than through the `HttpException` options, which keep a cause only when it is
     // truthy: a serializer may throw `0` or an empty string, and that is still the original error.
-    this.cause = cause
+    if (cause !== undefined) {
+      this.cause = cause
+    }
     // An object response leaves `Error.message` as the class-name default, which is all a log line
     // or an uncaught boot failure prints. The catalog text is the readable message.
     this.message = message
