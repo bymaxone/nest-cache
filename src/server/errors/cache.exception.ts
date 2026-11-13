@@ -55,7 +55,8 @@ export class CacheException extends HttpException {
    *   canonical status for `code` (§12.2), or 500 for codes whose canonical
    *   status is 500.
    * @param cause - The original error this one wraps, kept on `cause`. It is never part of the
-   *   serialized body, so it may hold what `details` must not.
+   *   serialized body, so it may hold what `details` must not. Nest keeps a cause only when it is
+   *   truthy, so a falsy thrown value (`0`, `''`) is not preserved.
    */
   constructor(
     code: CacheErrorCode,
