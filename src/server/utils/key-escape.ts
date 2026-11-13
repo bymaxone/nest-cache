@@ -215,11 +215,16 @@ export function holdsLiteralUnit(pattern: string, units: ReadonlySet<string>): b
  * Under strict escaping every separator character is rewritten, so a stored id never holds one of
  * these: a pattern that does can never match. A separator character that is also a token
  * character (a digit, `A`-`F`, `u`) is spelled inside tokens, so a pattern may hold it and still match,
- * and it is left out.
+ * and it is left out. So is a surrogate unit: ioredis writes a key as UTF-8, where a lone surrogate
+ * becomes U+FFFD, which is not a separator unit, so a pattern holding one can match a stored id.
  *
  * @param separator - The configured key separator.
  * @returns The code units a stored id cannot hold.
  */
 export function unmatchableUnits(separator: string): ReadonlySet<string> {
-  return new Set(separator.split('').filter((unit) => !TOKEN_ALPHABET.has(unit)))
+  return new Set(
+    separator
+      .split('')
+      .filter((unit) => !TOKEN_ALPHABET.has(unit) && !isSurrogate(unit.charCodeAt(0)))
+  )
 }

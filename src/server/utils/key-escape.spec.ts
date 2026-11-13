@@ -183,6 +183,10 @@ describe('unmatchableUnits', () => {
     ['u', []],
     ['25', []],
     ['%', []],
+    ['\u{1F600}', []],
+    ['\u{1F600}:', [':']],
+    ['\uD83D', []],
+    ['\uDE00', []],
     ['6:', [':']]
   ])('keeps %j as %j', (separator, expected) => {
     expect([...unmatchableUnits(separator)]).toEqual(expected)

@@ -94,8 +94,7 @@ describe('KeyBuilder key escaping', () => {
       [':', 'u1:*'],
       ['|', 'a|b'],
       ['aa', 'xax*'],
-      ['\u{1F600}', '*\u{1F600}'],
-      ['\u{1F600}', '*\u{1F601}']
+      ['|', '*|*']
     ])('refuses a pattern holding a character of the separator %j: %j', (separator, pattern) => {
       const builder = makeStrict({ keySeparator: separator })
       let caught: unknown
@@ -124,6 +123,15 @@ describe('KeyBuilder key escaping', () => {
       expect(builder.buildPattern('users', pattern)).toBe(
         `app${separator}users${separator}${pattern}`
       )
+    })
+
+    // ioredis writes a key as UTF-8, where a lone surrogate becomes U+FFFD, and a stored U+FFFD is not
+    // a separator unit, so a pattern holding a lone surrogate can match: it is never refused for one.
+    it('does not refuse a lone surrogate of an astral separator', () => {
+      const builder = makeStrict({ keySeparator: '\u{1F600}' })
+
+      expect(builder.buildPattern('users', '\uD83D')).toBe('app\u{1F600}users\u{1F600}\uD83D')
+      expect(builder.buildPattern('users', '*\uDE00*')).toBe('app\u{1F600}users\u{1F600}*\uDE00*')
     })
 
     // A separator character that is also a character of an escape token (a digit, A-F, u) is spelled
