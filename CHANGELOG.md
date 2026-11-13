@@ -27,7 +27,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   throws `INVALID_KEY` (`details.reason: 'pattern_contains_separator'`; a separator character that escape tokens are also
   spelled with, a digit, `A`-`F` or `u`, is never refused, and the check stops at a character class), and the new `KeyBuilder.idPrefixPattern` builds
   the pattern that matches the ids of one owner. A separator containing a glob character (`*`, `?`, `[`, `\`) is now
-  rejected at registration under `'strict'`, since it widened every pattern built from it, `flushNamespace` included.
+  rejected at registration under `'strict'`, since it widened every pattern built from it, `flushNamespace` included;
+  under `'legacy'`, which still boots with such a separator, `idPrefixPattern` throws `INVALID_NAMESPACE` for it, because
+  every boundary of the composed pattern would be a wildcard.
 - The `JsonSerializer` documentation no longer says a corrupted entry can never pass as a valid `T`: only a payload
   that is not valid JSON throws, and valid JSON is not checked against `T`.
 

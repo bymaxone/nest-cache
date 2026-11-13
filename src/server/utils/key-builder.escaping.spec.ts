@@ -176,26 +176,38 @@ describe('KeyBuilder key escaping', () => {
       expect(makeBuilder().idPrefixPattern(['a', 'b'])).toBe('a:b:*')
     })
 
-    // Legacy accepts a separator that is a glob character. In the pattern it must stay the literal
-    // delimiter of the owner's boundary, not become a second wildcard that selects another owner.
-    it.each([
-      ['*', 'u1\\**', 'u1*s1', 'u10*s1'],
-      ['?', 'u1\\?*', 'u1?s1', 'u10?s1'],
-      ['[', 'u1\\[*', 'u1[s1', 'u10[s1'],
-      ['\\', 'u1\\\\*', 'u1\\s1', 'u10\\s1']
-    ])(
-      'keeps a glob separator %j literal under legacy: %j',
-      (separator, expected, owned, other) => {
+    // Legacy accepts a separator that is a glob character, and `compose()` leaves the namespace and
+    // prefix boundaries of every key and pattern as that raw separator. In a pattern those boundaries
+    // are wildcards, so the namespace and prefix wildcards eat into the owner field and the sweep
+    // returns other owners' keys (measured against Redis). Escaping only the helper's own part cannot
+    // fix that, so the helper refuses the configuration and points at strict.
+    it.each(['*', '?', '[', '\\', 'a*b'])(
+      'refuses to build an owner pattern under legacy with the glob separator %j',
+      (separator) => {
         const builder = makeBuilder({ keySeparator: separator })
-        const pattern = builder.idPrefixPattern(['u1'])
+        let caught: unknown
+        try {
+          builder.idPrefixPattern(['u1'])
+        } catch (error) {
+          caught = error
+        }
 
-        expect(pattern).toBe(expected)
-        // The literal prefix, with each backslash escape resolved, starts the owner's id and not the other's.
-        const literal = pattern.slice(0, -1).replace(/\\(.)/g, '$1')
-        expect(owned.startsWith(literal)).toBe(true)
-        expect(other.startsWith(literal)).toBe(false)
+        expect(caught).toBeInstanceOf(CacheException)
+        expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+        expect((caught as CacheException).details).toEqual({
+          reason: 'key separator contains glob metacharacter',
+          separator,
+          metacharacter: separator.includes('*') ? '*' : separator
+        })
+        expect((caught as Error).message).toContain('keyEscaping')
       }
     )
+
+    // A separator without a glob character is unaffected, and so is a `]`, a literal to Redis.
+    it('still builds an owner pattern under legacy for a separator with no glob character', () => {
+      expect(makeBuilder({ keySeparator: '|' }).idPrefixPattern(['u1'])).toBe('u1|*')
+      expect(makeBuilder({ keySeparator: ']' }).idPrefixPattern(['u1'])).toBe('u1]*')
+    })
 
     // Legacy stores the id as the fields escaped one by one and joined, with no outer escaping, so
     // the pattern escapes each field the same way: a field holding the separator or a glob character

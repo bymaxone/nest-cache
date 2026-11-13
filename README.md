@@ -331,7 +331,7 @@ Under `'strict'` each part is escaped, so **no two distinct `(prefix, id)` tuple
 The escape rewrites `%`, every character of the separator, glob metacharacters (`*`, `?`, `[`, `\`)
 in the `prefix`, and unpaired surrogates as `%XX` (ASCII) or `%uXXXX` tokens. A part holding none of
 those keeps its bytes, so most keys do not change. `keys()` and `scan()` escape only the `prefix` and
-pass the pattern through as a glob. A separator containing `%` or a glob character (`*`, `?`, `[`, `\`) is rejected under `'strict'`, and `escapePart` refuses a `%` separator in either mode.
+pass the pattern through as a glob. A separator containing `%` or a glob character (`*`, `?`, `[`, `\`) is rejected under `'strict'`, and `escapePart` refuses a `%` separator in either mode. Under `'legacy'` a separator that is a glob character already turns every boundary of a `keys()` / `scan()` pattern into a wildcard, and `idPrefixPattern` refuses that configuration (`INVALID_NAMESPACE`): use `'strict'`.
 
 ```ts
 BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'strict' })

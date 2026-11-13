@@ -10,6 +10,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import { BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
 import {
   ESCAPE_CHAR,
+  GLOB_CHARS,
   buildEscapeSet,
   escapeKeyPart,
   holdsLiteralUnit,
@@ -125,12 +126,14 @@ export class KeyBuilder {
    * {@link KeyBuilder.escapePart}, joined with the separator and passed to `build()`. The trailing
    * separator belongs to the prefix, so `['u1']` matches `u1:s1` and not `u10:s1`. Every field is
    * escaped, so no glob character of its own survives and the trailing `*` is the only wildcard.
-   * Both modes escape the fields; only `'strict'` also escapes the joined id, as `build()` does. A
-   * separator that is a glob character, which `'legacy'` allows, is backslash-escaped in the pattern.
+   * Both modes escape the fields; only `'strict'` also escapes the joined id, as `build()` does.
+   * Under `'legacy'` a separator that is a glob character (`*`, `?`, `[`, `\`) makes every
+   * boundary of the composed pattern a wildcard, so it is refused: use `keyEscaping: 'strict'`.
    *
    * @param segments - The leading fields of the composite id, at least one, none empty.
    * @returns The glob to pass to `scan()` or `keys()` as `pattern`.
-   * @throws {CacheException} `INVALID_KEY` when there is no field or one is empty.
+   * @throws {CacheException} `INVALID_KEY` when there is no field or one is empty, and
+   *   `INVALID_NAMESPACE` under `'legacy'` when the separator is a glob character.
    */
   idPrefixPattern(segments: readonly string[]): string {
     if (segments.length === 0) {
@@ -143,10 +146,18 @@ export class KeyBuilder {
     if (this.strict) {
       return `${escapeKeyPart(fields.join(this.separator) + this.separator, this.partEscapes)}*`
     }
-    // Legacy stores the joined id as it is, so the separator stays raw in the id; in the pattern a
-    // separator that is a glob character is backslash-escaped, so it is the owner's literal boundary.
-    const separator = this.separator.replace(/[*?[\\]/g, '\\$&')
-    return `${fields.join(separator)}${separator}*`
+    // Legacy stores the joined id as it is, and `compose()` leaves the namespace and prefix boundaries
+    // of every pattern as the raw separator, so a separator that is a glob character would turn those
+    // boundaries into wildcards that eat into the owner field. Escaping only this part cannot fix that.
+    const glob = this.separator.split('').find((unit) => GLOB_CHARS.includes(unit))
+    if (glob !== undefined) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+        reason: 'key separator contains glob metacharacter',
+        separator: this.separator,
+        metacharacter: glob
+      })
+    }
+    return `${fields.join(this.separator)}${this.separator}*`
   }
 
   /**

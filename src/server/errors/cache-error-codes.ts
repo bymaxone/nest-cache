@@ -31,7 +31,7 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
   [CACHE_ERROR_CODES.DESERIALIZATION_FAILED, 'Failed to deserialize the cached value.'],
   [
     CACHE_ERROR_CODES.INVALID_NAMESPACE,
-    "Namespace or key separator is invalid: the namespace is empty, contains the separator or a Redis glob metacharacter, or the separator is empty. keyEscaping must be 'legacy' or 'strict', a separator containing '%' is rejected under keyEscaping 'strict' (and by escapePart in either mode), and so is one containing a glob metacharacter."
+    "Namespace or key separator is invalid: the namespace is empty, contains the separator or a Redis glob metacharacter, or the separator is empty. keyEscaping must be 'legacy' or 'strict', a separator containing '%' is rejected under keyEscaping 'strict' (and by escapePart in either mode), and so is one containing a glob metacharacter (idPrefixPattern also refuses one under keyEscaping 'legacy', where every boundary of a pattern would become a wildcard)."
   ],
   [
     CACHE_ERROR_CODES.INVALID_KEY,
