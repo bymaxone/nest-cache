@@ -67,7 +67,7 @@ describe('CacheService command timeout', () => {
     expect(source).toContain('new Error("Command timed out")')
   })
 
-  // A read that times out is a coded 504 with the original error on `cause`.
+  // A read that times out is a coded 503 with the original error on `cause`.
   it('reports a timed-out read as COMMAND_TIMEOUT with the original as cause', async () => {
     const original = new Error('Command timed out')
     failWith('get', original)

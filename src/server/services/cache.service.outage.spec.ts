@@ -92,7 +92,7 @@ describe('CacheService against the real ioredis', () => {
   }
 
   // A server that accepts the socket and never answers: ioredis rejects the command with its own
-  // `Command timed out` after `commandTimeout`, and the service reports it as a coded 504.
+  // `Command timed out` after `commandTimeout`, and the service reports it as a coded 503.
   it('reports a command that gets no answer as COMMAND_TIMEOUT', async () => {
     silent = await listenSilent()
     const cache = build(silent.port)

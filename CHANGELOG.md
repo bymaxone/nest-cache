@@ -58,12 +58,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `connection` options a cluster ignored without a word (`password`, `username`, `tls`, `lazyConnect`) are refused at registration
   with `cache.invalid_options`, naming where to set each. A cluster created with `cluster.options.lazyConnect` no longer waits for
   readiness at init.
-- A command that exceeds `commandTimeout` through `CacheService` now rejects with `cache.command_timeout` (HTTP 504), with ioredis's
+- A command that exceeds `commandTimeout` through `CacheService` now rejects with `cache.command_timeout` (HTTP 503), with ioredis's
   error on `cause`, instead of a bare `Error`. The server may still have applied the command, so a timed-out `incr`, `setNx` or
   `eval` is not known to have failed. With the offline queue off (the default here), a call while the connection is down, which
   ioredis rejects at once with `Stream isn't writeable and enableOfflineQueue options is false`, now rejects with
-  `cache.connection_lost` (HTTP 503, `details.reason: 'offline'`, the original on `cause`). `getClient()` still returns the raw
-  client, and `ScriptManagerService` and `PubSubService` are not mapped.
+  `cache.connection_lost` (HTTP 503, `details.reason: 'offline'`, the original on `cause`). `getClient()` and `pipeline()` still hand out
+  the raw client; the same mapping covers `ScriptManagerService`, `PubSubService` and the `/admin` reads.
 
 - A malformed `connection.url` is now refused with the structured `cache.connection_failed` (`details.reason:
 'invalid connection.url'`, no URL) in every mode. In `sentinel` and `cluster` mode the check was skipped and the raw
