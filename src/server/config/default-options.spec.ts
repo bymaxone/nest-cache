@@ -534,7 +534,11 @@ describe('validateOptions', () => {
 
     expect(thrown).toBeInstanceOf(CacheException)
     expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-    expect((thrown as CacheException).details).toMatchObject({ value })
+    const reason =
+      typeof value === 'number' && Number.isInteger(value) && value < 2 ** 31
+        ? `${field} too low`
+        : `${field} not a valid timer delay`
+    expect((thrown as CacheException).details).toMatchObject({ value, reason })
   })
 
   // The valid cluster settings still pass.

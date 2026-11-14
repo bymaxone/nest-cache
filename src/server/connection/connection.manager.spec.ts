@@ -128,6 +128,7 @@ describe('ConnectionManager', () => {
       // cleanup() must remove both the 'ready' and 'error' listeners on resolve.
       expect(offSpy).toHaveBeenCalledWith('ready', expect.any(Function))
       expect(offSpy).toHaveBeenCalledWith('error', expect.any(Function))
+      expect(offSpy).toHaveBeenCalledWith('end', expect.any(Function))
     })
 
     // With `lazyConnect`, init must NOT await readiness — it resolves even though

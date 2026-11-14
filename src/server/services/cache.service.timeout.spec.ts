@@ -12,6 +12,7 @@ import { applyDefaults } from '../config/default-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import * as guardClientModule from '../utils/guard-client'
 import { KeyBuilder } from '../utils/key-builder'
 import { CacheService } from './cache.service'
 
@@ -99,6 +100,17 @@ describe('CacheService command timeout', () => {
     expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_LOST)
     expect((error as CacheException).details).toEqual({ reason: 'offline' })
     expect((error as CacheException).cause).toBe(original)
+  })
+
+  // The wrapped client is built once per client, not once per call.
+  it("wraps the connection's client once however many calls it serves", async () => {
+    const guard = jest.spyOn(guardClientModule, 'guardClient')
+
+    await cache.get('user', '1')
+    await cache.get('user', '2')
+    await cache.set('user', '3', { a: 1 })
+
+    expect(guard).toHaveBeenCalledTimes(1)
   })
 
   // Only the exact message is a timeout; any other failure reaches the caller unchanged.
