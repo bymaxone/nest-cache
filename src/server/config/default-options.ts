@@ -137,6 +137,15 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
       separator
     })
   }
+  // Only under strict. An astral character is two surrogate code units, and a pattern holding the
+  // pair or one half of it cannot be judged exactly against the ids strict stores (a lone surrogate
+  // reaches Redis as U+FFFD, a pair is escaped whole), so the separator is asked to be BMP.
+  if (keyEscaping === 'strict' && /[\ud800-\udfff]/.test(separator)) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+      reason: 'key separator contains an astral character',
+      separator
+    })
+  }
   // Only under strict, like the `%` rule above. A glob character in the separator widens every
   // pattern built from it, `flushNamespace`'s `{namespace}{separator}*` included.
   const separatorGlob = keyEscaping === 'strict' ? findGlobMetacharacter(separator) : null

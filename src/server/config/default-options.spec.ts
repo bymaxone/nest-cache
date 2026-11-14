@@ -356,6 +356,53 @@ describe('validateOptions', () => {
     }
   )
 
+  // An astral character is two surrogate code units. Strict escapes each unit of the separator, so a
+  // pattern holding the pair or one half of it cannot be judged exactly: strict refuses such a
+  // separator at registration and asks for a BMP one.
+  it.each(['\u{1F600}', 'a\u{1F600}', '\u{10FFFF}'])(
+    'rejects the astral separator %j under strict escaping',
+    (separator) => {
+      let caught: unknown
+      try {
+        validateOptions({
+          connection: { host: 'h' },
+          keyEscaping: 'strict',
+          keySeparator: separator
+        })
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+      expect((caught as CacheException).details).toEqual({
+        reason: 'key separator contains an astral character',
+        separator
+      })
+      expect((caught as Error).message).toContain('astral')
+    }
+  )
+
+  // A BMP separator, accented or not, boots under strict, and legacy keeps booting with an astral one.
+  it('accepts a BMP separator under strict escaping and an astral one under legacy', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '\u00A7' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '\u2603' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keySeparator: '\u{1F600}' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({
+        connection: { host: 'h' },
+        keyEscaping: 'legacy',
+        keySeparator: '\u{1F600}'
+      })
+    ).not.toThrow()
+  })
+
   // `]` alone is a literal to Redis, as for the namespace, and a plain separator is unaffected.
   it('accepts a separator with ] or none of the glob characters under strict escaping', () => {
     expect(() =>
