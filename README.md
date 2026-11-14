@@ -436,6 +436,74 @@ Whatever a custom serializer throws reaches the caller as a `CacheException` (`S
 
 ---
 
+## ✅ Validating what you read
+
+A value is decoded as `T`, but `T` does not exist at runtime, so the library cannot check a value's shape by itself: a payload that is valid JSON of the wrong shape comes back typed as `T`. Pass the rule to the read. `validate` takes a type predicate or any [Standard Schema](https://standardschema.dev) validator (zod, valibot and arktype implement it), and the library imports none of them.
+
+```typescript
+import { Injectable } from '@nestjs/common'
+import { CacheService } from '@bymax-one/nest-cache'
+import { z } from 'zod'
+
+const userSchema = z.object({ id: z.number(), name: z.string() })
+const isUser = (value: unknown): value is { id: number; name: string } =>
+  typeof value === 'object' && value !== null && 'id' in value && 'name' in value
+
+@Injectable()
+export class UserReader {
+  constructor(private readonly cache: CacheService) {}
+
+  async read(id: string): Promise<void> {
+    // `T` is inferred from the schema: the result is `{ id: number; name: string } | null`
+    const user = await this.cache.get('user', id, { validate: userSchema })
+    // a type predicate works too
+    const same = await this.cache.get('user', id, { validate: isUser })
+    void [user, same]
+  }
+}
+```
+
+It is opt-in and off by default: without `validate` nothing changes and no validator runs. It is accepted by `get`, `mget` (every present value), `hget`, `hgetall` (every field) and, for messages, `subscribe` and `psubscribe`.
+
+A value that does not satisfy the rule throws `CacheException` with the code `cache.validation_failed` (HTTP 500). `details` holds fixed text and an issue count, plus `index` or `field` for a batch read, and never the value or the validator's messages, which often quote what they received. The validator's own issues are on `cause`. The entry is **left in place**: a read does not delete. A message that fails is not delivered to the subscriber; it takes the handler-error path (an `error` event with `reason: 'handler_error'`).
+
+During a rolling deploy an older instance may still write the old shape, so treat the failure as a miss, recompute and write the new shape:
+
+```typescript
+import { Injectable } from '@nestjs/common'
+import { CACHE_ERROR_CODES, CacheException, CacheService } from '@bymax-one/nest-cache'
+import { z } from 'zod'
+
+const userSchema = z.object({ id: z.number(), name: z.string() })
+type User = z.infer<typeof userSchema>
+
+@Injectable()
+export class UserLoader {
+  constructor(
+    private readonly cache: CacheService,
+    private readonly findUser: (id: string) => Promise<User>
+  ) {}
+
+  async load(id: string): Promise<User> {
+    const cached = await this.cache
+      .get('user', id, { validate: userSchema })
+      .catch((error: unknown) => {
+        if (error instanceof CacheException && error.code === CACHE_ERROR_CODES.VALIDATION_FAILED) {
+          return null // wrong shape: a miss
+        }
+        throw error
+      })
+    if (cached !== null) return cached
+
+    const fresh = await this.findUser(id)
+    await this.cache.set('user', id, fresh, 3600) // replaces the wrong-shape entry
+    return fresh
+  }
+}
+```
+
+---
+
 ## 🔗 Plug with @bymax-one/nest-logger
 
 Wire connection events into your logger via the `events.onEvent` hook:
@@ -856,6 +924,7 @@ All errors are instances of `CacheException` and carry a stable `code` string fr
 | `cache.serialization_failed`         | 500  | Unserializable value in `set<T>`                                                                                                                                                                                                                       |
 | `cache.invalid_key`                  | 400  | Empty prefix or id (`build`), or empty key (`applyNamespace`)                                                                                                                                                                                          |
 | `cache.invalid_ttl`                  | 400  | `ttlSeconds` is not a safe integer, or is below 1 for `set` / `setRaw` / `setNx`                                                                                                                                                                       |
+| `cache.validation_failed`            | 500  | A read's `validate` refused the decoded value, or the validator threw (the entry is left in place)                                                                                                                                                     |
 | `cache.invalid_namespace`            | 500  | Empty or whitespace-only namespace, empty `keySeparator`, namespace containing the separator or a glob metacharacter (`*`, `?`, `[`, `\`), a `keyEscaping` other than `legacy` or `strict`, a `%` separator under `strict` (and `escapePart` with one) |
 | `cache.script_not_registered`        | 500  | `eval(name)` before `register(name)`                                                                                                                                                                                                                   |
 | `cache.script_execution_failed`      | 500  | Lua runtime error or NOSCRIPT retry failure                                                                                                                                                                                                            |

@@ -594,7 +594,7 @@ export class AppModule {}
 
 | Method           | Signature                                                                                          | Description                                                        |
 | ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `get<T>`         | `(prefix: string, id: string) => Promise<T \| null>`                                               | Read + deserialize                                                 |
+| `get<T>`         | `(prefix: string, id: string, options?: ReadOptions<T>) => Promise<T \| null>`                     | Read + deserialize                                                 |
 | `getRaw`         | `(prefix: string, id: string) => Promise<string \| null>`                                          | Read string without deserializing                                  |
 | `set<T>`         | `(prefix, id, value: T, ttlSeconds?: number) => Promise<void>`                                     | Serialize + write with optional TTL                                |
 | `setRaw`         | `(prefix, id, value: string, ttlSeconds?: number) => Promise<void>`                                | Write string without serializing                                   |
@@ -1280,6 +1280,7 @@ export class CacheException extends HttpException {
 | `cache.shutdown_timeout`             | 500  | `quit()` exceeded `shutdownTimeoutMs`; handled internally by forcing `disconnect()`                                                                                                                                                            |
 | `cache.unsupported_in_cluster`       | 500  | `scan`, `keys`, `getClient` or `flushNamespace` called in cluster mode                                                                                                                                                                         |
 | `cache.invalid_ttl`                  | 400  | `ttlSeconds` is not a safe integer, or is below 1 for `set`, `setRaw` or `setNx`                                                                                                                                                               |
+| `cache.validation_failed`            | 500  | A read's `validate` refused the decoded value, or the validator threw (the entry is left in place)                                                                                                                                             |
 | `cache.invalid_scope`                | 500  | `./admin`: a scope or threshold is malformed (§18)                                                                                                                                                                                             |
 | `cache.scope_not_found`              | 500  | `./admin`: no scope is declared under the given id                                                                                                                                                                                             |
 | `cache.scope_not_readable`           | 500  | Reserved, never thrown today: the library does not throw it; `revealValue` returns `status: 'withheld'` instead                                                                                                                                |
@@ -1308,7 +1309,8 @@ export const CACHE_ERROR_CODES = {
   SCOPE_NOT_FOUND: 'cache.scope_not_found',
   SCOPE_NOT_READABLE: 'cache.scope_not_readable',
   KEY_NOT_IN_SCOPE: 'cache.key_not_in_scope',
-  INVALID_TTL: 'cache.invalid_ttl'
+  INVALID_TTL: 'cache.invalid_ttl',
+  VALIDATION_FAILED: 'cache.validation_failed'
 } as const satisfies Record<string, `cache.${string}`>
 
 export type CacheErrorCode = (typeof CACHE_ERROR_CODES)[keyof typeof CACHE_ERROR_CODES]

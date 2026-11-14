@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.2.13] - 2026-11-12
 
+### Added
+
+- Opt-in read validation. `get`, `mget`, `hget`, `hgetall`, `subscribe` and `psubscribe` take a trailing
+  `{ validate }` option: a type predicate or any Standard Schema validator (zod, valibot, arktype), declared
+  structurally so the library imports none of them and gains no dependency. `T` is inferred from the validator. A value
+  that does not satisfy it throws `CacheException` with the new code `cache.validation_failed` (HTTP 500): `details`
+  hold fixed text and an issue count (`index` or `field` for a batch read), never the value or the validator's
+  messages, and the issues are on `cause`; the entry is left in place. A subscriber's message that fails is not
+  delivered and takes the handler-error path. Without `validate` nothing changes and no validator runs.
+
 ### Fixed
 
 - The message of a `CacheException` is now the catalog text for its code. An object response left `Error.message`
@@ -44,6 +54,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The Security Table is a compact table, one line per control.
 
 #### Apply to a consumer
+
+New: pass `{ validate }` to a read to check its shape, and treat `cache.validation_failed` as a miss (the README shows the
+rolling-deploy pattern). Nothing changes if you do not.
 
 Under `keyEscaping: 'strict'`, replace a `scan`/`keys` pattern that holds the separator with
 `KeyBuilder.idPrefixPattern`, and use a BMP separator without `*`, `?`, `[` or `\` (no emoji); nothing changes under `'legacy'`.
