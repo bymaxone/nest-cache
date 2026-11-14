@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.14] - 2026-11-14
+
 ### Changed
 
 - HTTP statuses now follow one rule: a backing service that is unavailable or too slow answers 503, a caller's mistake a 4xx, and
@@ -24,6 +26,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whose message reads as a network failure: `shutdownTimeoutMs`, `connection.connectTimeout` and `connection.commandTimeout`
   below their minimum, not a finite integer, or above 2147483647 ms. `details` are unchanged. The admin
   `probeTimeoutMs` keeps `cache.invalid_scope`, the administration surface's code.
+
+- Dev tooling floors: `glob` 14.0.2 and `minimatch` 11.0.1 (GHSA-3g3m-2fjr-6pw4, GHSA-g3hv-75wg-m249) and
+  `eslint-plugin-import-x` 4.18.1, reached only through test, mutation and lint tooling, so no dependency of the package moves
+  (`dependencies` stays empty, the peers are unchanged). The newer lint plugin sorts parent before sibling imports as this
+  repository's own configuration always asked, so seven source files reorder their import lines; that changes the order of
+  modules inside `dist/server` and `dist/admin` and nothing else: no code is added or removed.
 
 ### Added
 
@@ -815,7 +823,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.13...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.14...HEAD
+[1.2.14]: https://github.com/bymaxone/nest-cache/compare/v1.2.13...v1.2.14
 [1.2.13]: https://github.com/bymaxone/nest-cache/compare/v1.2.12...v1.2.13
 [1.2.12]: https://github.com/bymaxone/nest-cache/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/bymaxone/nest-cache/compare/v1.2.10...v1.2.11
