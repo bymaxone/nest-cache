@@ -9,11 +9,15 @@
 // `node:zlib`'s brotli matches what npm/CDN compression produces on the wire.
 
 import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { brotliCompressSync, constants } from 'node:zlib'
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+import { resolvePackageRoot } from './lib/package-root.mjs'
+
+// The bundles are read from the working tree, or from the unpacked tarball when `PACKAGE_TARBALL`
+// names one, so the release gate measures the file that is published.
+const pkg = resolvePackageRoot()
+const ROOT = pkg.root
 
 // Budgets are in bytes (KiB units, `n * 1024`, matching the table's ÷1024
 // display) measured against the brotli'd .mjs bundle — what a consumer's
@@ -84,6 +88,7 @@ for (const { name, path, brotli: limit } of BUDGETS) {
     raw = readFileSync(abs)
   } catch {
     console.error(`Missing build artifact: ${path} — run \`pnpm build\` first.`)
+    pkg.cleanup()
     process.exit(2)
   }
   const compressed = brotliCompressSync(raw, BROTLI_OPTS).length
@@ -114,6 +119,8 @@ for (const r of rows) {
   )
 }
 console.log('')
+
+pkg.cleanup()
 
 if (failed > 0) {
   console.error(`${failed} subpath(s) exceeded the brotli budget.`)
