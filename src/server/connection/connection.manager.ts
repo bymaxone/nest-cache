@@ -29,6 +29,7 @@ import {
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
+import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
 
@@ -184,41 +185,23 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
     this.#shutDown = true
     const client = this.#client
-    // A client that has ended has nothing to quit and nothing to disconnect.
-    if (!client || client.status === 'end') {
-      this.#client = null
+    if (!client) {
       return
     }
-    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      await Promise.race([
-        client.quit(),
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new CacheException(CACHE_ERROR_CODES.SHUTDOWN_TIMEOUT, {
-                  timeoutMs: this.options.shutdownTimeoutMs
-                })
-              ),
-            this.options.shutdownTimeoutMs
-          )
+      await closeClient(client, this.options.shutdownTimeoutMs, () =>
+        // Graceful quit timed out or rejected: signal the forced teardown to the
+        // observability sink before severing the socket. Reuses the 'error' event
+        // (the CacheEventName union has no shutdown member) with a distinguishing
+        // `reason: 'forced_disconnect'` and no `error` string, so consumers can tell
+        // it apart from an ioredis socket error.
+        this.emit('error', {
+          role: 'main',
+          reason: 'forced_disconnect',
+          shutdownTimeoutMs: this.options.shutdownTimeoutMs
         })
-      ])
-    } catch {
-      // Graceful quit timed out or rejected: signal the forced teardown to the
-      // observability sink before severing the socket. Reuses the 'error' event
-      // (the CacheEventName union has no shutdown member) with a distinguishing
-      // `reason: 'forced_disconnect'` and no `error` string, so consumers can tell
-      // it apart from an ioredis socket error.
-      this.emit('error', {
-        role: 'main',
-        reason: 'forced_disconnect',
-        shutdownTimeoutMs: this.options.shutdownTimeoutMs
-      })
-      releaseClient(client)
+      )
     } finally {
-      clearTimeout(timer)
       this.#client = null
     }
   }

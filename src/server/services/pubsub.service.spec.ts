@@ -395,6 +395,88 @@ describe('PubSubService', () => {
     expect(fakeSubscriber.disconnect).toHaveBeenCalled()
   })
 
+  /** A subscriber stub whose `quit` is `quit`; the rest is what subscribing and closing touch. */
+  const stubSubscriber = (quit: jest.Mock): { quit: jest.Mock; disconnect: jest.Mock } => {
+    const fake = {
+      subscribe: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      off: jest.fn(),
+      unsubscribe: jest.fn().mockResolvedValue(undefined),
+      quit,
+      disconnect: jest.fn()
+    }
+    jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(fake as unknown as Redis)
+    return fake
+  }
+
+  // The forced teardown of the subscriber is reported like the main client's: the same `error` event
+  // with `reason: 'forced_disconnect'`, so a silent teardown does not sit next to a signalled one.
+  it('reports the forced teardown of a subscriber whose quit is refused', async () => {
+    const onEvent = jest.fn()
+    const fake = stubSubscriber(jest.fn().mockRejectedValue(new Error('quit refused')))
+    const observed = new PubSubService(options, connection, keyBuilder, undefined, { onEvent })
+    await observed.subscribe('events', () => undefined)
+
+    await observed.onApplicationShutdown()
+
+    expect(fake.disconnect).toHaveBeenCalledTimes(1)
+    expect(onEvent).toHaveBeenCalledWith('error', {
+      role: 'subscriber',
+      reason: 'forced_disconnect',
+      shutdownTimeoutMs: options.shutdownTimeoutMs
+    })
+  })
+
+  // A quit that never settles must not stretch the shutdown past `shutdownTimeoutMs`: at that deadline
+  // the subscriber is forced closed and the teardown is reported, whatever the command timeout is.
+  it('forces a subscriber whose quit never settles closed at shutdownTimeoutMs', async () => {
+    jest.useFakeTimers()
+    try {
+      const onEvent = jest.fn()
+      const fake = stubSubscriber(jest.fn().mockReturnValue(new Promise<never>(() => undefined)))
+      const slowOptions = applyDefaults({
+        connection: { host: 'h' },
+        namespace: 'ps',
+        shutdownTimeoutMs: 300
+      })
+      const observed = new PubSubService(slowOptions, connection, keyBuilder, undefined, {
+        onEvent
+      })
+      await observed.subscribe('events', () => undefined)
+
+      const closing = observed.onApplicationShutdown()
+      await jest.advanceTimersByTimeAsync(299)
+      expect(fake.disconnect).not.toHaveBeenCalled()
+      await jest.advanceTimersByTimeAsync(1)
+      await closing
+
+      expect(fake.disconnect).toHaveBeenCalledTimes(1)
+      expect(onEvent).toHaveBeenCalledWith('error', {
+        role: 'subscriber',
+        reason: 'forced_disconnect',
+        shutdownTimeoutMs: 300
+      })
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // A consumer's `onEvent` that throws must not break the shutdown of the subscriber.
+  it('closes the subscriber even when onEvent throws during the forced teardown', async () => {
+    const fake = stubSubscriber(jest.fn().mockRejectedValue(new Error('quit refused')))
+    const observed = new PubSubService(options, connection, keyBuilder, undefined, {
+      onEvent: () => {
+        throw new Error('sink down')
+      }
+    })
+    await observed.subscribe('events', () => undefined)
+
+    await expect(observed.onApplicationShutdown()).resolves.toBeUndefined()
+
+    expect(fake.disconnect).toHaveBeenCalledTimes(1)
+  })
+
   // Destroying twice after a subscriber was opened must be idempotent: the second
   // destroy is a clean no-op (the subscriber reference was cleared), not a repeat
   // tear-down. Pins the `this.subscriber = null` clear (quit must run only once).

@@ -6,6 +6,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The shutdown of the Pub/Sub subscriber is now bounded by `shutdownTimeoutMs`. The main client's `quit()` was raced against it, but
+  the subscriber's was only bounded by `commandTimeout`, so with a server that stopped answering and a `commandTimeout` longer than
+  `shutdownTimeoutMs` the application waited out the command timeout (8 003 ms measured with `commandTimeout` 8 000 and
+  `shutdownTimeoutMs` 500). Both clients now close through one helper: the graceful `quit()` gets `shutdownTimeoutMs`, and when it
+  fails or is too slow the client is disconnected. Nest runs the shutdown hooks of the providers of one module together, so the
+  whole close takes about one `shutdownTimeoutMs` (measured on a frozen Redis with both clients open and the default 5 000 ms: see the
+  test). The forced teardown of the subscriber is reported to `events.onEvent` like the main client's: an `error` event with
+  `reason: 'forced_disconnect'` and `role: 'subscriber'`.
+
+  **Apply to a consumer:** a host that counts or alerts on `forced_disconnect` and filters on `role: 'main'` sees nothing new; one that
+  counts every `forced_disconnect` now also sees the subscriber's. Nothing else to change.
+
 ## [1.2.17] - 2026-11-14
 
 ### Changed

@@ -140,4 +140,35 @@ describe('Pub/Sub liveness (real Redis)', () => {
 
     expect(elapsed).toBeLessThan(3_000)
   }, 40_000)
+
+  // Nest runs the shutdown hooks of the providers of one module together, so the main client and the
+  // subscriber are each bounded by shutdownTimeoutMs at the same time: the whole close takes about
+  // one shutdownTimeoutMs, not two, however long the command timeout is.
+  it('ends the whole close of an unresponsive server within about one shutdownTimeoutMs', async () => {
+    const events: [string, Record<string, unknown>][] = []
+    const app = await bootCacheApp({
+      connection: { url: redis.url, commandTimeout: 30_000 },
+      namespace: 'e2e-liveness',
+      events: { onEvent: (name, data) => void events.push([name, data]) }
+    })
+    await app.get(PubSubService).subscribe('whole', () => undefined)
+    const id = redis.container.getId()
+    execFileSync('docker', ['pause', id])
+    let elapsed = 0
+    try {
+      const started = Date.now()
+      await app.close()
+      elapsed = Date.now() - started
+    } finally {
+      execFileSync('docker', ['unpause', id])
+    }
+
+    const forced = events.filter(([, data]) => data['reason'] === 'forced_disconnect')
+    expect(forced.map(([, data]) => data['role']).sort()).toEqual(['main', 'subscriber'])
+    expect(elapsed).toBeGreaterThanOrEqual(4_500)
+    expect(elapsed).toBeLessThan(7_500)
+    process.stdout.write(
+      `whole close with Redis frozen, default shutdownTimeoutMs 5000: ${elapsed} ms\n`
+    )
+  }, 60_000)
 })
