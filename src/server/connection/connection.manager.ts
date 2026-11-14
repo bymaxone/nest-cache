@@ -83,6 +83,14 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    */
   #shutDown = false
 
+  /**
+   * The error the boot wait failed with. That failure disconnected the client on purpose, and a
+   * client opened later would be one nothing waited for: it would reconnect behind a boot that
+   * reported the connection as failed, so every later attempt to open one is refused, with this
+   * error as the cause.
+   */
+  #bootError: unknown = null
+
   /** The driver options built from the connection config; they carry the password. */
   readonly #redisOptionsResolved: RedisOptions
 
@@ -132,7 +140,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    *
    * @returns The shared main client.
    * @throws CacheException `CONNECTION_LOST` (`details.reason` `'shutdown'`) when called after
-   *   shutdown has begun, instead of opening a client nothing would close.
+   *   shutdown has begun, instead of opening a client nothing would close;
+   *   `CONNECTION_FAILED` (`details.reason` `'boot_failed'`, 503, the boot's error on `cause`) when
+   *   the boot wait failed and closed the client.
    */
   getClient(): AnyRedis {
     return this.ensureClient()
@@ -153,10 +163,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    * In cluster mode the override sets the cluster client's own offline queue.
    *
    * @returns A fresh client wired with `subscriber`-role event listeners.
-   * @throws CacheException `CONNECTION_LOST` once shutdown has begun.
+   * @throws CacheException `CONNECTION_LOST` once shutdown has begun;
+   *   `CONNECTION_FAILED` (`boot_failed`) after a failed boot wait.
    */
   createSubscriberClient(): AnyRedis {
-    this.assertNotShutDown()
+    this.assertCanOpen()
     const client = this.createClient({ enableOfflineQueue: true })
     this.registerListeners(client, 'subscriber')
     return client
@@ -222,17 +233,29 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    */
   private ensureClient(): AnyRedis {
     if (!this.#client) {
-      this.assertNotShutDown()
+      this.assertCanOpen()
       this.#client = this.createClient()
       this.registerListeners(this.#client, 'main')
     }
     return this.#client
   }
 
-  /** Refuses to open a client once shutdown has begun; see {@link ConnectionManager.#shutDown}. */
-  private assertNotShutDown(): void {
+  /**
+   * Refuses to open a client once shutdown has begun (see {@link ConnectionManager.#shutDown}) or
+   * after the boot wait failed (see {@link ConnectionManager.#bootError}).
+   */
+  private assertCanOpen(): void {
     if (this.#shutDown) {
       throw new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'shutdown' })
+    }
+    if (this.#bootError) {
+      // Fixed text only: `details` reaches the HTTP body and the boot's own message can name a host.
+      throw new CacheException(
+        CACHE_ERROR_CODES.CONNECTION_FAILED,
+        { reason: 'boot_failed' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+        this.#bootError
+      )
     }
   }
 
@@ -406,6 +429,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       // follows would try to quit.
       releaseClient(client)
       this.#client = null
+      this.#bootError = error
       throw error
     }
   }

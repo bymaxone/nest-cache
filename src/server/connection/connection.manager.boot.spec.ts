@@ -181,6 +181,48 @@ describe('ConnectionManager boot wait', () => {
     expect(events.filter(([, data]) => data['reason'] === 'forced_disconnect')).toEqual([])
   })
 
+  // A failed boot closed its client on purpose, so a later `getClient()` or subscriber must not
+  // quietly open another one and undo that: nothing would have waited for it to become ready.
+  it.each([
+    ['getClient', (manager: ConnectionManager): unknown => manager.getClient()],
+    [
+      'createSubscriberClient',
+      (manager: ConnectionManager): unknown => manager.createSubscriberClient()
+    ]
+  ])('refuses %s after a failed boot instead of opening a client', async (_name, reach) => {
+    const manager = makeManager({})
+    const init = manager.onModuleInit()
+    redisInstances[0]?.emit('error', new Error('boom'))
+    await init.catch(() => undefined)
+    const opened = redisInstances.length
+
+    let thrown: unknown
+    try {
+      reach(manager)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CacheException)
+    expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
+    expect((thrown as CacheException).getStatus()).toBe(503)
+    expect((thrown as CacheException).details).toEqual({ reason: 'boot_failed' })
+    expect(JSON.stringify((thrown as CacheException).getResponse())).not.toContain('boom')
+    expect(((thrown as CacheException).cause as CacheException).details).toEqual({ error: 'boom' })
+    expect(redisInstances).toHaveLength(opened)
+  })
+
+  // The control: before any boot failure the same calls open a client, so the refusal above is the
+  // failed boot's doing and not a manager that refuses everything.
+  it('still opens a client for getClient and a subscriber when no boot failed', () => {
+    const manager = makeManager({ connection: { host: 'h', lazyConnect: true } })
+
+    manager.getClient()
+    manager.createSubscriberClient()
+
+    expect(redisInstances).toHaveLength(2)
+  })
+
   // A client that becomes ready leaves no timer behind and is not disconnected.
   it('clears the deadline and keeps the client when it becomes ready', async () => {
     jest.useFakeTimers()
