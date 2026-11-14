@@ -74,7 +74,8 @@ describe('after a client has ended (real ioredis)', () => {
   })
 
   // The boot wait gives up when the client ends, and must not disconnect a client that is already
-  // closed: that is the call that armed the 2 s timer.
+  // closed: ioredis arms a 2 s teardown timer in `disconnect()` that only a `close` clears, and an
+  // ended client never emits one.
   it('leaves no timer after a boot that failed because the client ended', async () => {
     const built = await build()
     const before = activeTimers()
@@ -87,8 +88,8 @@ describe('after a client has ended (real ioredis)', () => {
   })
 
   // A server that accepts and closes cleanly gives ioredis a close with no error, so the client ends with
-  // nothing to report and the boot wait sees only `end`; disconnecting that ended client is the call
-  // that armed the 2 s timer.
+  // nothing to report and the boot wait sees only `end`; that ended client must not be disconnected,
+  // or its teardown timer would outlive the boot.
   it('leaves no timer after a boot where the server hung up and the client ended', async () => {
     const sockets: Socket[] = []
     const server = createServer((socket) => {
