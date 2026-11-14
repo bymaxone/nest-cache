@@ -5,8 +5,8 @@
  * the message of a driver, a serializer, a schema or a script can name a host, a port, a stored
  * value or a key. Each case below makes one of them throw a poisoned message and asserts the
  * response body does not contain it while the original error stays on `cause`. Every error code
- * is either in the table or listed with the reason it cannot carry such text, so a new code, or a
- * new throw site of an existing one, has to be decided here.
+ * is either in the table or listed with the reason it cannot carry such text, so a new code has to
+ * be decided here.
  */
 import { EventEmitter } from 'node:events'
 

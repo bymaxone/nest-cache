@@ -54,7 +54,7 @@ export class JsonSerializer implements ISerializer {
    *   `BigInt`) AND the silent cases where a top-level `undefined`, function, or
    *   `symbol` would make `JSON.stringify` return the JS value `undefined`
    *   instead of a string. `details.error` is fixed text and the
-   *   original error is on `cause`; the value itself is never echoed, as it may carry secrets
+   *   error `JSON.stringify` threw, when it threw, is on `cause`; the value itself is never echoed, as it may carry secrets
    *   (CLAUDE.md §4).
    */
   serialize<T>(value: T): string {
