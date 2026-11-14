@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A failed boot no longer lets a later call reopen the client it closed. When the readiness wait fails (an error, the end of the
+  connection, or no `ready` within `connectTimeout`) the client is disconnected on purpose, but `getClient()` (and with it every
+  `CacheService`, script, Pub/Sub and admin call) and the Pub/Sub subscriber then opened a new one that nothing had waited for,
+  which reconnected behind a boot that had reported the connection as failed. They now answer with
+  `cache.connection_failed` (503, `details.reason` `boot_failed`) and open nothing. The boot's own error, which can name a host and
+  a port, stays on `cause` and is never part of the response body.
+
+  **Apply to a consumer:** a host that caught the boot failure and kept the application running now gets that error from every
+  cache call instead of a silently reopened connection. Restart the application, or build a new module, to try the connection
+  again.
+
 ## [1.2.15] - 2026-11-14
 
 ### Changed
