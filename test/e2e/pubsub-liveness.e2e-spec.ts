@@ -53,6 +53,7 @@ describe('Pub/Sub liveness (real Redis)', () => {
     try {
       const pubsub = app.get(PubSubService)
       const unsubscribe = await pubsub.subscribe('c8', () => undefined)
+      await pubsub.subscribe('c8-kept', () => undefined)
       expect(await numSub(raw, 'e2e-liveness:c8')).toBe(1)
 
       await proxy.cut()
@@ -65,6 +66,9 @@ describe('Pub/Sub liveness (real Redis)', () => {
       // The subscriber reconnects and restores what it believes it is subscribed to.
       await new Promise((resolve) => setTimeout(resolve, 3_000))
 
+      // The channel the application kept is back on the server, so the subscriber did reconnect
+      // and restore its subscriptions inside the wait above; the released one is not.
+      expect(await numSub(raw, 'e2e-liveness:c8-kept')).toBe(1)
       expect([outcome, await numSub(raw, 'e2e-liveness:c8')]).toEqual([outcome, 0])
     } finally {
       await proxy.cut()
@@ -88,6 +92,7 @@ describe('Pub/Sub liveness (real Redis)', () => {
     try {
       const pubsub = app.get(PubSubService)
       const unsubscribe = await pubsub.subscribe('c8b', () => undefined)
+      await pubsub.subscribe('c8b-kept', () => undefined)
       expect(await numSub(raw, 'e2e-liveness:c8b')).toBe(1)
 
       proxy.dropReplies(true)
@@ -101,6 +106,7 @@ describe('Pub/Sub liveness (real Redis)', () => {
       await proxy.open()
       await new Promise((resolve) => setTimeout(resolve, 3_000))
 
+      expect(await numSub(raw, 'e2e-liveness:c8b-kept')).toBe(1)
       expect([outcome, heldBeforeReconnect, await numSub(raw, 'e2e-liveness:c8b')]).toEqual([
         outcome,
         0,
