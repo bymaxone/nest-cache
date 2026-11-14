@@ -195,7 +195,7 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
  *
  * @param options - The raw consumer options.
  * @throws {CacheException} `SENTINEL_MISCONFIGURED`, `CLUSTER_MISCONFIGURED`,
- *   `CONNECTION_FAILED`, or `INVALID_NAMESPACE` depending on the violation.
+ *   `CONNECTION_FAILED`, `INVALID_NAMESPACE` or `INVALID_OPTIONS` depending on the violation.
  */
 export function validateOptions(options: BymaxCacheModuleOptions): void {
   const mode = options.mode ?? 'standalone'

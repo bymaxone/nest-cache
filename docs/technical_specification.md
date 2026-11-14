@@ -574,8 +574,7 @@ export class AppModule {}
 - `namespace` is empty or whitespace-only, contains `keySeparator`, or contains a Redis glob metacharacter (`*`, `?`, `[`, `\`); `]` is accepted (`INVALID_NAMESPACE`)
 - `keySeparator` is empty (`INVALID_NAMESPACE`)
 - `keyEscaping` is neither `'legacy'` nor `'strict'`, or is `'strict'` and `keySeparator` contains `%` (`INVALID_NAMESPACE`)
-- `shutdownTimeoutMs < 100` (`CONNECTION_FAILED`)
-- `connection.connectTimeout < 100` (`CONNECTION_FAILED`)
+- `shutdownTimeoutMs`, `connection.connectTimeout` or `connection.commandTimeout` below its minimum (100 ms, 100 ms, 1 ms), not a finite integer, or above 2147483647 (`INVALID_OPTIONS`)
 
 ---
 

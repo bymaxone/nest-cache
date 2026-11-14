@@ -24,7 +24,7 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
  * @param options - The connection options, as for `BymaxCacheModule.forRoot`.
  * @returns A new manager that has not connected yet.
  * @throws {CacheException} `SENTINEL_MISCONFIGURED`, `CLUSTER_MISCONFIGURED`,
- *   `CONNECTION_FAILED` or `INVALID_NAMESPACE` when the options are invalid.
+ *   `CONNECTION_FAILED`, `INVALID_NAMESPACE` or `INVALID_OPTIONS` when the options are invalid.
  * @example
  * ```ts
  * export const AUTH_REDIS = Symbol('AUTH_REDIS')
