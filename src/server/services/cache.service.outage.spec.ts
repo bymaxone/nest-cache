@@ -46,6 +46,8 @@ const listenSilent = async (): Promise<{ server: Server; sockets: Socket[]; port
   return { server, sockets, port: typeof address === 'object' && address ? address.port : 0 }
 }
 
+jest.setTimeout(60_000)
+
 describe('CacheService against the real ioredis', () => {
   let connection: ConnectionManager | undefined
   let silent: Awaited<ReturnType<typeof listenSilent>> | undefined
@@ -68,6 +70,9 @@ describe('CacheService against the real ioredis', () => {
         port,
         enableReadyCheck: false,
         commandTimeout: 150,
+        // The boot wait must not be what a loaded machine trips over; the commands under test are
+        // bounded by `commandTimeout` above.
+        connectTimeout: 30_000,
         ...connectionOptions
       },
       namespace: 'outage'
@@ -87,7 +92,7 @@ describe('CacheService against the real ioredis', () => {
   }
 
   // A server that accepts the socket and never answers: ioredis rejects the command with its own
-  // `Command timed out` after `commandTimeout`, and the service reports it as a coded 504.
+  // `Command timed out` after `commandTimeout`, and the service reports it as a coded 503.
   it('reports a command that gets no answer as COMMAND_TIMEOUT', async () => {
     silent = await listenSilent()
     const cache = build(silent.port)

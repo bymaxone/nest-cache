@@ -64,7 +64,6 @@ const isScannableClient = (client: Redis | Cluster): client is Redis =>
 export class CacheService {
   /** Resolved serializer: explicit option wins, then injected token, then JSON. */
   private readonly serializer: ISerializer
-  #guarded?: { client: object; proxy: ReturnType<ConnectionManager['getClient']> }
 
   /**
    * @param options - Resolved module options (frozen). Supplies `serializer`
@@ -98,11 +97,7 @@ export class CacheService {
    * @returns The connection's client behind the timeout mapping.
    */
   private client(): ReturnType<ConnectionManager['getClient']> {
-    const client = this.connection.getClient()
-    if (this.#guarded?.client !== client) {
-      this.#guarded = { client, proxy: guardClient(client) }
-    }
-    return this.#guarded.proxy
+    return guardClient(this.connection.getClient())
   }
 
   // ─── String / value commands ───────────────────────────────────────────────

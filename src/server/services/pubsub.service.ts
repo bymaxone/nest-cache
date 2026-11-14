@@ -32,6 +32,7 @@ import type { IPubSubHandler, IPubSubPatternHandler } from '../interfaces/pubsub
 import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
 import { describeError } from '../utils/describe-error'
+import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
@@ -106,7 +107,7 @@ export class PubSubService implements OnApplicationShutdown {
   async publish<T>(channel: string, message: T): Promise<number> {
     const fullChannel = this.keyBuilder.applyNamespace(channel)
     const raw = this.serializer.serialize(message)
-    return this.connection.getClient().publish(fullChannel, raw)
+    return guardClient(this.connection.getClient()).publish(fullChannel, raw)
   }
 
   /**
@@ -243,7 +244,7 @@ export class PubSubService implements OnApplicationShutdown {
       if (this.#shutDown) {
         throw new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'shutdown' })
       }
-      this.#subscriber = this.connection.createSubscriberClient()
+      this.#subscriber = guardClient(this.connection.createSubscriberClient())
     }
     return this.#subscriber
   }

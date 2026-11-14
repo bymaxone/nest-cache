@@ -12,7 +12,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 
-import { CACHE_ERROR_CODES, CacheException, CacheService } from '@bymax-one/nest-cache'
+import { CACHE_ERROR_CODES, CacheException, CacheService, guardClient } from '@bymax-one/nest-cache'
 
 import { BYMAX_CACHE_ADMIN_OPTIONS } from '../bymax-cache-admin.constants'
 import type { ResolvedAdminOptions } from '../config/resolved-admin-options'
@@ -182,7 +182,7 @@ export class CacheAdminService {
    */
   async listKeys(scopeId: string, listOptions: ListKeysOptions = {}): Promise<KeyspacePage> {
     const scope = findScope(this.options.scopes, scopeId)
-    const client = this.cache.getClient()
+    const client = guardClient(this.cache.getClient())
     const limit = this.options.scanLimit
     const rounds = this.options.scanRoundsLimit
 
@@ -232,7 +232,7 @@ export class CacheAdminService {
    */
   async describeKey(scopeId: string, key: string): Promise<KeyDetail> {
     const scope = this.resolve(scopeId, key)
-    const client = this.cache.getClient()
+    const client = guardClient(this.cache.getClient())
     const [type, ttl] = await Promise.all([client.type(key), client.ttl(key)])
     return {
       scopeId: scope.id,
@@ -260,7 +260,7 @@ export class CacheAdminService {
     if (withholder !== undefined) {
       return { status: 'withheld', key, scopeId: withholder.id, origin: withholder.origin }
     }
-    const client = this.cache.getClient()
+    const client = guardClient(this.cache.getClient())
     const rawType = await client.type(key)
     if (rawType === TYPE_NONE) {
       return { status: 'missing', key }

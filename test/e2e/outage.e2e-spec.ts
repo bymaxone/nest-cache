@@ -8,8 +8,15 @@
  */
 import { execFileSync } from 'node:child_process'
 
-import { CACHE_ERROR_CODES, CacheException, CacheService } from '@bymax-one/nest-cache'
+import { CacheAdminService } from '@bymax-one/nest-cache/admin'
+import {
+  CACHE_ERROR_CODES,
+  CacheException,
+  CacheService,
+  PubSubService
+} from '@bymax-one/nest-cache'
 
+import { bootAdminApp } from './fixtures/test-admin-app.module'
 import { bootCacheApp } from './fixtures/test-cache-app.module'
 import { getFreePort } from './helpers/free-port'
 import { startRedisContainer, type StartedRedis } from './helpers/start-redis-container'
@@ -50,15 +57,41 @@ describe('Outage E2E (real Redis)', () => {
   let redis: StartedRedis
   let app: TestingModule
   let cache: CacheService
+  let pubsub: PubSubService
+  let admin: CacheAdminService
+
+  /** Every way the library reaches the server, so each is shown to answer the same way. */
+  const everyPath: Record<string, () => Promise<unknown>> = {
+    'cache get': () => cache.getRaw('out', 'k'),
+    'script eval': () => cache.eval('echo', ['out:k'], []),
+    'pubsub publish': () => pubsub.publish('out', 'x'),
+    'admin listKeys': () => admin.listKeys('out')
+  }
 
   beforeAll(async () => {
     const hostPort = await getFreePort()
     redis = await startRedisContainer({ hostPort })
-    app = await bootCacheApp({
-      connection: { url: redis.url, commandTimeout: 500 },
-      namespace: 'e2e-outage'
-    })
+    app = await bootAdminApp(
+      {
+        connection: { url: redis.url, commandTimeout: 500 },
+        namespace: 'e2e-outage',
+        scripts: [{ name: 'echo', lua: 'return 1' }]
+      },
+      {
+        scopes: [
+          {
+            id: 'out',
+            label: 'Outage',
+            pattern: 'e2e-outage:*',
+            isReadable: true,
+            origin: 'the test'
+          }
+        ]
+      }
+    )
     cache = app.get(CacheService)
+    pubsub = app.get(PubSubService)
+    admin = app.get(CacheAdminService)
     await cache.setRaw('out', 'k', 'v')
   }, 60_000)
 
@@ -72,11 +105,17 @@ describe('Outage E2E (real Redis)', () => {
     const id = redis.container.getId()
     execFileSync('docker', ['pause', id])
     try {
-      const error = await rejectionOf(() => cache.getRaw('out', 'k'))
+      for (const [path, call] of Object.entries(everyPath)) {
+        const error = await rejectionOf(call)
 
-      expect(error).toBeInstanceOf(CacheException)
-      expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.COMMAND_TIMEOUT)
-      expect(((error as CacheException).cause as Error).message).toBe('Command timed out')
+        expect([path, error instanceof CacheException]).toEqual([path, true])
+        expect([path, (error as CacheException).code]).toEqual([
+          path,
+          CACHE_ERROR_CODES.COMMAND_TIMEOUT
+        ])
+        expect((error as CacheException).getStatus()).toBe(503)
+        expect(((error as CacheException).cause as Error).message).toBe('Command timed out')
+      }
     } finally {
       execFileSync('docker', ['unpause', id])
     }
@@ -99,6 +138,7 @@ describe('Outage E2E (real Redis)', () => {
 
     expect(error).toBeInstanceOf(CacheException)
     expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
+    expect((error as CacheException).getStatus()).toBe(503)
     expect(Date.now() - started).toBeLessThan(5_000)
   }, 20_000)
 
@@ -107,15 +147,21 @@ describe('Outage E2E (real Redis)', () => {
   it('reports a stopped server as CONNECTION_LOST (offline)', async () => {
     await redis.container.stop()
 
-    const error = await waitForCode(
-      () => cache.getRaw('out', 'k'),
-      CACHE_ERROR_CODES.CONNECTION_LOST,
-      15_000
-    )
+    // The client notices the stop on its own; wait for the first path to say so, then every path
+    // must answer the same way at once.
+    await waitForCode(everyPath['cache get']!, CACHE_ERROR_CODES.CONNECTION_LOST, 15_000)
+    for (const [path, call] of Object.entries(everyPath)) {
+      const error = await rejectionOf(call)
 
-    expect(error.details).toEqual({ reason: 'offline' })
-    expect((error.cause as Error).message).toBe(
-      "Stream isn't writeable and enableOfflineQueue options is false"
-    )
+      expect([path, (error as CacheException).code]).toEqual([
+        path,
+        CACHE_ERROR_CODES.CONNECTION_LOST
+      ])
+      expect((error as CacheException).getStatus()).toBe(503)
+      expect((error as CacheException).details).toEqual({ reason: 'offline' })
+      expect(((error as CacheException).cause as Error).message).toBe(
+        "Stream isn't writeable and enableOfflineQueue options is false"
+      )
+    }
   }, 30_000)
 })

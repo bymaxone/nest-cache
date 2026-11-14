@@ -77,6 +77,20 @@ describe('ConnectionManager boot wait', () => {
     expect(client?.disconnect).toHaveBeenCalledTimes(1)
   })
 
+  // A client that never became ready is a backing service that is unavailable, so every way the
+  // wait fails answers 503; the boot-time configuration errors keep 500.
+  it.each([
+    ['an error', (client: Captured): boolean => client.emit('error', new Error('boom'))],
+    ['the end of the connection', (client: Captured): boolean => client.emit('end')]
+  ])('answers 503 when the wait fails by %s', async (_label, fail) => {
+    const manager = makeManager({})
+
+    const init = manager.onModuleInit()
+    fail(redisInstances[0] as Captured)
+
+    await expect(init).rejects.toMatchObject({ status: 503 })
+  })
+
   // `end` means ioredis stopped reconnecting (a retryStrategy returned null) without an error, so
   // neither `ready` nor `error` would ever fire.
   it('rejects and disconnects when the client ends before ready', async () => {

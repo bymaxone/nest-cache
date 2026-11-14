@@ -9,7 +9,7 @@
  *
  * @see `docs/technical_specification.md` §11 — Connection Strategy
  */
-import { Inject, Injectable, Optional } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common'
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
 import { Cluster, Redis } from 'ioredis'
 import type { ClusterOptions, RedisOptions } from 'ioredis'
@@ -381,7 +381,15 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
           outcome()
         }
         const refuse = (error: string): void =>
-          settle(() => reject(new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, { error })))
+          settle(() =>
+            reject(
+              new CacheException(
+                CACHE_ERROR_CODES.CONNECTION_FAILED,
+                { error },
+                HttpStatus.SERVICE_UNAVAILABLE
+              )
+            )
+          )
         const onReady = (): void => settle(resolve)
         const onError = (err: Error): void => refuse(err.message)
         const onEnd = (): void => refuse('connection ended before ready')
