@@ -55,9 +55,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // consumer's runtime.
 //
 // The server budget covers the key escape (the token writer and decoder, the escape sets and the
-// `KeyBuilder` helpers), the read-validation routing and the timer-delay checks. It sits 0.04 kB above
-// the measured 9.55 kB, so any growth shows up here before it ships. Measured sizes are taken after
-// the comments are stripped.
+// `KeyBuilder` helpers), the read-validation routing and the timer-delay checks. It is kept tight on
+// purpose, a few hundredths of a kB above the measured 9.55 kB, which the older notes above call too
+// little to absorb growth: here any growth fails the gate and is raised and justified in review
+// instead of being absorbed. Measured sizes are taken after the comments are stripped.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 9.59 * 1024 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5.3 * 1024 },
