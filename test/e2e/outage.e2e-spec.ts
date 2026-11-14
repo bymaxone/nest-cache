@@ -7,6 +7,7 @@
  * error on `cause`, and nothing must be left reconnecting after a failed boot.
  */
 import { execFileSync } from 'node:child_process'
+import { createServer } from 'node:net'
 
 import { CacheAdminService } from '@bymax-one/nest-cache/admin'
 import {
@@ -22,6 +23,7 @@ import { getFreePort } from './helpers/free-port'
 import { startRedisContainer, type StartedRedis } from './helpers/start-redis-container'
 
 import type { TestingModule } from '@nestjs/testing'
+import type { Socket } from 'node:net'
 
 /** What `call` rejected with, failing the test when it resolved. */
 async function rejectionOf(call: () => Promise<unknown>): Promise<unknown> {
@@ -55,6 +57,9 @@ async function waitForCode(
 
 /** The connect timeout the fresh boot is configured with, which is the deadline it must meet. */
 const CONNECT_TIMEOUT_MS = 1_000
+
+/** Longer than the connect deadline on purpose, so only the deadline can end the fresh boot. */
+const SLOW_COMMAND_TIMEOUT_MS = 30_000
 
 /**
  * Slack added to a configured deadline before a wall-clock assertion fails. The check is of a real
@@ -134,23 +139,46 @@ describe('Outage E2E (real Redis)', () => {
     expect(await cache.getRaw('out', 'k')).toBe('v')
   }, 30_000)
 
-  // FRESH: a client that never reaches a server fails its boot within connectTimeout with the
-  // structured error, and leaves no client reconnecting.
-  it('fails a fresh boot against an unreachable server within connectTimeout', async () => {
-    const closedPort = await getFreePort()
+  // FRESH: a server that accepts the connection and never answers, so nothing but the connect deadline
+  // can end the boot. It must fail with the structured error at that deadline, not wait for a
+  // command timeout (set longer on purpose) and leave nothing reconnecting. A refused port would end
+  // the boot at once whatever the deadline, so it would not test it.
+  it('fails a fresh boot against a silent server at connectTimeout', async () => {
+    const sockets: Socket[] = []
+    const silent = createServer((socket) => {
+      sockets.push(socket)
+      socket.on('error', () => undefined)
+    })
+    await new Promise<void>((resolve) => silent.listen(0, '127.0.0.1', resolve))
+    const address = silent.address()
+    const port = typeof address === 'object' && address ? address.port : 0
     const started = Date.now()
+    try {
+      const error = await rejectionOf(() =>
+        bootCacheApp({
+          connection: {
+            host: '127.0.0.1',
+            port,
+            connectTimeout: CONNECT_TIMEOUT_MS,
+            commandTimeout: SLOW_COMMAND_TIMEOUT_MS
+          },
+          namespace: 'e2e-fresh'
+        })
+      )
 
-    const error = await rejectionOf(() =>
-      bootCacheApp({
-        connection: { host: '127.0.0.1', port: closedPort, connectTimeout: CONNECT_TIMEOUT_MS },
-        namespace: 'e2e-fresh'
+      expect(error).toBeInstanceOf(CacheException)
+      expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
+      expect((error as CacheException).getStatus()).toBe(503)
+      expect((error as CacheException).details).toEqual({
+        error: 'not ready within connectTimeout'
       })
-    )
-
-    expect(error).toBeInstanceOf(CacheException)
-    expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
-    expect((error as CacheException).getStatus()).toBe(503)
-    expect(Date.now() - started).toBeLessThan(CONNECT_TIMEOUT_MS + DEADLINE_MARGIN_MS)
+      const elapsed = Date.now() - started
+      expect(elapsed).toBeGreaterThanOrEqual(CONNECT_TIMEOUT_MS - 100)
+      expect(elapsed).toBeLessThan(CONNECT_TIMEOUT_MS + DEADLINE_MARGIN_MS)
+    } finally {
+      sockets.forEach((socket) => socket.destroy())
+      await new Promise<void>((resolve) => silent.close(() => resolve()))
+    }
   }, 20_000)
 
   // STOPPED: the connection is refused and the offline queue is off, so every call rejects at once
