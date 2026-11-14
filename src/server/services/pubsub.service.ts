@@ -35,6 +35,7 @@ import { describeError } from '../utils/describe-error'
 import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
+import { releaseClient } from '../utils/release-client'
 import { resolveSerializer } from '../utils/resolve-serializer'
 import { validateRead } from '../utils/validate-read'
 
@@ -221,10 +222,14 @@ export class PubSubService implements OnApplicationShutdown {
     }
     const subscriber = this.#subscriber
     this.#subscriber = null
+    // A subscriber that has ended has nothing to quit and nothing to disconnect.
+    if (subscriber.status === 'end') {
+      return
+    }
     try {
       await subscriber.quit()
     } catch {
-      subscriber.disconnect()
+      releaseClient(subscriber)
     }
   }
 

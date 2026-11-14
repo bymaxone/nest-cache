@@ -29,6 +29,7 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import { parseRedisUrl } from '../utils/parse-redis-url'
+import { releaseClient } from '../utils/release-client'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
@@ -171,7 +172,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
     this.#shutDown = true
     const client = this.#client
-    if (!client) {
+    // A client that has ended has nothing to quit and nothing to disconnect.
+    if (!client || client.status === 'end') {
+      this.#client = null
       return
     }
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -201,7 +204,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         reason: 'forced_disconnect',
         shutdownTimeoutMs: this.options.shutdownTimeoutMs
       })
-      client.disconnect()
+      releaseClient(client)
     } finally {
       clearTimeout(timer)
       this.#client = null
@@ -401,7 +404,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     } catch (error) {
       // A failed boot must not leave a client that keeps reconnecting, nor one the shutdown that
       // follows would try to quit.
-      client.disconnect()
+      releaseClient(client)
       this.#client = null
       throw error
     }

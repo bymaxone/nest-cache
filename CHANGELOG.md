@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A client that has already ended is no longer disconnected. ioredis arms a 2 s teardown timer in `disconnect()` and clears it only
+  when the stream emits `close`; an ended client never emits it again, so the process stayed alive 2 s longer after a boot that
+  failed because the client ended, after the shutdown of a main client that had ended (which also reported a spurious
+  `forced_disconnect` event), and after the shutdown of an ended Pub/Sub subscriber. Shutdown now skips a client whose status is
+  `end`, and the forced teardown disconnects only a client that has not ended.
+
 ## [1.2.14] - 2026-11-14
 
 ### Changed
