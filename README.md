@@ -344,7 +344,7 @@ BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'stri
 Inject `KeyBuilder` for the helpers: `escapePart('tenant:7')` returns `'tenant%3A7'`, safe to join several
 fields into one `id`, and `parse('app:a%3Ab:c')` returns `{ prefix: 'a:b', id: 'c' }` under `'strict'`.
 
-The `scan()` / `keys()` pattern is a glob over the _escaped_ id, and a stored id holds no separator character under `'strict'`, so a pattern that spells one as a literal can never match and throws `INVALID_KEY` instead of returning nothing. A separator holding an astral character (an emoji, say) or an unpaired surrogate is rejected at registration under `'strict'`: use a BMP one. The check stops at the first character class (`[...]`): a class can match ids that hold none of its members, and Redis's rules for closing one are not copied here, so the pattern from the class on is accepted and may match nothing. A separator character that escape tokens are also spelled with is the exception: it cannot be told apart from a token, so it is never refused and a pattern holding it may match nothing. To sweep a composite id (every session of one user, say), build the ids from escaped fields and use `idPrefixPattern`:
+The `COUNT` hint of `scan()` is a whole number from 1 to 10 000: a larger value is clamped, a smaller one raised to 1, and a value that is not a whole number falls back to 100. The pattern length is not capped, because the cost of matching a glob belongs to Redis; do not pass a user-typed pattern straight through. The `scan()` / `keys()` pattern is a glob over the _escaped_ id, and a stored id holds no separator character under `'strict'`, so a pattern that spells one as a literal can never match and throws `INVALID_KEY` instead of returning nothing. A separator holding an astral character (an emoji, say) or an unpaired surrogate is rejected at registration under `'strict'`: use a BMP one. The check stops at the first character class (`[...]`): a class can match ids that hold none of its members, and Redis's rules for closing one are not copied here, so the pattern from the class on is accepted and may match nothing. A separator character that escape tokens are also spelled with is the exception: it cannot be told apart from a token, so it is never refused and a pattern holding it may match nothing. To sweep a composite id (every session of one user, say), build the ids from escaped fields and use `idPrefixPattern`:
 
 ```ts
 import { Injectable } from '@nestjs/common'
@@ -670,16 +670,17 @@ await this.admin.revealValue('auth', 'auth:sess:1')  // { status: 'withheld', or
 
 ### Options
 
-| Option              | Type                    | Default | Description                                                              |
-| ------------------- | ----------------------- | ------- | ------------------------------------------------------------------------ |
-| `scopes`            | `readonly CacheScope[]` | —       | The keyspaces this deployment exposes; required                          |
-| `degradedAboveMs`   | `number`                | `250`   | Probe latency above which `health()` reports `degraded`                  |
-| `probeTimeoutMs`    | `number`                | `2000`  | How long `health()` waits for `PING` before reporting `down`             |
-| `scanLimit`         | `number`                | `500`   | Entries one `listKeys` page may carry (a page can slightly exceed it)    |
-| `commandBatchLimit` | `number`                | `100`   | Commands in one pipeline batch                                           |
-| `revealLimit`       | `number`                | `200`   | Members or fields `revealValue` returns before `isComplete` is `false`   |
-| `revealStringLimit` | `number`                | `4096`  | Characters of a string value `revealValue` returns                       |
-| `isGlobal`          | `boolean`               | `false` | Register the admin module globally. The cache module's default is `true` |
+| Option              | Type                    | Default | Description                                                                                              |
+| ------------------- | ----------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `scopes`            | `readonly CacheScope[]` | —       | The keyspaces this deployment exposes; required                                                          |
+| `degradedAboveMs`   | `number`                | `250`   | Probe latency above which `health()` reports `degraded`                                                  |
+| `probeTimeoutMs`    | `number`                | `2000`  | How long `health()` waits for `PING` before reporting `down`                                             |
+| `scanLimit`         | `number`                | `500`   | Entries one `listKeys` page may carry (a page can slightly exceed it)                                    |
+| `scanRoundsLimit`   | `number`                | `100`   | `SCAN` round trips one `listKeys` request makes before it returns a cursor (a whole number, 1 to 10 000) |
+| `commandBatchLimit` | `number`                | `100`   | Commands in one pipeline batch                                                                           |
+| `revealLimit`       | `number`                | `200`   | Members or fields `revealValue` returns before `isComplete` is `false`                                   |
+| `revealStringLimit` | `number`                | `4096`  | Characters of a string value `revealValue` returns                                                       |
+| `isGlobal`          | `boolean`               | `false` | Register the admin module globally. The cache module's default is `true`                                 |
 
 Every threshold must be a positive integer; one that is not fails the boot with `cache.invalid_scope`. `CacheAdminService` also has `listScopes()` and `describeKey(scope, key)`, which returns a key's type, TTL and whether its value is readable, without the value.
 
@@ -735,6 +736,7 @@ Every arm except `unsupported` carries `isComplete`; `false` means the value was
 ### Costs
 
 - `sampledCount` / `sampledBytes` are sums over a capped `SCAN`, not measurements of the keyspace; `isComplete` is the fact.
+- A request makes at most `scanRoundsLimit` `SCAN` round trips. A scope that matches few keys never reaches `scanLimit`, so the page can come back incomplete and even empty, with `cursor` set: continue with `listKeys(scopeId, { cursor })`. A caller that loops until `isComplete` makes at most `scanRoundsLimit` round trips per request, and the whole walk still ends, because `SCAN` guarantees it. With the keyspace unchanged between calls no key is returned twice; while keys are being written `SCAN` can return a key more than once, so treat the pages as a sample and deduplicate if it matters.
 - A page may carry slightly more than `scanLimit` entries: `SCAN` returns whole batches, so the limit stops the loop rather than trimming the result.
 - Sizing is opt-in (`includeSize`), and every pipeline batch is bounded in commands, not keys, because a large pipeline blocks the single-threaded server for the whole burst.
 - The config payload carries a connection's host, port and a TLS flag, never its URL or credentials.

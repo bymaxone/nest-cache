@@ -33,6 +33,18 @@ export const DEFAULT_PROBE_TIMEOUT_MS = 2_000
 export const DEFAULT_SCAN_LIMIT = 500
 
 /**
+ * Most `SCAN` round trips one `listKeys` request makes before it returns the cursor to continue from.
+ *
+ * A scope that matches few keys never reaches `scanLimit`, so without this bound one request walks
+ * the whole keyspace serially on the shared connection. At the default `scanLimit` it examines about
+ * 50 000 keys.
+ */
+export const DEFAULT_SCAN_ROUNDS_LIMIT = 100
+
+/** Largest accepted `scanRoundsLimit`. */
+export const MAX_SCAN_ROUNDS_LIMIT = 10_000
+
+/**
  * Most commands one pipeline flush sends.
  *
  * Bounds the BATCH, in commands, rather than the key count — that is the

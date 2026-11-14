@@ -19,6 +19,11 @@ export interface BymaxCacheAdminModuleOptions {
   probeTimeoutMs?: number
   /** Most keys one listing reads before reporting the page incomplete. Default: 500. */
   scanLimit?: number
+  /**
+   * Most `SCAN` round trips one listing request makes before it returns a cursor to continue from.
+   * A whole number from 1 to 10 000. Default: 100.
+   */
+  scanRoundsLimit?: number
   /** Most commands one pipeline flush sends. Default: 100. */
   commandBatchLimit?: number
   /** Most members or hash fields one value reveal returns. Default: 200. */

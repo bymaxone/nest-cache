@@ -169,7 +169,10 @@ export class CacheAdminService {
    * The page may carry slightly MORE than `scanLimit` entries: the limit stops
    * the scan loop, and the batch that crosses it is kept whole rather than
    * trimmed, because the cursor has already moved past those keys and trimming
-   * would drop them from every subsequent page too.
+   * would drop them from every subsequent page too. A request also stops after
+   * `scanRoundsLimit` round trips, so a scope that matches few keys cannot walk the
+   * whole keyspace in one call: the page is then incomplete, possibly empty, and
+   * carries the cursor to continue from.
    *
    * @param scopeId - The scope a caller named.
    * @param listOptions - Cursor and whether to measure sizes.
@@ -181,14 +184,17 @@ export class CacheAdminService {
     const scope = findScope(this.options.scopes, scopeId)
     const client = this.cache.getClient()
     const limit = this.options.scanLimit
+    const rounds = this.options.scanRoundsLimit
 
     const keys: string[] = []
     let cursor = listOptions.cursor ?? SCAN_END_CURSOR
+    let round = 0
     do {
       const [nextCursor, batch] = await client.scan(cursor, 'MATCH', scope.pattern, 'COUNT', limit)
       cursor = nextCursor
       keys.push(...batch)
-    } while (cursor !== SCAN_END_CURSOR && keys.length < limit)
+      round += 1
+    } while (cursor !== SCAN_END_CURSOR && keys.length < limit && round < rounds)
 
     // Everything collected is returned, deliberately: `SCAN` hands back whole
     // batches and the cursor has already moved past them, so trimming the tail
@@ -207,6 +213,7 @@ export class CacheAdminService {
       sampledBytes: includeSize ? sumMeasured(entries) : null,
       isComplete,
       scanLimit: limit,
+      scanRoundsLimit: rounds,
       cursor: isComplete ? null : cursor
     }
   }

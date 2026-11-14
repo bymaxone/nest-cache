@@ -99,6 +99,33 @@ describe('resolveAdminOptions', () => {
     expect(() => resolveAdminOptions({ scopes: SCOPES, [field]: value })).toThrow(CacheException)
   })
 
+  // The scan-round cap is a loop bound: a whole number from 1 to 10 000, 100 by default.
+  it('defaults scanRoundsLimit to 100', () => {
+    expect(resolveAdminOptions({ scopes: SCOPES }).scanRoundsLimit).toBe(100)
+  })
+
+  it.each([1, 10_000])('accepts a scanRoundsLimit of %p', (value) => {
+    expect(resolveAdminOptions({ scopes: SCOPES, scanRoundsLimit: value }).scanRoundsLimit).toBe(
+      value
+    )
+  })
+
+  it.each([0, -1, 1.5, NaN, Infinity])('rejects a scanRoundsLimit of %p', (value) => {
+    expectCode(
+      () => resolveAdminOptions({ scopes: SCOPES, scanRoundsLimit: value }),
+      CACHE_ERROR_CODES.INVALID_SCOPE,
+      { reason: 'threshold must be positive', option: 'scanRoundsLimit', value }
+    )
+  })
+
+  it('rejects a scanRoundsLimit above 10 000', () => {
+    expectCode(
+      () => resolveAdminOptions({ scopes: SCOPES, scanRoundsLimit: 10_001 }),
+      CACHE_ERROR_CODES.INVALID_SCOPE,
+      { reason: 'threshold too large', option: 'scanRoundsLimit', value: 10_001, max: 10_000 }
+    )
+  })
+
   // The probe timeout feeds setTimeout, which stores a delay above 2^31-1 ms as 1 ms: the probe
   // would report the cache down before asking it anything.
   it('rejects a probe timeout above the largest delay setTimeout honours', () => {

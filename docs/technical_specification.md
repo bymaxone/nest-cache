@@ -1681,12 +1681,13 @@ export class HealthController {
 | `degradedAboveMs`   | `number`                | `250`   | Round trip above which health reports `degraded`                                                                  |
 | `probeTimeoutMs`    | `number`                | `2000`  | How long a health probe waits before reporting `down`                                                             |
 | `scanLimit`         | `number`                | `500`   | Most keys one listing reads before reporting the page incomplete                                                  |
+| `scanRoundsLimit`   | `number`                | `100`   | Most `SCAN` round trips one listing request makes before it returns a cursor; a whole number from 1 to 10 000     |
 | `commandBatchLimit` | `number`                | `100`   | Most commands one pipeline flush sends; a flush always carries at least one key, so a lower limit may be exceeded |
 | `revealLimit`       | `number`                | `200`   | Most members or hash fields one reveal returns                                                                    |
 | `revealStringLimit` | `number`                | `4096`  | Most characters one revealed string carries                                                                       |
 | `isGlobal`          | `boolean`               | `false` | Register the module globally                                                                                      |
 
-Each threshold must be a positive integer.
+Each threshold must be a positive integer; `scanRoundsLimit` is also at most 10 000.
 
 ### 18.2 Scopes
 
@@ -1716,12 +1717,12 @@ interface CacheScope {
 
 **`CacheAdminService`**
 
-| Method                                         | Returns                                                                                                                                                                                                                                                           |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listScopes()`                                 | The declared scopes                                                                                                                                                                                                                                               |
-| `listKeys(scopeId, { cursor?, includeSize? })` | `KeyspacePage`: `scopeId`, entries (key, type, TTL, optional size), `sampledCount`, `sampledBytes`, `isComplete`, `scanLimit`, `cursor`. The scan stops after `scanLimit` keys; the final batch may overshoot by up to one batch. Size (`MEMORY USAGE`) is opt-in |
-| `describeKey(scopeId, key)`                    | `KeyDetail`: type, TTL and `isReadable`                                                                                                                                                                                                                           |
-| `revealValue(scopeId, key)`                    | `RevealResult`: `revealed`, `withheld` or `missing`                                                                                                                                                                                                               |
+| Method                                         | Returns                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listScopes()`                                 | The declared scopes                                                                                                                                                                                                                                                                                                                                               |
+| `listKeys(scopeId, { cursor?, includeSize? })` | `KeyspacePage`: `scopeId`, entries (key, type, TTL, optional size), `sampledCount`, `sampledBytes`, `isComplete`, `scanLimit`, `scanRoundsLimit`, `cursor`. The scan stops after `scanLimit` keys or `scanRoundsLimit` round trips (the page may then be empty and incomplete); the final batch may overshoot by up to one batch. Size (`MEMORY USAGE`) is opt-in |
+| `describeKey(scopeId, key)`                    | `KeyDetail`: type, TTL and `isReadable`                                                                                                                                                                                                                                                                                                                           |
+| `revealValue(scopeId, key)`                    | `RevealResult`: `revealed`, `withheld` or `missing`                                                                                                                                                                                                                                                                                                               |
 
 A scope with `isReadable: false` is refused **before** any read, so the value never enters the process; the result carries the scope's `origin` instead. A revealed value is `string` (truncated to `revealStringLimit`), `hash` (`{ field, value }` entries), `members` (set or list), `scored` (sorted set) or `unsupported`; collections are truncated to `revealLimit` and `isComplete` reports whether truncation happened.
 
