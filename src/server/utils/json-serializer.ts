@@ -53,8 +53,8 @@ export class JsonSerializer implements ISerializer {
    *   stringified. This covers `JSON.stringify` throwing (circular reference,
    *   `BigInt`) AND the silent cases where a top-level `undefined`, function, or
    *   `symbol` would make `JSON.stringify` return the JS value `undefined`
-   *   instead of a string. The original message is attached under
-   *   `details.error`; the value itself is never echoed, as it may carry secrets
+   *   instead of a string. `details.error` is fixed text and the
+   *   original error is on `cause`; the value itself is never echoed, as it may carry secrets
    *   (CLAUDE.md §4).
    */
   serialize<T>(value: T): string {
