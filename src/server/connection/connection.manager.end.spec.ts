@@ -30,13 +30,40 @@ const closedPort = async (): Promise<number> => {
   return port
 }
 
-/** The timers the process is keeping alive right now. */
-const activeTimers = (): number =>
-  process.getActiveResourcesInfo().filter((resource) => resource === 'Timeout').length
+/** The delay of ioredis's teardown timer: its `disconnectTimeout` default, which no code here changes. */
+const TEARDOWN_DELAY_MS = 2_000
+
+/** What the spy saw of ioredis's teardown timer: how many it armed, and how many were never cleared. */
+interface TeardownTimers {
+  armed: () => number
+  uncleared: () => number
+}
 
 /**
- * Lets short-lived callbacks finish, so only a timer that outlives them is counted: ioredis's teardown
- * timer lasts 2 s, and the pauses here are far shorter.
+ * Starts recording the teardown timers ioredis arms from now on. A spy on `setTimeout` and
+ * `clearTimeout` sees only the timers this test's own calls arm and clear, where a count of the
+ * process's active timers also counts ones that are not ours and varies with the load of the machine.
+ * A client that has not ended arms the timer when it is disconnected and its `close` clears it, so
+ * a timer is a defect only while it is armed and never cleared.
+ *
+ * @returns Readers of the number armed and the number never cleared since this call.
+ */
+const watchTeardownTimers = (): TeardownTimers => {
+  const set = jest.spyOn(globalThis, 'setTimeout')
+  const clear = jest.spyOn(globalThis, 'clearTimeout')
+  const handles = (): unknown[] =>
+    set.mock.calls.flatMap(([, delay], index) =>
+      delay === TEARDOWN_DELAY_MS ? [set.mock.results[index]?.value] : []
+    )
+  return {
+    armed: () => handles().length,
+    uncleared: () =>
+      handles().filter((handle) => !clear.mock.calls.some(([cleared]) => cleared === handle)).length
+  }
+}
+
+/**
+ * Lets short-lived callbacks finish before an assertion reads the spy.
  */
 const settle = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 150))
 
@@ -69,6 +96,7 @@ describe('after a client has ended (real ioredis)', () => {
   })
 
   afterEach(async () => {
+    jest.restoreAllMocks()
     await manager?.onApplicationShutdown()
     manager = undefined
   })
@@ -78,13 +106,13 @@ describe('after a client has ended (real ioredis)', () => {
   // ended client never emits one.
   it('leaves no timer after a boot that failed because the client ended', async () => {
     const built = await build()
-    const before = activeTimers()
+    const timers = watchTeardownTimers()
 
     // Which of the refusal and the end the wait sees first is up to ioredis; both fail the boot.
     await expect(built.onModuleInit()).rejects.toMatchObject({ code: 'cache.connection_failed' })
     await settle()
 
-    expect(activeTimers()).toBeLessThanOrEqual(before)
+    expect(timers.uncleared()).toBe(0)
   })
 
   // A server that accepts and closes cleanly gives ioredis a close with no error, so the client ends with
@@ -101,14 +129,14 @@ describe('after a client has ended (real ioredis)', () => {
     const port = typeof address === 'object' && address ? address.port : 0
     try {
       const built = await build({ port })
-      const before = activeTimers()
+      const timers = watchTeardownTimers()
 
       await expect(built.onModuleInit()).rejects.toMatchObject({
         details: { error: 'connection ended before ready' }
       })
       await settle()
 
-      expect(activeTimers()).toBeLessThanOrEqual(before)
+      expect(timers.uncleared()).toBe(0)
     } finally {
       sockets.forEach((socket) => socket.destroy())
       await new Promise<void>((resolve) => server.close(() => resolve()))
@@ -123,12 +151,12 @@ describe('after a client has ended (real ioredis)', () => {
     const ended = new Promise<void>((resolve) => client.once('end', () => resolve()))
     client.connect().catch(() => undefined)
     await ended
-    const before = activeTimers()
+    const timers = watchTeardownTimers()
 
     await built.onApplicationShutdown()
     await settle()
 
-    expect(activeTimers()).toBeLessThanOrEqual(before)
+    expect(timers.uncleared()).toBe(0)
     expect(events.filter(([, data]) => data['reason'] === 'forced_disconnect')).toEqual([])
   })
 
@@ -145,13 +173,44 @@ describe('after a client has ended (real ioredis)', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 300))
     const subscriber = minted.mock.results[0]?.value as { status: string; quit: () => unknown }
     const quit = jest.spyOn(subscriber, 'quit')
-    const before = activeTimers()
+    const timers = watchTeardownTimers()
 
     await pubsub.onApplicationShutdown()
     await settle()
 
     expect(subscriber.status).toBe('end')
     expect(quit).not.toHaveBeenCalled()
-    expect(activeTimers()).toBeLessThanOrEqual(before)
+    expect(timers.uncleared()).toBe(0)
+  })
+
+  // The control: a client that has not ended and is disconnected does arm the teardown timer, and its
+  // `close` clears it. The spy sees that close path, so the zero in the cases above is the spy
+  // watching and not a spy that cannot see the timer.
+  it('arms and clears the teardown timer when a client that has not ended is closed', async () => {
+    const sockets: Socket[] = []
+    const silent = createServer((socket) => {
+      sockets.push(socket)
+      socket.on('error', () => undefined)
+      // Read what the client sends, so that its end of the connection is seen and answered.
+      socket.resume()
+    })
+    await new Promise<void>((resolve) => silent.listen(0, '127.0.0.1', resolve))
+    const address = silent.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+    try {
+      const built = await build({ port, connectTimeout: 300 })
+      const timers = watchTeardownTimers()
+
+      await expect(built.onModuleInit()).rejects.toMatchObject({
+        details: { error: 'not ready within connectTimeout' }
+      })
+      await settle()
+
+      expect(timers.armed()).toBe(1)
+      expect(timers.uncleared()).toBe(0)
+    } finally {
+      sockets.forEach((socket) => socket.destroy())
+      await new Promise<void>((resolve) => silent.close(() => resolve()))
+    }
   })
 })
