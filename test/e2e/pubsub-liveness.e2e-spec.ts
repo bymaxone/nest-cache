@@ -138,6 +138,9 @@ describe('Pub/Sub liveness (real Redis)', () => {
       execFileSync('docker', ['unpause', id])
     }
 
+    process.stdout.write(
+      `shutdown with Redis frozen, commandTimeout 8000, shutdownTimeoutMs 500: ${elapsed} ms\n`
+    )
     expect(elapsed).toBeLessThan(3_000)
   }, 40_000)
 
