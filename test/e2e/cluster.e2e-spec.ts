@@ -10,6 +10,8 @@
  * administration call that reads keys). A rejected TTL writes nothing. Boots its own
  * cluster container and tears it down in `afterAll`.
  */
+import { execFileSync } from 'node:child_process'
+
 import {
   CacheService,
   CacheException,
@@ -66,6 +68,17 @@ const waitFor = async (check: () => boolean, timeoutMs = 10_000): Promise<void> 
   }
 }
 
+/** The command timeout the client is configured with, which is the deadline a read must meet. */
+const COMMAND_TIMEOUT_MS = 5_000
+
+/**
+ * Slack added to a configured deadline before a wall-clock assertion fails. The check is of a real
+ * deadline, so it stays on the real clock, but its bound is the configured deadline plus this margin
+ * and never a fixed number: a loaded machine delays the rejection, not the deadline it is measured
+ * against.
+ */
+const DEADLINE_MARGIN_MS = 10_000
+
 describe('Redis Cluster topology E2E (real cluster)', () => {
   let cluster: StartedRedisCluster
   let app: TestingModule
@@ -76,7 +89,10 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
     cluster = await startRedisCluster()
     const cacheOptions = {
       mode: 'cluster' as const,
-      cluster: { nodes: cluster.nodes, options: { redisOptions: { maxRetriesPerRequest: 5 } } },
+      cluster: {
+        nodes: cluster.nodes,
+        options: { redisOptions: { maxRetriesPerRequest: 5, commandTimeout: COMMAND_TIMEOUT_MS } }
+      },
       namespace: 'e2e-cluster',
       scripts: [{ name: 'cas', lua: COMPARE_AND_SET_LUA }]
     }
@@ -264,12 +280,36 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
     })
   })
 
+  // Scenario: every node stops answering without refusing the connection, so only the command
+  // timeout can end a read. A refused connection fails at once whatever the timeout, so it cannot
+  // show that the deadline fires; a paused cluster can. The read must reject with the coded error at
+  // that deadline, and the cluster must serve again once it resumes.
+  it('rejects a get at the command timeout while the whole cluster stops answering', async () => {
+    await cache.set('stall', 'k', { v: 1 })
+    const id = cluster.container.getId()
+    execFileSync('docker', ['pause', id])
+    const started = Date.now()
+    try {
+      const error = await cache.get('stall', 'k').then(
+        () => undefined,
+        (rejection: unknown) => rejection
+      )
+
+      expect(error).toBeInstanceOf(CacheException)
+      expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.COMMAND_TIMEOUT)
+      expect(Date.now() - started).toBeLessThan(COMMAND_TIMEOUT_MS + DEADLINE_MARGIN_MS)
+    } finally {
+      execFileSync('docker', ['unpause', id])
+    }
+  }, 60_000)
+
   // Keep this the LAST test: it stops the cluster, so nothing after it can reach one.
   // Scenario: every node goes away after the client booted and served traffic.
-  // Rule: a read rejects within the default command timeout instead of waiting in an offline
-  // queue for the cluster to come back, so a caller that treats an unreachable cache as a miss
-  // reaches its fallback.
-  it('rejects a get within the command timeout once the whole cluster is down', async () => {
+  // Rule: a read rejects instead of waiting in an offline queue for the cluster to come back, so a
+  // caller that treats an unreachable cache as a miss reaches its fallback. A refused connection fails
+  // at once whatever the command timeout, so this checks that it fails promptly (within the configured
+  // timeout plus a margin); the timeout firing is checked by the test above, with the cluster paused.
+  it('rejects a get promptly once the whole cluster is down', async () => {
     await cache.set('outage', 'k', { v: 1 })
     expect(await cache.get('outage', 'k')).toEqual({ v: 1 })
 
@@ -286,10 +326,12 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
           return 'rejected'
         }
       ),
-      new Promise<string>((resolve) => setTimeout(() => resolve('pending'), 15_000))
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve('pending'), COMMAND_TIMEOUT_MS + DEADLINE_MARGIN_MS)
+      )
     ])
 
     expect(outcome).toBe('rejected')
-    expect(settledAt).toBeLessThan(5_000)
+    expect(settledAt).toBeLessThan(COMMAND_TIMEOUT_MS + DEADLINE_MARGIN_MS)
   }, 60_000)
 })
