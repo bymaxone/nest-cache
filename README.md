@@ -465,7 +465,7 @@ export class UserReader {
 
 It is opt-in and off by default: without `validate` nothing changes and no validator runs. It is accepted by `get`, `mget` (every present value), `hget`, `hgetall` (every field) and, for messages, `subscribe` and `psubscribe`.
 
-A value that does not satisfy the rule throws `CacheException` with the code `cache.validation_failed` (HTTP 500). `details` holds fixed text and an issue count, plus `index` or `field` for a batch read, and never the value or the validator's messages, which often quote what they received. The validator's own issues are on `cause`. The entry is **left in place**: a read does not delete. A message that fails is not delivered to the subscriber; it takes the handler-error path (an `error` event with `reason: 'handler_error'`).
+A value that does not satisfy the rule throws `CacheException` with the code `cache.validation_failed` (HTTP 500). `details` holds fixed text, plus `index` or `field` for a batch read, and never the value or the validator's messages, which often quote what they received. The validator's own issues are on `cause`. The entry is **left in place**: a read does not delete. A message that fails is not delivered to the subscriber; it takes the handler-error path (an `error` event with `reason: 'handler_error'`).
 
 During a rolling deploy an older instance may still write the old shape, so treat the failure as a miss, recompute and write the new shape:
 

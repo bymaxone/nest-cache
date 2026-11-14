@@ -14,7 +14,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `{ validate }` option: a type predicate or any Standard Schema validator (zod, valibot, arktype), declared
   structurally so the library imports none of them and gains no dependency. `T` is inferred from the validator. A value
   that does not satisfy it throws `CacheException` with the new code `cache.validation_failed` (HTTP 500): `details`
-  hold fixed text and an issue count (`index` or `field` for a batch read), never the value or the validator's
+  hold fixed text (`index` or `field` for a batch read), never the value or the validator's
   messages, and the issues are on `cause`; the entry is left in place. A subscriber's message that fails is not
   delivered and takes the handler-error path. Without `validate` nothing changes and no validator runs.
 
