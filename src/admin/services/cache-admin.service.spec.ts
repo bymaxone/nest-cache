@@ -428,6 +428,26 @@ describe('CacheAdminService.listKeys', () => {
 })
 
 describe('CacheAdminService.describeKey', () => {
+  // The surface disables the reveal from `isReadable`, so it must follow the same deny-wins rule.
+  it('reports a key a withheld scope also matches as unreadable', async () => {
+    const reader = new FakeReader([], { type: 'string' })
+    const service = build(reader, {
+      scopes: [
+        { id: 'wide', label: 'Wide', pattern: 'app:*', isReadable: true, origin: 'the app' },
+        {
+          id: 'secrets',
+          label: 'Secrets',
+          pattern: 'app:secrets:*',
+          isReadable: false,
+          origin: 'holds credentials'
+        }
+      ]
+    })
+
+    expect(await service.describeKey('wide', 'app:secrets:k')).toMatchObject({ isReadable: false })
+    expect(await service.describeKey('wide', 'app:plain')).toMatchObject({ isReadable: true })
+  })
+
   // The base case for description: a key inside the scope reports its real type
   // and remaining life, with no value read.
   it('describes a key inside the scope', async () => {
@@ -490,6 +510,33 @@ describe('CacheAdminService.revealValue', () => {
       scopeId: 'auth',
       origin: 'written by nest-auth at Redis root; holds session records'
     })
+  })
+
+  // Deny wins: a key is revealed only when EVERY scope whose pattern matches it is readable, so
+  // naming the broader readable scope cannot reach into a withheld one nested inside it.
+  it('withholds a key that a withheld scope also matches, whichever scope is named', async () => {
+    const reader = new FakeReader([], { type: 'string', get: 'secret' })
+    const spy = jest.spyOn(reader, 'get')
+    const service = build(reader, {
+      scopes: [
+        { id: 'wide', label: 'Wide', pattern: 'app:*', isReadable: true, origin: 'the app' },
+        {
+          id: 'secrets',
+          label: 'Secrets',
+          pattern: 'app:secrets:*',
+          isReadable: false,
+          origin: 'holds credentials'
+        }
+      ]
+    })
+
+    expect(await service.revealValue('wide', 'app:secrets:k')).toEqual({
+      status: 'withheld',
+      key: 'app:secrets:k',
+      scopeId: 'secrets',
+      origin: 'holds credentials'
+    })
+    expect(spy).not.toHaveBeenCalled()
   })
 
   // The refusal must happen BEFORE any value is read, or the secret has already

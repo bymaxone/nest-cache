@@ -685,7 +685,7 @@ The library owns the mechanism (validating the allowlist, scanning against it, d
 
 A scope pattern is a literal prefix, optionally ending in `*`: `auth:*`, `my-app:*` and exact keys are accepted; `app:*:v1`, `*`, `a?b` and `a[bc]` are refused at wiring. Key membership is therefore exact: a caller names a key and the library checks it against the named scope by prefix, never with a glob matcher.
 
-`isReadable: false` withholds the value only. Listing, types, TTLs and sizes stay available, and the refusal is returned before the value is read. A withheld value is not an authorization failure, since the deployment declared the keyspace unreadable at wiring and no credential changes that, so do not serve it as `403`.
+`isReadable: false` withholds the value only. Scopes may overlap, and deny wins: a key is revealed only when every scope whose pattern matches it is readable, so naming `app:*` does not reach a key under a withheld `app:secrets:*`. A key matched by a withheld scope is withheld whichever scope names it; its name can still be listed. Listing, types, TTLs and sizes stay available, and the refusal is returned before the value is read. A withheld value is not an authorization failure, since the deployment declared the keyspace unreadable at wiring and no credential changes that, so do not serve it as `403`.
 
 Readings that would carry two meanings are unions, not nullables: `maxmemory` is `unbounded | limited | unreported`, a TTL is `expiring | persistent | missing`, `aofEnabled` is `boolean | null`, and health is `{ up | degraded, latencyMs } | { down, reason, code }`. `mode`, `isScanSupported` and `degradedAboveMs` sit outside the health union.
 

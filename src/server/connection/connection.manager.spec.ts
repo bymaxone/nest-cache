@@ -222,6 +222,54 @@ describe('ConnectionManager', () => {
       expect(opts['natMap']).toBe(natMap)
     })
 
+    // With TLS configured for the data nodes, the sentinel connection uses it too: without these
+    // two options ioredis talks to the sentinels in cleartext and sends `sentinelPassword` that way.
+    it('enables TLS toward the sentinels when connection.tls is set', () => {
+      const tls = { servername: 'redis.internal' }
+      const manager = makeManager({
+        mode: 'sentinel',
+        connection: { host: 'h', tls },
+        sentinel: {
+          name: 'mymaster',
+          sentinels: [{ host: 's', port: 26379 }],
+          sentinelPassword: 'sp'
+        }
+      })
+
+      manager.getClient()
+      const opts = redisInstances[0]?.options ?? {}
+      expect(opts['enableTLSForSentinelMode']).toBe(true)
+      expect(opts['sentinelTLS']).toBe(tls)
+    })
+
+    // Sentinel TLS follows the resolved TLS options, so a rediss:// url that gives the data nodes TLS
+    // gives the sentinels TLS too.
+    it('enables TLS toward the sentinels when a rediss:// connection.url sets it', () => {
+      const manager = makeManager({
+        mode: 'sentinel',
+        connection: { url: 'rediss://h:6379' },
+        sentinel: { name: 'mymaster', sentinels: [{ host: 's', port: 26379 }] }
+      })
+
+      manager.getClient()
+      const opts = redisInstances[0]?.options ?? {}
+      expect(opts['enableTLSForSentinelMode']).toBe(true)
+      expect(opts['sentinelTLS']).toEqual({})
+    })
+
+    // Without connection.tls nothing changes: no TLS option reaches the sentinel connection.
+    it('does not enable TLS toward the sentinels when connection.tls is unset', () => {
+      const manager = makeManager({
+        mode: 'sentinel',
+        sentinel: { name: 'mymaster', sentinels: [{ host: 's', port: 26379 }] }
+      })
+
+      manager.getClient()
+      const opts = redisInstances[0]?.options ?? {}
+      expect(opts['enableTLSForSentinelMode']).toBeUndefined()
+      expect(opts['sentinelTLS']).toBeUndefined()
+    })
+
     // The modern 'replica' role must be normalised to 'slave' before reaching
     // ioredis 5 (which only accepts 'slave' at the wire level).
     it("normalises role: 'replica' to 'slave' for ioredis", () => {

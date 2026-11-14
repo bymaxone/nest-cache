@@ -71,11 +71,34 @@ function findGlobMetacharacter(namespace: string): string | null {
 }
 
 /**
+ * Refuses a `connection.url` that does not parse, in every mode.
+ *
+ * The connection manager parses it whatever the mode, and the raw parse error carries the whole URL,
+ * credentials included, so it must never escape. The URL is omitted from `details` since it may embed
+ * credentials (CLAUDE.md section 4).
+ *
+ * @param url - The configured URL, when there is one.
+ * @throws {CacheException} `CONNECTION_FAILED` when the URL is malformed.
+ */
+function validateConnectionUrl(url: string | undefined): void {
+  if (!url) {
+    return
+  }
+  try {
+    parseRedisUrl(url)
+  } catch {
+    throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
+      reason: 'invalid connection.url'
+    })
+  }
+}
+
+/**
  * Validates the standalone connection block.
  *
  * @param options - The raw consumer options.
  * @throws {CacheException} `CONNECTION_FAILED` when neither `url` nor `host` is
- *   set, or when the URL is malformed.
+ *   set.
  */
 function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
   const connection = options.connection
@@ -83,18 +106,6 @@ function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
     throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
       reason: 'missing connection.url or connection.host'
     })
-  }
-  if (connection.url) {
-    try {
-      parseRedisUrl(connection.url)
-    } catch {
-      // Surface a malformed URL as the library's structured error at bootstrap
-      // rather than a raw Error during connection-manager construction. The URL
-      // is omitted from `details` since it may embed credentials (CLAUDE.md §4).
-      throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
-        reason: 'invalid connection.url'
-      })
-    }
   }
 }
 
@@ -210,6 +221,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
       throw new CacheException(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode })
     }
   }
+  validateConnectionUrl(options.connection?.url)
   if (mode === 'standalone') {
     validateStandaloneConnection(options)
   }
