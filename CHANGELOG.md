@@ -1,10 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented in this file. The format is
-based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
-project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while this API is pre-stable: breaking changes ship in minor and patch releases by explicit `@bymax-one` policy, so a version number carries no compatibility information. The **Apply to a consumer** note, on the entries that carry one, is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
+
+## [1.2.18] - 2026-11-14
 
 ### Fixed
 
@@ -16,6 +19,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whole close takes about one `shutdownTimeoutMs` (measured on a frozen Redis with both clients open and the default 5 000 ms: see the
   test). The forced teardown of the subscriber is reported to `events.onEvent` like the main client's: an `error` event with
   `reason: 'forced_disconnect'` and `role: 'subscriber'`.
+  The declarations of `PubSubService` list two private members more (`shutdownTimeoutMs`, `emitForcedDisconnect`); a private member is
+  not part of the API.
 
   **Apply to a consumer:** a host that counts or alerts on `forced_disconnect` and filters on `role: 'main'` sees nothing new; one that
   counts every `forced_disconnect` now also sees the subscriber's. Nothing else to change.
@@ -908,7 +913,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.17...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.18...HEAD
+[1.2.18]: https://github.com/bymaxone/nest-cache/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/bymaxone/nest-cache/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/bymaxone/nest-cache/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/bymaxone/nest-cache/compare/v1.2.14...v1.2.15
