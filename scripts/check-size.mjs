@@ -54,11 +54,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // server's, the externalisation has broken and DI is about to fail at a
 // consumer's runtime.
 //
+// 1.2.13: server 9.20 -> 9.59 kB (measured 9.55 kB). Read validation (about +0.37 kB) and the timer-delay
+// ceiling on the shutdown, connect and command timeouts. The PM approved measured + 0.04 kB.
+//
 // The server budget covers the key escape (the token writer and decoder, the escape sets and the
 // `KeyBuilder` helpers). Every budget keeps about 10% of headroom over the measured bundle, which is
 // taken after the comments are stripped.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 9.2 * 1024 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 9.59 * 1024 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5.3 * 1024 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }

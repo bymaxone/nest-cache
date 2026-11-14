@@ -4,6 +4,7 @@ import { DEFAULT_KEY_SEPARATOR, DEFAULT_NAMESPACE } from '../constants/default-n
 import {
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
   MAX_TIMER_DELAY_MS,
+  MIN_COMMAND_TIMEOUT_MS,
   MIN_CONNECT_TIMEOUT_MS,
   MIN_SHUTDOWN_TIMEOUT_MS
 } from '../constants/default-timeouts'
@@ -486,12 +487,16 @@ describe('validateOptions', () => {
     ['connectTimeout', NaN],
     ['connectTimeout', 2 ** 31],
     ['connectTimeout', Infinity],
-    ['connectTimeout', 150.5]
+    ['connectTimeout', 150.5],
+    ['commandTimeout', NaN],
+    ['commandTimeout', 2 ** 31],
+    ['commandTimeout', Infinity],
+    ['commandTimeout', 150.5]
   ])('rejects %s of %p as not a valid timer delay', (field, value) => {
     const options =
       field === 'shutdownTimeoutMs'
         ? { connection: { host: 'h' }, shutdownTimeoutMs: value }
-        : { connection: { host: 'h', connectTimeout: value } }
+        : { connection: { host: 'h', [field]: value } }
     expectCode(() => validateOptions(options), CACHE_ERROR_CODES.CONNECTION_FAILED, {
       reason: `${field} not a valid timer delay`,
       value,
@@ -503,9 +508,25 @@ describe('validateOptions', () => {
   it('accepts a timer delay of exactly 2^31-1', () => {
     expect(() =>
       validateOptions({
-        connection: { host: 'h', connectTimeout: 2 ** 31 - 1 },
+        connection: { host: 'h', connectTimeout: 2 ** 31 - 1, commandTimeout: 2 ** 31 - 1 },
         shutdownTimeoutMs: 2 ** 31 - 1
       })
+    ).not.toThrow()
+  })
+
+  // A command timeout of 0 or below would time every command out at once; 1 ms is the smallest
+  // delay that waits at all.
+  it.each([0, -5])('rejects a command timeout of %p as too low', (value) => {
+    expectCode(
+      () => validateOptions({ connection: { host: 'h', commandTimeout: value } }),
+      CACHE_ERROR_CODES.CONNECTION_FAILED,
+      { reason: 'commandTimeout too low', value, min: MIN_COMMAND_TIMEOUT_MS }
+    )
+  })
+
+  it('accepts a command timeout of exactly 1 ms', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h', commandTimeout: MIN_COMMAND_TIMEOUT_MS } })
     ).not.toThrow()
   })
 
