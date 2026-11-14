@@ -1,3 +1,10 @@
+/**
+ * Unit tests for {@link CacheException}: the structured response body, the catalog message, the
+ * cause, the HTTP status of every code and an explicit override, and the `code` and `details`
+ * fields.
+ *
+ * Layer: server.
+ */
 import { HttpStatus } from '@nestjs/common'
 
 import { CACHE_ERROR_CODES, type CacheErrorCode } from '../../shared/constants/error-codes'

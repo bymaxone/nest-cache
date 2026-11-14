@@ -1,3 +1,9 @@
+/**
+ * Unit tests for `CACHE_EVENT_NAMES`: each key maps to its raw event name, the six lifecycle keys
+ * are exactly those exposed, and every value belongs to the `CacheEventName` union.
+ *
+ * Layer: shared.
+ */
 import type { CacheEventName } from '../types/cache-event.types'
 import { CACHE_EVENT_NAMES } from './event-names'
 

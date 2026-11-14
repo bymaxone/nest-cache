@@ -20,7 +20,7 @@ export default [
   // TypeScript production files (Node-only library; no DOM, no JSX)
   {
     files: ['src/**/*.ts'],
-    ignores: ['**/*.spec.ts'],
+    ignores: ['**/*.spec.ts', '**/__tests__/**'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -76,6 +76,12 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'error',
       '@typescript-eslint/explicit-module-boundary-types': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
+      // A function is at most 50 raw lines — blank lines and comments count, as a reader sees
+      // them. Spec files are exempt: a `describe` callback holds a whole suite.
+      'max-lines-per-function': [
+        'error',
+        { max: 50, skipBlankLines: false, skipComments: false, IIFEs: true }
+      ],
       '@typescript-eslint/consistent-type-imports': [
         'error',
         {
@@ -202,9 +208,10 @@ export default [
     }
   },
 
-  // Test files — Jest + Node globals, relaxed rules.
+  // Test files and the fixtures under `__tests__` (excluded from coverage, mutation and the build)
+  // — Jest + Node globals, relaxed rules.
   {
-    files: ['**/*.spec.ts', '**/*.test.ts'],
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/__tests__/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

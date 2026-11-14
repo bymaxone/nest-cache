@@ -1,3 +1,10 @@
+/**
+ * Unit tests for `resolveAdminOptions`: every default applies when only scopes are given, each
+ * override is honoured, a malformed scope list or an out-of-range limit or timeout is refused with
+ * the offending option named, and the resolved options are frozen.
+ *
+ * Layer: admin.
+ */
 import { CACHE_ERROR_CODES } from '../../server/errors/cache-error-codes'
 import { CacheException } from '../../server/errors/cache.exception'
 import {

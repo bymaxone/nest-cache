@@ -1,3 +1,9 @@
+/**
+ * Unit tests for `parseRedisUrl`: host and port, credentials with percent-decoding, the database
+ * index, and TLS for the `rediss://` scheme.
+ *
+ * Layer: server.
+ */
 import { parseRedisUrl } from './parse-redis-url'
 
 describe('parseRedisUrl', () => {

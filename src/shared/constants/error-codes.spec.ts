@@ -1,3 +1,9 @@
+/**
+ * Unit tests for `CACHE_ERROR_CODES`: every code is namespaced under `cache.`, the values are
+ * unique, and the codes consumers match on keep their wire value.
+ *
+ * Layer: shared.
+ */
 import { CACHE_ERROR_CODES } from './error-codes'
 
 describe('CACHE_ERROR_CODES', () => {

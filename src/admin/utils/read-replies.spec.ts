@@ -1,3 +1,9 @@
+/**
+ * Unit tests for the reply readers: `readKeyType` maps a TYPE reply, `readKeyTtl` tells an
+ * expiring, persistent and missing key apart, and `readSizeBytes` reads a MEMORY USAGE reply.
+ *
+ * Layer: admin.
+ */
 import { readKeyTtl, readKeyType, readSizeBytes } from './read-replies'
 
 describe('readKeyType', () => {

@@ -1,3 +1,9 @@
+/**
+ * Unit tests for the default error messages: the catalog is a Map with a non-empty message for
+ * every code, and `CONNECTION_FAILED` keeps its exact wire text.
+ *
+ * Layer: server.
+ */
 import { CACHE_ERROR_CODES, CACHE_ERROR_MESSAGES } from './cache-error-codes'
 
 describe('CACHE_ERROR_MESSAGES', () => {

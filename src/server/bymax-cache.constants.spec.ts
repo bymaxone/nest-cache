@@ -1,3 +1,9 @@
+/**
+ * Unit tests for the injection tokens: each is a symbol and no two are the same, so a provider can
+ * never be resolved through a string or a colliding token.
+ *
+ * Layer: server.
+ */
 import {
   BYMAX_CACHE_CONNECTION,
   BYMAX_CACHE_EVENTS,
