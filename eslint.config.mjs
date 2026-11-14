@@ -21,6 +21,9 @@ export default [
   {
     files: ['src/**/*.ts'],
     ignores: ['**/*.spec.ts', '**/__tests__/**'],
+    // An inline `eslint-disable` above a long function would accept it without a trace, so the
+    // directives are ignored in production source and the rules report as configured.
+    linterOptions: { noInlineConfig: true },
     languageOptions: {
       parser: tsParser,
       parserOptions: {
