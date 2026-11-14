@@ -63,6 +63,15 @@ describe('CacheException', () => {
     expect(ex.message).toBe('The stored value does not match the expected shape.')
   })
 
+  // A refused option is a boot-time configuration fault, a 500 with a message that does not read as
+  // a network failure.
+  it('defaults INVALID_OPTIONS to INTERNAL_SERVER_ERROR with its catalog message', () => {
+    const ex = new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS)
+
+    expect(ex.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
+    expect(ex.message).toBe('A configuration option has a value the library cannot honour.')
+  })
+
   // An unknown code must fall back to the generic message, never `undefined`.
   it('falls back to a generic message for an unknown code', () => {
     const ex = new CacheException('cache.not_a_real_code' as CacheErrorCode)

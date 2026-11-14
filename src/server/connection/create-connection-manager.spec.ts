@@ -86,13 +86,13 @@ describe('createConnectionManager', () => {
     ],
     [
       'a connectTimeout below the minimum',
-      { connection: { connectTimeout: 1 } },
-      CACHE_ERROR_CODES.CONNECTION_FAILED
+      { connection: { host: 'h', connectTimeout: 1 } },
+      CACHE_ERROR_CODES.INVALID_OPTIONS
     ],
     [
       'a shutdownTimeoutMs below the minimum',
       { connection: { host: 'h' }, shutdownTimeoutMs: 1 },
-      CACHE_ERROR_CODES.CONNECTION_FAILED
+      CACHE_ERROR_CODES.INVALID_OPTIONS
     ],
     ['no connection in standalone mode', {}, CACHE_ERROR_CODES.CONNECTION_FAILED]
   ])('with %s', (_label, options, code) => {

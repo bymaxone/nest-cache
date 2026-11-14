@@ -21,6 +21,11 @@ describe('CACHE_ERROR_CODES', () => {
     expect(CACHE_ERROR_CODES.VALIDATION_FAILED).toBe('cache.validation_failed')
   })
 
+  // A refused configuration option has its own code, so it is not read as a network failure.
+  it('maps INVALID_OPTIONS to its stable wire value', () => {
+    expect(CACHE_ERROR_CODES.INVALID_OPTIONS).toBe('cache.invalid_options')
+  })
+
   // Lock the most common code's wire value explicitly (it is part of the
   // public contract and must stay stable across minor versions).
   it('maps CONNECTION_FAILED to its stable wire value', () => {

@@ -574,8 +574,7 @@ export class AppModule {}
 - `namespace` is empty or whitespace-only, contains `keySeparator`, or contains a Redis glob metacharacter (`*`, `?`, `[`, `\`); `]` is accepted (`INVALID_NAMESPACE`)
 - `keySeparator` is empty (`INVALID_NAMESPACE`)
 - `keyEscaping` is neither `'legacy'` nor `'strict'`, or is `'strict'` and `keySeparator` contains `%` (`INVALID_NAMESPACE`)
-- `shutdownTimeoutMs < 100` (`CONNECTION_FAILED`)
-- `connection.connectTimeout < 100` (`CONNECTION_FAILED`)
+- `shutdownTimeoutMs`, `connection.connectTimeout` or `connection.commandTimeout` below its minimum (100 ms, 100 ms, 1 ms), not a finite integer, or above 2147483647 (`INVALID_OPTIONS`)
 
 ---
 
@@ -1264,7 +1263,7 @@ export class CacheException extends HttpException {
 
 | Code                                 | HTTP | When                                                                                                                                                                                                                                           |
 | ------------------------------------ | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cache.connection_failed`            | 500  | Invalid or missing `connection.url` / `connection.host`; `shutdownTimeoutMs` or `connectTimeout` below 100; an error before `ready`                                                                                                            |
+| `cache.connection_failed`            | 500  | Invalid or missing `connection.url` / `connection.host`; an error before `ready`                                                                                                                                                               |
 | `cache.command_timeout`              | 504  | Reserved: the status is mapped, the library does not throw it (ioredis reports `commandTimeout` itself)                                                                                                                                        |
 | `cache.connection_lost`              | 503  | Reserved: the status is mapped, the library does not throw it                                                                                                                                                                                  |
 | `cache.serialization_failed`         | 500  | `JsonSerializer.serialize` threw (also a top-level `undefined`, function or symbol); a custom `ISerializer` must throw it itself                                                                                                               |
@@ -1281,6 +1280,7 @@ export class CacheException extends HttpException {
 | `cache.unsupported_in_cluster`       | 500  | `scan`, `keys`, `getClient` or `flushNamespace` called in cluster mode                                                                                                                                                                         |
 | `cache.invalid_ttl`                  | 400  | `ttlSeconds` is not a safe integer, or is below 1 for `set`, `setRaw` or `setNx`                                                                                                                                                               |
 | `cache.validation_failed`            | 500  | A read's `validate` refused the decoded value, or the validator threw (the entry is left in place)                                                                                                                                             |
+| `cache.invalid_options`              | 500  | A timer option (`shutdownTimeoutMs`, `connection.connectTimeout`, `connection.commandTimeout`) is below its minimum, not an integer, or above 2147483647 ms (refused at registration)                                                          |
 | `cache.invalid_scope`                | 500  | `./admin`: a scope or threshold is malformed (§18)                                                                                                                                                                                             |
 | `cache.scope_not_found`              | 500  | `./admin`: no scope is declared under the given id                                                                                                                                                                                             |
 | `cache.scope_not_readable`           | 500  | Reserved, never thrown today: the library does not throw it; `revealValue` returns `status: 'withheld'` instead                                                                                                                                |
@@ -1310,7 +1310,8 @@ export const CACHE_ERROR_CODES = {
   SCOPE_NOT_READABLE: 'cache.scope_not_readable',
   KEY_NOT_IN_SCOPE: 'cache.key_not_in_scope',
   INVALID_TTL: 'cache.invalid_ttl',
-  VALIDATION_FAILED: 'cache.validation_failed'
+  VALIDATION_FAILED: 'cache.validation_failed',
+  INVALID_OPTIONS: 'cache.invalid_options'
 } as const satisfies Record<string, `cache.${string}`>
 
 export type CacheErrorCode = (typeof CACHE_ERROR_CODES)[keyof typeof CACHE_ERROR_CODES]

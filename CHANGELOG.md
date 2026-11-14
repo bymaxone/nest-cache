@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- A refused timer option now reports the new code `cache.invalid_options` (HTTP 500) instead of `cache.connection_failed`,
+  whose message reads as a network failure: `shutdownTimeoutMs`, `connection.connectTimeout` and `connection.commandTimeout`
+  below their minimum, not a finite integer, or above 2147483647 ms. `details` are unchanged. The admin
+  `probeTimeoutMs` keeps `cache.invalid_scope`, the administration surface's code.
+
+#### Apply to a consumer
+
+A refused timer option now reports `cache.invalid_options` instead of `cache.connection_failed`; `details` are unchanged.
+A host that matched `cache.connection_failed` on a boot-time timeout refusal matches `cache.invalid_options` instead.
+
 ## [1.2.13] - 2026-11-13
 
 ### Added

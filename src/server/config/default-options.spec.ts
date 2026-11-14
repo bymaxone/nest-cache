@@ -439,13 +439,13 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
-  // A shutdown timeout below the minimum must throw CONNECTION_FAILED — too short
+  // A shutdown timeout below the minimum must throw INVALID_OPTIONS — too short
   // a window risks killing in-flight commands. Pins the `{ reason, value, min }`
   // details payload.
   it('rejects a shutdown timeout below the minimum', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h' }, shutdownTimeoutMs: 50 }),
-      CACHE_ERROR_CODES.CONNECTION_FAILED,
+      CACHE_ERROR_CODES.INVALID_OPTIONS,
       { reason: 'shutdownTimeoutMs too low', value: 50, min: MIN_SHUTDOWN_TIMEOUT_MS }
     )
   })
@@ -464,7 +464,7 @@ describe('validateOptions', () => {
   it('rejects a connect timeout below the minimum', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h', connectTimeout: 50 } }),
-      CACHE_ERROR_CODES.CONNECTION_FAILED,
+      CACHE_ERROR_CODES.INVALID_OPTIONS,
       { reason: 'connectTimeout too low', value: 50, min: MIN_CONNECT_TIMEOUT_MS }
     )
   })
@@ -497,7 +497,7 @@ describe('validateOptions', () => {
       field === 'shutdownTimeoutMs'
         ? { connection: { host: 'h' }, shutdownTimeoutMs: value }
         : { connection: { host: 'h', [field]: value } }
-    expectCode(() => validateOptions(options), CACHE_ERROR_CODES.CONNECTION_FAILED, {
+    expectCode(() => validateOptions(options), CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: `${field} not a valid timer delay`,
       value,
       max: MAX_TIMER_DELAY_MS
@@ -519,7 +519,7 @@ describe('validateOptions', () => {
   it.each([0, -5])('rejects a command timeout of %p as too low', (value) => {
     expectCode(
       () => validateOptions({ connection: { host: 'h', commandTimeout: value } }),
-      CACHE_ERROR_CODES.CONNECTION_FAILED,
+      CACHE_ERROR_CODES.INVALID_OPTIONS,
       { reason: 'commandTimeout too low', value, min: MIN_COMMAND_TIMEOUT_MS }
     )
   })

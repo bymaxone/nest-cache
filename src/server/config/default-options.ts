@@ -195,7 +195,7 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
  *
  * @param options - The raw consumer options.
  * @throws {CacheException} `SENTINEL_MISCONFIGURED`, `CLUSTER_MISCONFIGURED`,
- *   `CONNECTION_FAILED`, or `INVALID_NAMESPACE` depending on the violation.
+ *   `CONNECTION_FAILED`, `INVALID_NAMESPACE` or `INVALID_OPTIONS` depending on the violation.
  */
 export function validateOptions(options: BymaxCacheModuleOptions): void {
   const mode = options.mode ?? 'standalone'
@@ -236,21 +236,21 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
  * @param option - The option name, echoed in the error details.
  * @param value - The configured delay in milliseconds; `undefined` means the option is unset.
  * @param min - The smallest accepted delay.
- * @throws {CacheException} `CONNECTION_FAILED` when the value is not a finite integer within range.
+ * @throws {CacheException} `INVALID_OPTIONS` when the value is not a finite integer within range or is below `min`.
  */
 function requireTimerDelay(option: string, value: number | undefined, min: number): void {
   if (value === undefined) {
     return
   }
   if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
-    throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: `${option} not a valid timer delay`,
       value,
       max: MAX_TIMER_DELAY_MS
     })
   }
   if (value < min) {
-    throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: `${option} too low`,
       value,
       min
