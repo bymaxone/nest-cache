@@ -6,6 +6,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A malformed `connection.url` is now refused with the structured `cache.connection_failed` (`details.reason:
+'invalid connection.url'`, no URL) in every mode. In `sentinel` and `cluster` mode the check was skipped and the raw
+  parse error escaped the connection manager's constructor; that error's enumerable `input` holds the whole URL, so a
+  credential in it reached whatever logged the boot failure.
+- In `sentinel` mode with `connection.tls` set, TLS now also applies to the connection to the sentinels
+  (`enableTLSForSentinelMode` and `sentinelTLS`). Before, `sentinelPassword` and the master discovery went to the
+  sentinels in cleartext while only the data nodes used TLS.
+- Admin scopes now deny first. A key's value is revealed only when every scope whose pattern matches it is readable, so
+  naming a broader readable scope (`app:*`) no longer reaches a key in a withheld scope nested inside it
+  (`app:secrets:*`): `revealValue` returns `withheld` for the scope that withholds it, and `describeKey` reports
+  `isReadable: false`.
+
+#### Apply to a consumer
+
+If you configure sentinels with `connection.tls`, check that your sentinels accept TLS: the sentinel connection now uses
+the same TLS options. If your admin scopes overlap, a key matched by a withheld scope is now withheld whichever scope the
+caller names. A malformed `connection.url` in `sentinel` or `cluster` mode now fails at registration, as it already did
+in `standalone`.
+
 ### Changed
 
 - A refused timer option now reports the new code `cache.invalid_options` (HTTP 500) instead of `cache.connection_failed`,

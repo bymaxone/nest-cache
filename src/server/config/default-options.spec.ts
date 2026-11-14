@@ -439,6 +439,45 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
+  // A malformed connection.url is refused in every mode, with the structured error and no URL. In
+  // sentinel and cluster mode the raw parse error used to escape at construction, and its enumerable
+  // `input` holds the whole URL, credentials included.
+  it.each([
+    ['standalone', { connection: { host: 'h', url: 'redis://u:p@ss@@:bad' } }],
+    [
+      'sentinel',
+      {
+        mode: 'sentinel',
+        sentinel: { name: 'm', sentinels: [{ host: 's', port: 26379 }] },
+        connection: { url: 'redis://u:p@ss@@:bad' }
+      }
+    ],
+    [
+      'cluster',
+      {
+        mode: 'cluster',
+        cluster: { nodes: [{ host: 'n', port: 6379 }] },
+        connection: { url: 'redis://u:p@ss@@:bad' }
+      }
+    ]
+  ] as [string, BymaxCacheModuleOptions][])(
+    'refuses a malformed connection.url in %s mode without echoing it',
+    (_mode, options) => {
+      let thrown: unknown
+      try {
+        validateOptions(options)
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(CacheException)
+      expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
+      expect((thrown as CacheException).details).toEqual({ reason: 'invalid connection.url' })
+      expect(JSON.stringify(thrown)).not.toContain('p@ss')
+      expect(inspect(thrown, { depth: 5 })).not.toContain('p@ss')
+    }
+  )
+
   // A shutdown timeout below the minimum must throw INVALID_OPTIONS — too short
   // a window risks killing in-flight commands. Pins the `{ reason, value, min }`
   // details payload.

@@ -233,7 +233,7 @@ export class CacheAdminService {
       type: readKeyType(type),
       ttl: readKeyTtl(ttl),
       sizeBytes: null,
-      isReadable: scope.isReadable
+      isReadable: this.withholder(scope, key) === undefined
     }
   }
 
@@ -249,8 +249,9 @@ export class CacheAdminService {
     const scope = this.resolve(scopeId, key)
     // Refused BEFORE any read. Fetching the value and discarding it would have
     // already pulled the secret into this process.
-    if (!scope.isReadable) {
-      return { status: 'withheld', key, scopeId: scope.id, origin: scope.origin }
+    const withholder = this.withholder(scope, key)
+    if (withholder !== undefined) {
+      return { status: 'withheld', key, scopeId: withholder.id, origin: withholder.origin }
     }
     const client = this.cache.getClient()
     const rawType = await client.type(key)
@@ -260,6 +261,23 @@ export class CacheAdminService {
     const type = readKeyType(rawType)
     const value = await this.readValue(client, key, type)
     return value === null ? { status: 'missing', key } : { status: 'revealed', key, type, value }
+  }
+
+  /**
+   * Finds the scope that withholds a key's value, deny winning over allow.
+   *
+   * A key may fall under several scopes (`app:*` and `app:secrets:*`). Its value is readable only
+   * when every scope that matches it is, so naming the broader readable scope cannot reach into a
+   * withheld one nested inside it.
+   *
+   * @param named - The scope the caller named.
+   * @param key - The key, already confirmed to belong to `named`.
+   * @returns The scope that withholds the value, or `undefined` when none does.
+   */
+  private withholder(named: CacheScope, key: string): CacheScope | undefined {
+    return named.isReadable
+      ? this.options.scopes.find((scope) => !scope.isReadable && isKeyInScope(scope.pattern, key))
+      : named
   }
 
   /**
