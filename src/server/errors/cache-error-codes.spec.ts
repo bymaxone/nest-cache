@@ -29,7 +29,7 @@ describe('CACHE_ERROR_MESSAGES', () => {
   // public contract surfaced to consumers and must stay stable.
   it('maps CONNECTION_FAILED to its stable message', () => {
     expect(CACHE_ERROR_MESSAGES.get(CACHE_ERROR_CODES.CONNECTION_FAILED)).toBe(
-      'Could not connect to Redis after retries.'
+      'Could not establish the Redis connection: the connection options are missing or invalid, or the client did not become ready.'
     )
   })
 })

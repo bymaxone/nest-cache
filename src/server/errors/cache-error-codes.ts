@@ -24,7 +24,10 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
   CacheErrorCode,
   string
 >([
-  [CACHE_ERROR_CODES.CONNECTION_FAILED, 'Could not connect to Redis after retries.'],
+  [
+    CACHE_ERROR_CODES.CONNECTION_FAILED,
+    'Could not establish the Redis connection: the connection options are missing or invalid, or the client did not become ready.'
+  ],
   [CACHE_ERROR_CODES.COMMAND_TIMEOUT, 'Redis command timed out.'],
   [CACHE_ERROR_CODES.CONNECTION_LOST, 'Redis connection was lost during the operation.'],
   [CACHE_ERROR_CODES.SERIALIZATION_FAILED, 'Failed to serialize the value.'],

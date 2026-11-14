@@ -13,7 +13,8 @@ describe('CacheException', () => {
     expect(ex.getResponse()).toEqual({
       error: {
         code: 'cache.connection_failed',
-        message: 'Could not connect to Redis after retries.',
+        message:
+          'Could not establish the Redis connection: the connection options are missing or invalid, or the client did not become ready.',
         details: null
       }
     })
@@ -23,7 +24,7 @@ describe('CacheException', () => {
   // the catalog text, not the class-name default an object response would otherwise produce.
   it('uses the catalog message as the error message', () => {
     expect(new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED).message).toBe(
-      'Could not connect to Redis after retries.'
+      'Could not establish the Redis connection: the connection options are missing or invalid, or the client did not become ready.'
     )
     expect(new CacheException('cache.not_a_real_code' as CacheErrorCode).message).toBe(
       'Cache error'
