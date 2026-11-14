@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.15] - 2026-11-14
+
 ### Changed
 
 - The default message of `cache.connection_failed` now states what the code does. It read "Could not connect to Redis after
@@ -842,7 +844,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.14...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.15...HEAD
+[1.2.15]: https://github.com/bymaxone/nest-cache/compare/v1.2.14...v1.2.15
 [1.2.14]: https://github.com/bymaxone/nest-cache/compare/v1.2.13...v1.2.14
 [1.2.13]: https://github.com/bymaxone/nest-cache/compare/v1.2.12...v1.2.13
 [1.2.12]: https://github.com/bymaxone/nest-cache/compare/v1.2.11...v1.2.12
