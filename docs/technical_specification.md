@@ -432,7 +432,7 @@ export interface BymaxCacheModuleOptions {
   shutdownTimeoutMs?: number
 
   /**
-   * Allows `flushNamespace()` when NODE_ENV === 'production'. Default: false.
+   * Allows `flushNamespace()` when NODE_ENV is 'production' (trimmed, any letter case). Default: false.
    * Leave false in real production environments.
    */
   allowFlushInProduction?: boolean
@@ -731,7 +731,7 @@ export class CacheService {
  * Deletes ALL keys under the configured namespace via SCAN + UNLINK pipeline.
  *
  * SAFETY: throws CACHE_ERROR_CODES.FLUSH_DISABLED_IN_PRODUCTION unless
- * options.allowFlushInProduction === true OR NODE_ENV !== 'production'.
+ * options.allowFlushInProduction === true OR NODE_ENV is not 'production' (trimmed, any letter case).
  *
  * Use ONLY in tests/tooling. In production, prefer del/delMany.
  * Throws CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER in cluster mode.

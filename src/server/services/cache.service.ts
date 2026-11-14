@@ -639,7 +639,7 @@ export class CacheService {
    * `{namespace}{sep}*`, so keys of other namespaces are never touched.
    *
    * SAFETY: throws {@link CacheException} `FLUSH_DISABLED_IN_PRODUCTION` when
-   * `NODE_ENV === 'production'` unless `options.allowFlushInProduction` is `true`.
+   * `NODE_ENV` is `production` (trimmed, any letter case) unless `options.allowFlushInProduction` is `true`.
    * Intended for tests and tooling — in production prefer
    * {@link CacheService.del} / {@link CacheService.delMany}.
    *

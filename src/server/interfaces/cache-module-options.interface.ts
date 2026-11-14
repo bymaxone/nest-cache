@@ -146,7 +146,7 @@ export interface BymaxCacheModuleOptions {
   /** Graceful shutdown timeout in ms. Default: 5000. */
   shutdownTimeoutMs?: number
   /**
-   * Allows `flushNamespace()` to run even when `NODE_ENV === 'production'`.
+   * Allows `flushNamespace()` to run even when `NODE_ENV` is `production` (trimmed, any letter case).
    * Default: false. SAFETY: leave false in real production environments.
    */
   allowFlushInProduction?: boolean

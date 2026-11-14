@@ -12,6 +12,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Linux is two hours, so a connection that went half-open (a NAT idle drop, a failover without a reset) stayed silent that
   long; the dedicated Pub/Sub connection has no command traffic to notice it otherwise.
 
+- A refused timer option now reports the new code `cache.invalid_options` (HTTP 500) instead of `cache.connection_failed`,
+  whose message reads as a network failure: `shutdownTimeoutMs`, `connection.connectTimeout` and `connection.commandTimeout`
+  below their minimum, not a finite integer, or above 2147483647 ms. `details` are unchanged. The admin
+  `probeTimeoutMs` keeps `cache.invalid_scope`, the administration surface's code.
+
 ### Fixed
 
 - The production guard of `flushNamespace()` now reads `NODE_ENV` trimmed and without regard to case, so `Production` or
@@ -19,14 +24,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The README no longer says that `cache.connection_lost` is never thrown, that `cache.connection_failed` follows retries, or that
   no error detail can carry a driver message: it documents what each code carries, the `lazyConnect` caveat with the default
   `enableOfflineQueue: false`, and the new `keepAlive` default.
-
-#### Apply to a consumer
-
-A connection that went half-open is now probed after 30 s of idleness instead of the operating system's much longer delay;
-set `connection.keepAlive: 0` to keep the old behaviour. A deployment whose `NODE_ENV` is `Production` now has the flush guard
-that `production` always had.
-
-### Fixed
 
 - The readiness wait at boot is bounded and cleans up after itself. It had no deadline and ignored the end of the connection, so a
   `retryStrategy` that returns `null` (the client ends and emits no error), or a server still loading its dataset (ioredis polls
@@ -45,15 +42,6 @@ that `production` always had.
   `cache.connection_lost` (HTTP 503, `details.reason: 'offline'`, the original on `cause`). `getClient()` still returns the raw
   client, and `ScriptManagerService` and `PubSubService` are not mapped.
 
-#### Apply to a consumer
-
-A host that catches errors from `CacheService` and keys on `cache.command_timeout` now sees it for a timed-out command, and
-`cache.connection_lost` (`reason: 'offline'`) while the connection is down; treat a timed-out write as unknown, not failed. If you set `connection.password`, `username`, `tls` or `lazyConnect` with `mode: 'cluster'`,
-move them to `cluster.options.redisOptions` (`lazyConnect` to `cluster.options`): they were ignored and are now refused. A boot that
-waited without limit, a server loading a large dataset included, now fails with `cache.connection_failed` after `connectTimeout`: raise `connection.connectTimeout` (`cluster.options.redisOptions.connectTimeout` in cluster mode) if your server takes longer to become ready.
-
-### Fixed
-
 - A malformed `connection.url` is now refused with the structured `cache.connection_failed` (`details.reason:
 'invalid connection.url'`, no URL) in every mode. In `sentinel` and `cluster` mode the check was skipped and the raw
   parse error escaped the connection manager's constructor; that error's enumerable `input` holds the whole URL, so a
@@ -68,19 +56,19 @@ waited without limit, a server loading a large dataset included, now fails with 
 
 #### Apply to a consumer
 
+A connection that went half-open is now probed after 30 s of idleness instead of the operating system's much longer delay;
+set `connection.keepAlive: 0` to keep the old behaviour. A deployment whose `NODE_ENV` is `Production` now has the flush guard
+that `production` always had.
+
+A host that catches errors from `CacheService` and keys on `cache.command_timeout` now sees it for a timed-out command, and
+`cache.connection_lost` (`reason: 'offline'`) while the connection is down; treat a timed-out write as unknown, not failed. If you set `connection.password`, `username`, `tls` or `lazyConnect` with `mode: 'cluster'`,
+move them to `cluster.options.redisOptions` (`lazyConnect` to `cluster.options`): they were ignored and are now refused. A boot that
+waited without limit, a server loading a large dataset included, now fails with `cache.connection_failed` after `connectTimeout`: raise `connection.connectTimeout` (`cluster.options.redisOptions.connectTimeout` in cluster mode) if your server takes longer to become ready.
+
 If you configure sentinels with `connection.tls` or a `rediss://` url, check that your sentinels accept TLS: the sentinel connection now uses
 the same TLS options. If your admin scopes overlap, a key matched by a withheld scope is now withheld whichever scope the
 caller names. A malformed `connection.url` in `sentinel` or `cluster` mode now fails at registration, as it already did
 in `standalone`.
-
-### Changed
-
-- A refused timer option now reports the new code `cache.invalid_options` (HTTP 500) instead of `cache.connection_failed`,
-  whose message reads as a network failure: `shutdownTimeoutMs`, `connection.connectTimeout` and `connection.commandTimeout`
-  below their minimum, not a finite integer, or above 2147483647 ms. `details` are unchanged. The admin
-  `probeTimeoutMs` keeps `cache.invalid_scope`, the administration surface's code.
-
-#### Apply to a consumer
 
 A refused timer option now reports `cache.invalid_options` instead of `cache.connection_failed`; `details` are unchanged.
 A host that matched `cache.connection_failed` on a boot-time timeout refusal matches `cache.invalid_options` instead.
