@@ -40,9 +40,9 @@ interface TeardownTimers {
 }
 
 /**
- * Starts recording the teardown timers ioredis arms from now on. A spy on `setTimeout` and
- * `clearTimeout` sees only the timers this test's own calls arm and clear, where a count of the
- * process's active timers also counts ones that are not ours and varies with the load of the machine.
+ * Starts recording every timer armed and cleared from now on, and counts those armed with ioredis's
+ * 2 s teardown delay. A count of the process's active timers would also include timers that are
+ * not ours and varies with the load of the machine.
  * A client that has not ended arms the timer when it is disconnected and its `close` clears it, so
  * a timer is a defect only while it is armed and never cleared.
  *
