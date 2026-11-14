@@ -38,6 +38,9 @@ function mapCommandFailure(error: unknown): unknown {
     : error
 }
 
+/** The wrapped client of each client, so a client is wrapped once however many calls reach it. */
+const GUARDED = new WeakMap<object, object>()
+
 /**
  * Wraps a client so that every command it runs reports a timeout or an offline connection as a coded error.
  *
@@ -46,10 +49,14 @@ function mapCommandFailure(error: unknown): unknown {
  *
  * @typeParam C - The client type.
  * @param client - The ioredis client.
- * @returns A proxy with the client's own type.
+ * @returns A proxy with the client's own type, the same one for the same client.
  */
 export function guardClient<C extends object>(client: C): C {
-  return new Proxy(client, {
+  const known = GUARDED.get(client)
+  if (known !== undefined) {
+    return known as C
+  }
+  const guarded = new Proxy(client, {
     get(target, property): unknown {
       const value: unknown = Reflect.get(target, property, target)
       if (typeof value !== 'function') {
@@ -65,4 +72,6 @@ export function guardClient<C extends object>(client: C): C {
       }
     }
   })
+  GUARDED.set(client, guarded)
+  return guarded
 }

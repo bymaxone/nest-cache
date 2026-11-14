@@ -19,6 +19,7 @@ import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { describeError } from '../utils/describe-error'
+import { guardClient } from '../utils/guard-client'
 
 /** The `SCRIPT LOAD` subcommand keyword. */
 const SCRIPT_LOAD = 'LOAD'
@@ -30,6 +31,26 @@ const NOSCRIPT_MARKER = 'NOSCRIPT'
 interface ScriptEntry {
   lua: string
   sha?: string
+}
+
+/**
+ * What a failed script call surfaces as.
+ *
+ * A timeout or an offline connection reaches here already mapped to a `CacheException` by the
+ * guarded client (a backing service problem, 503) and passes through unchanged. Anything else is
+ * what the script or the server said, reported as `SCRIPT_EXECUTION_FAILED` with the driver's text.
+ *
+ * @param name - The script's registered name.
+ * @param err - What the call rejected with.
+ * @returns The exception to throw.
+ */
+function scriptFailure(name: string, err: unknown): CacheException {
+  return err instanceof CacheException
+    ? err
+    : new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
+        name,
+        originalError: describeError(err)
+      })
 }
 
 @Injectable()
@@ -98,7 +119,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       throw new CacheException(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, { name })
     }
     if (!entry.sha) {
-      const client = this.connection.getClient()
+      const client = guardClient(this.connection.getClient())
       // SCRIPT LOAD always returns the 40-char SHA1 per Redis protocol.
       entry.sha = (await client.script(SCRIPT_LOAD, entry.lua)) as string
     }
@@ -138,7 +159,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     if (!entry) {
       throw new CacheException(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, { name })
     }
-    const client = this.connection.getClient()
+    const client = guardClient(this.connection.getClient())
     if (this.options.mode === 'cluster') {
       if (keys.length === 0) {
         throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
@@ -149,10 +170,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       try {
         return await client.eval(entry.lua, keys.length, ...keys, ...args)
       } catch (err) {
-        throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
-          name,
-          originalError: describeError(err)
-        })
+        throw scriptFailure(name, err)
       }
     }
     try {
@@ -160,10 +178,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       return await client.evalsha(sha, keys.length, ...keys, ...args)
     } catch (err) {
       if (!describeError(err).includes(NOSCRIPT_MARKER)) {
-        throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
-          name,
-          originalError: describeError(err)
-        })
+        throw scriptFailure(name, err)
       }
       // The server evicted the SHA — reload once and retry. Wrap a failure of
       // EITHER the reload (SCRIPT LOAD) or the retry, so the method's contract of
@@ -174,10 +189,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
         entry.sha = reloadedSha
         return await client.evalsha(reloadedSha, keys.length, ...keys, ...args)
       } catch (retryErr) {
-        throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
-          name,
-          originalError: describeError(retryErr)
-        })
+        throw scriptFailure(name, retryErr)
       }
     }
   }

@@ -114,15 +114,12 @@ describe('CacheService command timeout', () => {
     expect(await rejectionOf(() => cache.get('user', '1'))).toBe('Command timed out')
   })
 
-  // The wrapped client is built once per client, not once per call.
-  it("wraps the connection's client once however many calls it serves", async () => {
-    const guard = jest.spyOn(guardClientModule, 'guardClient')
+  // The wrapped client is the same object for the same client, however many calls reach it.
+  it('wraps a client once', () => {
+    const client = connection.getClient()
 
-    await cache.get('user', '1')
-    await cache.get('user', '2')
-    await cache.set('user', '3', { a: 1 })
-
-    expect(guard).toHaveBeenCalledTimes(1)
+    expect(guardClientModule.guardClient(client)).toBe(guardClientModule.guardClient(client))
+    expect(guardClientModule.guardClient(client)).not.toBe(client)
   })
 
   // Only the exact message is a timeout; any other failure reaches the caller unchanged.
