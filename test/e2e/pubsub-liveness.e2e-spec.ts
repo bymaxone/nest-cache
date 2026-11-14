@@ -72,6 +72,46 @@ describe('Pub/Sub liveness (real Redis)', () => {
     }
   }, 30_000)
 
+  // The server executes the UNSUBSCRIBE but its reply never reaches the client, so the call rejects
+  // at the command timeout. ioredis only forgets a channel when the reply arrives, so the reconnect
+  // that follows would subscribe it again: the application released it and the server holds it.
+  it('leaves no server-side subscription after an unsubscribe whose reply was lost', async () => {
+    const proxy = new TcpProxy(await getFreePort(), {
+      host: '127.0.0.1',
+      port: redis.container.getMappedPort(6379)
+    })
+    await proxy.open()
+    const app: TestingModule = await bootCacheApp({
+      connection: { host: '127.0.0.1', port: proxy.port, commandTimeout: 500 },
+      namespace: 'e2e-liveness'
+    })
+    try {
+      const pubsub = app.get(PubSubService)
+      const unsubscribe = await pubsub.subscribe('c8b', () => undefined)
+      expect(await numSub(raw, 'e2e-liveness:c8b')).toBe(1)
+
+      proxy.dropReplies(true)
+      const outcome = await unsubscribe().then(
+        () => 'resolved',
+        (error: unknown) => (error as { code?: string }).code ?? 'rejected'
+      )
+      const heldBeforeReconnect = await numSub(raw, 'e2e-liveness:c8b')
+      await proxy.cut()
+      proxy.dropReplies(false)
+      await proxy.open()
+      await new Promise((resolve) => setTimeout(resolve, 3_000))
+
+      expect([outcome, heldBeforeReconnect, await numSub(raw, 'e2e-liveness:c8b')]).toEqual([
+        outcome,
+        0,
+        0
+      ])
+    } finally {
+      await proxy.cut()
+      await app.close()
+    }
+  }, 30_000)
+
   // The server stops answering and the application shuts down. The subscriber's QUIT is bounded only
   // by the command timeout, so a long command timeout must not stretch a short shutdown timeout.
   it('ends the shutdown of an unresponsive server within shutdownTimeoutMs', async () => {

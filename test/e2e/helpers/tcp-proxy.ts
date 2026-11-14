@@ -11,6 +11,7 @@ import { connect, createServer, type Server, type Socket } from 'node:net'
 export class TcpProxy {
   readonly #sockets = new Set<Socket>()
   #server: Server | undefined
+  #dropReplies = false
 
   /**
    * @param port - The local port clients connect to; stays the same across a cut and a reopen.
@@ -33,10 +34,24 @@ export class TcpProxy {
         socket.on('close', () => this.#sockets.delete(socket))
       }
       client.pipe(upstream)
-      upstream.pipe(client)
+      upstream.on('data', (chunk: Buffer) => {
+        if (!this.#dropReplies) {
+          client.write(chunk)
+        }
+      })
     })
     await new Promise<void>((resolve) => server.listen(this.port, '127.0.0.1', resolve))
     this.#server = server
+  }
+
+  /**
+   * While `on`, what the server answers is dropped and what the client sends still reaches the
+   * server, so a command is executed and its reply never arrives.
+   *
+   * @param on - Whether to drop the server's replies.
+   */
+  dropReplies(on: boolean): void {
+    this.#dropReplies = on
   }
 
   /** Destroys every connection and stops accepting new ones, so a client sees the server go away. */
