@@ -1,3 +1,10 @@
+/**
+ * Unit tests for {@link ConnectionManager} against a fake ioredis: client creation per mode, the
+ * readiness wait at boot, the subscriber client, event forwarding, the option mapping, and the
+ * shutdown that quits the client, forces a disconnect on a timeout and refuses later clients.
+ *
+ * Layer: server.
+ */
 import { EventEmitter } from 'node:events'
 
 import { applyDefaults } from '../config/default-options'

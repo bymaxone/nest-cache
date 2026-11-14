@@ -1,3 +1,9 @@
+/**
+ * Unit tests for {@link KeyBuilder}: namespaced keys with the default and a custom separator,
+ * INVALID_KEY for an empty prefix or id, and the bare-key and prefix helpers.
+ *
+ * Layer: server.
+ */
 import { applyDefaults } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'

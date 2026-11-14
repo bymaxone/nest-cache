@@ -1,3 +1,11 @@
+/**
+ * Unit tests for the wiring of {@link BymaxCacheAdminModule}: `forRoot` and `forRootAsync`
+ * register both administration services and the resolved options under their token, registration
+ * is global only when asked, a malformed scope list or factory result is refused at wiring, and an
+ * async factory can inject providers from an imported module.
+ *
+ * Layer: admin.
+ */
 import { Global, Inject, Injectable, Module } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 

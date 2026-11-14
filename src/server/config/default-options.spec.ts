@@ -1,3 +1,10 @@
+/**
+ * Unit tests for `validateOptions` and `applyDefaults`: each connection mode refuses the options
+ * it cannot start with, a refusal carries a coded `CacheException` that never echoes a credential,
+ * and every default is applied to what the caller left out.
+ *
+ * Layer: server.
+ */
 import { inspect } from 'node:util'
 
 import { DEFAULT_KEY_SEPARATOR, DEFAULT_NAMESPACE } from '../constants/default-namespace'

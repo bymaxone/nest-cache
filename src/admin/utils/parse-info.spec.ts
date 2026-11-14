@@ -1,3 +1,10 @@
+/**
+ * Unit tests for the INFO parsers: `parseInfoFields` drops section headers and malformed lines,
+ * and `readRedisStats` reads each numeric field, reporting an unpublished or unparseable value as
+ * null.
+ *
+ * Layer: admin.
+ */
 import { parseInfoFields, readRedisStats } from './parse-info'
 
 /** A fixed instant so every assertion on `readAt` is deterministic. */

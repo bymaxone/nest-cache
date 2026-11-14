@@ -1,3 +1,10 @@
+/**
+ * Unit tests for the scope declarations: `validateScopes` accepts well-formed scopes in order and
+ * refuses duplicates and an empty list, `findScope` answers an undeclared id with SCOPE_NOT_FOUND,
+ * and `readScopePattern` splits a pattern into its literal prefix.
+ *
+ * Layer: admin.
+ */
 import { CACHE_ERROR_CODES } from '../../server/errors/cache-error-codes'
 import { CacheException } from '../../server/errors/cache.exception'
 import { findScope, isKeyInScope, readScopePattern, validateScopes } from './validate-scopes'

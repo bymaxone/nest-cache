@@ -1,3 +1,10 @@
+/**
+ * Unit tests for {@link CacheStatusService}: `health` reports up, degraded or down from the ping
+ * latency and the reply, with the threshold that produced the verdict and no leaked timer, `stats`
+ * parses an INFO reply into a typed reading, and `config` reports the wiring without secrets.
+ *
+ * Layer: admin.
+ */
 import { applyDefaults } from '../../server/config/default-options'
 import { CacheStatusService } from './cache-status.service'
 import { resolveAdminOptions } from '../config/resolved-admin-options'
