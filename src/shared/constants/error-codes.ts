@@ -33,7 +33,8 @@ export const CACHE_ERROR_CODES = {
   SCOPE_NOT_READABLE: 'cache.scope_not_readable',
   KEY_NOT_IN_SCOPE: 'cache.key_not_in_scope',
   INVALID_TTL: 'cache.invalid_ttl',
-  VALIDATION_FAILED: 'cache.validation_failed'
+  VALIDATION_FAILED: 'cache.validation_failed',
+  INVALID_OPTIONS: 'cache.invalid_options'
 } as const satisfies Record<string, `cache.${string}`>
 
 /** Union of every cache error code string value. */
