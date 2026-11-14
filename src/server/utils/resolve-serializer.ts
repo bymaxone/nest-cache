@@ -6,9 +6,9 @@
  * then the injected `BYMAX_CACHE_SERIALIZER` provider, then the default JSON
  * serializer. Centralized here so the priority order lives in exactly one place.
  */
-import { JsonSerializer } from './json-serializer'
 import type { ResolvedOptions } from '../config/resolved-options'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { JsonSerializer } from './json-serializer'
 
 /**
  * Resolves the serializer to use, honoring the documented priority order.

@@ -61,6 +61,13 @@ overrides:
   # GHSA-333x-w4r6-6crp and GHSA-xhq7-xmqj-769h (3.7) are all fixed by 3.1.9. Dev-only, via
   # ajv 8 in the stryker and commitlint toolchains.
   'fast-uri': '^3.1.9'
+  # GHSA-3g3m-2fjr-6pw4 (glob >= 9 < 14.0.2) and GHSA-g3hv-75wg-m249 (minimatch >= 7 < 11.0.1).
+  # Reached only through test, mutation and lint tooling (jest, stryker, typescript-eslint, testcontainers).
+  # Floors on the majors that are in use; drop once the parents' own ranges are above them.
+  'glob@10': '^14.0.2'
+  'glob@13': '^14.0.2'
+  'minimatch@9': '^11.0.1'
+  'minimatch@10': '^11.0.1'
   # GHSA-2883-xcg3-v3hh (7.5): maxTotalMergeKeys does not bound CPU use for empty merge
   # sources; fixed in 3.15.2 and 4.3.2. Dev-only: 3.x via istanbul in jest, 4.x via cosmiconfig in commitlint.
   'js-yaml@3': '^3.15.2'

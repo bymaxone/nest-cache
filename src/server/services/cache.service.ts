@@ -19,7 +19,6 @@ import { Inject, Injectable, Optional } from '@nestjs/common'
 import type { ChainableCommander, Cluster, Redis } from 'ioredis'
 
 import { BYMAX_CACHE_OPTIONS, BYMAX_CACHE_SERIALIZER } from '../bymax-cache.constants'
-import { ScriptManagerService } from './script-manager.service'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
@@ -32,6 +31,7 @@ import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
 import { assertTtlSeconds, MIN_WRITE_TTL_SECONDS } from '../utils/ttl'
 import { validateRead } from '../utils/validate-read'
+import { ScriptManagerService } from './script-manager.service'
 
 /** Production value of `NODE_ENV` that gates the destructive flush guard. */
 const PRODUCTION_ENV = 'production'

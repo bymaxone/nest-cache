@@ -5,9 +5,9 @@
  * example a standalone one beside a clustered cache) builds it here instead of
  * hand-writing the resolved options, which would skip validation and the defaults.
  */
-import { ConnectionManager } from './connection.manager'
 import { resolveOptions } from '../config/default-options'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
+import { ConnectionManager } from './connection.manager'
 
 /**
  * Builds a {@link ConnectionManager} from the same options `BymaxCacheModule.forRoot`

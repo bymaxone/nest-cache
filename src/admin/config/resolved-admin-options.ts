@@ -7,7 +7,6 @@
  */
 import { CACHE_ERROR_CODES, CacheException } from '@bymax-one/nest-cache'
 
-import { validateScopes } from './validate-scopes'
 import {
   DEFAULT_DEGRADED_ABOVE_MS,
   DEFAULT_PROBE_TIMEOUT_MS,
@@ -20,6 +19,7 @@ import {
 } from '../constants/admin-defaults'
 import type { BymaxCacheAdminModuleOptions } from '../interfaces/admin-module-options.interface'
 import type { CacheScope } from '../interfaces/cache-scope.interface'
+import { validateScopes } from './validate-scopes'
 
 /** Administration options after defaults are merged and validated. */
 /**

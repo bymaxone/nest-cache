@@ -8,6 +8,9 @@
 import { Inject, Injectable } from '@nestjs/common'
 
 import { BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
+import type { ResolvedOptions } from '../config/resolved-options'
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
+import { CacheException } from '../errors/cache.exception'
 import {
   ESCAPE_CHAR,
   GLOB_CHARS,
@@ -18,9 +21,6 @@ import {
   unescapeKeyPart,
   unmatchableUnits
 } from './key-escape'
-import type { ResolvedOptions } from '../config/resolved-options'
-import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
-import { CacheException } from '../errors/cache.exception'
 
 /**
  * Composes Redis keys following `{namespace}{separator}{prefix}{separator}{id}`.

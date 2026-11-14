@@ -12,10 +12,10 @@
  */
 import { Injectable } from '@nestjs/common'
 
-import { describeError } from './describe-error'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { describeError } from './describe-error'
 
 /**
  * Fixed `details.error` of a failed decode. The engine's own `JSON.parse` message is
