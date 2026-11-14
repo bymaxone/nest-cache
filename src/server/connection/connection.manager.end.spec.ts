@@ -132,8 +132,9 @@ describe('after a client has ended (real ioredis)', () => {
   })
 
   // The dedicated subscriber ends the same way; its shutdown must not arm the timer either.
-  it('leaves no timer when an ended subscriber is shut down', async () => {
+  it('leaves no timer and sends no quit when an ended subscriber is shut down', async () => {
     const built = await build()
+    const minted = jest.spyOn(built, 'createSubscriberClient')
     const options = applyDefaults({
       connection: { host: '127.0.0.1', port: await closedPort(), retryStrategy: () => null },
       namespace: 'ended'
@@ -141,11 +142,15 @@ describe('after a client has ended (real ioredis)', () => {
     const pubsub = new PubSubService(options, built, new KeyBuilder(options))
     await pubsub.subscribe('channel', () => undefined).catch(() => undefined)
     await new Promise<void>((resolve) => setTimeout(resolve, 300))
+    const subscriber = minted.mock.results[0]?.value as { status: string; quit: () => unknown }
+    const quit = jest.spyOn(subscriber, 'quit')
     const before = activeTimers()
 
     await pubsub.onApplicationShutdown()
     await settle()
 
+    expect(subscriber.status).toBe('end')
+    expect(quit).not.toHaveBeenCalled()
     expect(activeTimers()).toBeLessThanOrEqual(before)
   })
 })
