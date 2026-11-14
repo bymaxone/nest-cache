@@ -173,6 +173,78 @@ describe('ConnectionManager', () => {
       expect(offSpy).toHaveBeenCalledWith('error', expect.any(Function))
     })
 
+    // A failed boot must not leave a client that keeps reconnecting: the readiness wait gives up
+    // and disconnects it, whichever way the wait fails.
+    it('disconnects the client when it errors before ready', async () => {
+      const manager = makeManager({})
+
+      const init = manager.onModuleInit()
+      const client = redisInstances[0]
+      client?.emit('error', new Error('boom'))
+
+      await expect(init).rejects.toBeInstanceOf(CacheException)
+      expect(client?.disconnect).toHaveBeenCalledTimes(1)
+    })
+
+    // `end` means ioredis stopped reconnecting (a retryStrategy returned null) without an error, so
+    // neither `ready` nor `error` would ever fire.
+    it('rejects and disconnects when the client ends before ready', async () => {
+      const manager = makeManager({})
+
+      const init = manager.onModuleInit()
+      const client = redisInstances[0]
+      client?.emit('end')
+
+      await expect(init).rejects.toMatchObject({
+        code: CACHE_ERROR_CODES.CONNECTION_FAILED,
+        details: { error: 'connection ended before ready' }
+      })
+      expect(client?.disconnect).toHaveBeenCalledTimes(1)
+    })
+
+    // The wait is bounded by `connectTimeout`: a server that accepts the socket and never answers
+    // would otherwise hold the boot forever.
+    it('rejects and disconnects when the client is not ready by connectTimeout', async () => {
+      jest.useFakeTimers()
+      try {
+        const manager = makeManager({ connection: { host: 'h', connectTimeout: 2_000 } })
+
+        const init = manager.onModuleInit()
+        const settled = init.then(
+          () => 'resolved',
+          (error: unknown) => error
+        )
+        await jest.advanceTimersByTimeAsync(1_999)
+        expect(redisInstances[0]?.disconnect).not.toHaveBeenCalled()
+        await jest.advanceTimersByTimeAsync(1)
+
+        await expect(settled).resolves.toMatchObject({
+          code: CACHE_ERROR_CODES.CONNECTION_FAILED,
+          details: { error: 'not ready within connectTimeout' }
+        })
+        expect(redisInstances[0]?.disconnect).toHaveBeenCalledTimes(1)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    // A client that becomes ready leaves no timer behind and is not disconnected.
+    it('clears the deadline and keeps the client when it becomes ready', async () => {
+      jest.useFakeTimers()
+      try {
+        const manager = makeManager({})
+
+        const init = manager.onModuleInit()
+        redisInstances[0]?.emit('ready')
+        await init
+
+        expect(jest.getTimerCount()).toBe(0)
+        expect(redisInstances[0]?.disconnect).not.toHaveBeenCalled()
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
     // A consumer can reach the cache before this hook runs — NestJS orders
     // onModuleInit by module depth, and `app.get()` works between
     // `NestFactory.create()` and `app.init()`. Init must then ADOPT that client:
