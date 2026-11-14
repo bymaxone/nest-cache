@@ -52,6 +52,25 @@ const rejectionOf = async (call: () => Promise<unknown>): Promise<CacheException
 describe('validateRead', () => {
   const user: User = { id: 1, name: 'Ada' }
 
+  // An ArkType type is callable AND carries `~standard`. Routed as a predicate it would return the
+  // data (never `true`) and refuse every value, valid ones included; it must run as a schema.
+  it('runs a callable that carries ~standard as a schema, not as a predicate', async () => {
+    const callableSchema = Object.assign((value: unknown) => value, userSchema(false))
+
+    await expect(validateRead(user, callableSchema)).resolves.toBe(user)
+    const error = await rejectionOf(() => validateRead({ id: 'x' }, callableSchema))
+    expect(error.details).toMatchObject({ issueCount: 1 })
+  })
+
+  // A JavaScript caller can pass anything. A value that is neither a function nor a schema must stay
+  // a CacheException (the validator could not check), never a raw TypeError from the routing.
+  it.each([null, 'x', 5, {}])('refuses %p as a validator with a CacheException', async (junk) => {
+    const error = await rejectionOf(() => validateRead(user, junk as never))
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect(error.code).toBe(CACHE_ERROR_CODES.VALIDATION_FAILED)
+  })
+
   // A predicate that accepts returns the value itself, unchanged and typed.
   it('returns the value a predicate accepts', async () => {
     await expect(validateRead(user, isUser)).resolves.toBe(user)

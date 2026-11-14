@@ -87,6 +87,11 @@ async function checkSchema<T>(
   return result.value
 }
 
+/** Whether `validate` is a plain predicate: a function that does not also carry `~standard`. */
+function isPredicate<T>(validate: ReadValidator<T>): validate is (value: unknown) => value is T {
+  return typeof validate === 'function' && !('~standard' in validate)
+}
+
 /**
  * Checks a decoded value against the host's rule.
  *
@@ -103,7 +108,9 @@ export async function validateRead<T>(
   validate: ReadValidator<T>,
   location: Record<string, unknown> = {}
 ): Promise<T> {
-  return typeof validate === 'function'
+  // `~standard` first: an ArkType type is a function that also carries it, and as a predicate it
+  // would return the data, never `true`, and refuse every value.
+  return isPredicate(validate)
     ? checkPredicate(value, validate, location)
     : checkSchema(value, validate, location)
 }
