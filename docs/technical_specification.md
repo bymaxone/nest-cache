@@ -382,7 +382,7 @@ export interface BymaxCacheStandaloneConnection {
   retryStrategy?: (times: number) => number | null | void
   /** Default: reconnects only on 'READONLY' (replica failover) */
   reconnectOnError?: (err: Error) => boolean | 1 | 2
-  keepAlive?: number // Default: 0
+  keepAlive?: number // Default: 30000
   noDelay?: boolean // Default: true
   family?: 4 | 6 // Default: 4
 }
@@ -432,7 +432,7 @@ export interface BymaxCacheModuleOptions {
   shutdownTimeoutMs?: number
 
   /**
-   * Allows `flushNamespace()` when NODE_ENV === 'production'. Default: false.
+   * Allows `flushNamespace()` when NODE_ENV is 'production' (trimmed, any letter case). Default: false.
    * Leave false in real production environments.
    */
   allowFlushInProduction?: boolean
@@ -482,7 +482,7 @@ export interface BymaxCacheModuleAsyncOptions {
 | `connection.enableOfflineQueue`   | `boolean`                                 | No       | `false`                  |
 | `connection.retryStrategy`        | `function`                                | No       | exp. backoff             |
 | `connection.reconnectOnError`     | `function`                                | No       | reconnects on `READONLY` |
-| `connection.keepAlive`            | `number`                                  | No       | `0`                      |
+| `connection.keepAlive`            | `number`                                  | No       | `30000`                  |
 | `connection.noDelay`              | `boolean`                                 | No       | `true`                   |
 | `connection.family`               | `4 \| 6`                                  | No       | `4`                      |
 | `sentinel.sentinels`              | `SentinelAddress[]`                       | \*\*     | —                        |
@@ -731,7 +731,7 @@ export class CacheService {
  * Deletes ALL keys under the configured namespace via SCAN + UNLINK pipeline.
  *
  * SAFETY: throws CACHE_ERROR_CODES.FLUSH_DISABLED_IN_PRODUCTION unless
- * options.allowFlushInProduction === true OR NODE_ENV !== 'production'.
+ * options.allowFlushInProduction === true OR NODE_ENV is not 'production' (trimmed, any letter case).
  *
  * Use ONLY in tests/tooling. In production, prefer del/delMany.
  * Throws CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER in cluster mode.

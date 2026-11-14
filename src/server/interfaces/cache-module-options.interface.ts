@@ -58,7 +58,7 @@ export interface BymaxCacheStandaloneConnection {
   retryStrategy?: (times: number) => number | null | void
   /** Default: reconnects only on `READONLY` (replica failover). */
   reconnectOnError?: (err: Error) => boolean | 1 | 2
-  /** TCP keep-alive in ms. */
+  /** TCP keep-alive delay in ms. Default: 30_000. */
   keepAlive?: number
   /** Disable Nagle's algorithm. */
   noDelay?: boolean
@@ -146,7 +146,7 @@ export interface BymaxCacheModuleOptions {
   /** Graceful shutdown timeout in ms. Default: 5000. */
   shutdownTimeoutMs?: number
   /**
-   * Allows `flushNamespace()` to run even when `NODE_ENV === 'production'`.
+   * Allows `flushNamespace()` to run even when `NODE_ENV` is `production` (trimmed, any letter case).
    * Default: false. SAFETY: leave false in real production environments.
    */
   allowFlushInProduction?: boolean

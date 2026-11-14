@@ -639,7 +639,7 @@ export class CacheService {
    * `{namespace}{sep}*`, so keys of other namespaces are never touched.
    *
    * SAFETY: throws {@link CacheException} `FLUSH_DISABLED_IN_PRODUCTION` when
-   * `NODE_ENV === 'production'` unless `options.allowFlushInProduction` is `true`.
+   * `NODE_ENV` is `production` (trimmed, any letter case) unless `options.allowFlushInProduction` is `true`.
    * Intended for tests and tooling — in production prefer
    * {@link CacheService.del} / {@link CacheService.delMany}.
    *
@@ -649,7 +649,10 @@ export class CacheService {
    *   (no usable top-level `scanStream`).
    */
   async flushNamespace(): Promise<number> {
-    if (process.env['NODE_ENV'] === PRODUCTION_ENV && !this.options.allowFlushInProduction) {
+    if (
+      process.env['NODE_ENV']?.trim().toLowerCase() === PRODUCTION_ENV &&
+      !this.options.allowFlushInProduction
+    ) {
       throw new CacheException(CACHE_ERROR_CODES.FLUSH_DISABLED_IN_PRODUCTION)
     }
 

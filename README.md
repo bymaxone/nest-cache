@@ -267,6 +267,8 @@ Keys resolve to `app:user-profile:<userId>` — namespaced automatically.
 
 `connection` also accepts `host`, `port`, `password`, `db`, `username`, `lazyConnect`, `connectTimeout` (minimum `100`), `commandTimeout`, `maxRetriesPerRequest`, `enableReadyCheck`, `enableOfflineQueue`, `retryStrategy`, `reconnectOnError`, `keepAlive`, `noDelay` and `family`; `url` takes precedence over the discrete fields.
 
+`keepAlive` defaults to 30 000 ms, so a connection that goes half-open (a NAT idle drop, a failover without a reset) is probed after 30 s of idleness instead of the operating system's own, much longer, delay; the dedicated Pub/Sub connection has no command traffic to notice it otherwise. With `lazyConnect: true` and the default `enableOfflineQueue: false`, the first command is issued before the connection exists and rejects with `cache.connection_lost` (`reason: 'offline'`); connect first, or set `enableOfflineQueue: true`.
+
 In `mode: 'cluster'` the client is built from `cluster`, so `connection.password`, `username`, `tls` and `lazyConnect` are refused at registration (`cache.invalid_options`); set them in `cluster.options.redisOptions` (`lazyConnect` in `cluster.options`). The timers `connectTimeout` and `commandTimeout` in `cluster.options.redisOptions` follow the same rule as the standalone ones. Boot waits for readiness for at most `connectTimeout` and disconnects the client when it fails; it does not wait when the connection is lazy.
 
 Both `forRoot(options)` (synchronous) and `forRootAsync({ useFactory, inject, imports })` are supported. The module registers globally by default — pass `isGlobal: false` to scope it to the importing module. With `forRootAsync`, `isGlobal` is read at the call site (`forRootAsync({ isGlobal, ... })`); a value returned from `useFactory` has no effect.
@@ -777,10 +779,11 @@ Error `details` are built to be safe to log:
 - A malformed `connection.url` throws `CONNECTION_FAILED` with `reason: 'invalid connection.url'` — the URL is omitted, because it may embed a password.
 - `SERIALIZATION_FAILED` carries the encoder's message, never the value being encoded.
 - `DESERIALIZATION_FAILED` carries a fixed `error` text and the `length` of the stored value, and nothing from its content — not a preview, not the parser's message, which quotes the start of its input. The exception is an `HttpException`, so a default Nest filter sends `details` to the HTTP client; a cached record holding PII or a token must never reach it.
+- `SCRIPT_EXECUTION_FAILED` (`originalError`) and `CONNECTION_FAILED` (`error`) carry the driver's own message: a Lua `error()` or a failing command can quote its arguments, and a connection error names the host and port. `cause` holds the original error. Log them, but do not forward them to an HTTP client.
 
 ### Destructive operations are guarded in production
 
-`flushNamespace()` throws `CacheException(FLUSH_DISABLED_IN_PRODUCTION)` when `NODE_ENV === 'production'` unless `allowFlushInProduction` is explicitly set. When it does run, it iterates with `SCAN` scoped to `{namespace}{separator}*` and removes keys with `UNLINK` (asynchronous reclaim), so it neither touches another namespace nor blocks the server on a large keyset.
+`flushNamespace()` throws `CacheException(FLUSH_DISABLED_IN_PRODUCTION)` when `NODE_ENV` is `production` (trimmed, any letter case; `prod` is not production) unless `allowFlushInProduction` is explicitly set. When it does run, it iterates with `SCAN` scoped to `{namespace}{separator}*` and removes keys with `UNLINK` (asynchronous reclaim), so it neither touches another namespace nor blocks the server on a large keyset.
 
 ### Lua scripts are registered, never interpolated
 
@@ -814,20 +817,20 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 
 ## 🛡️ Security Table
 
-| Layer                 | Implementation                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Tenant Isolation      | Every key and channel is composed by `KeyBuilder`; no bare-key path in the typed API                             |
-| Namespace Validation  | An empty, separator-containing or glob-metacharacter namespace is rejected at bootstrap (`INVALID_NAMESPACE`)    |
-| Key Validation        | An empty `prefix` or `id` is rejected (`INVALID_KEY`); `keyEscaping: 'strict'` makes the composition injective   |
-| Admin Scope Allowlist | Scopes are declared at wiring and frozen; a caller names a scope by id and never supplies a pattern              |
-| Admin Read-Only       | `/admin` issues no mutating command, enforced by the `check:admin-readonly` build gate                           |
-| Deserialization       | A payload that is not valid JSON throws `DESERIALIZATION_FAILED`; valid JSON is not checked against `T`          |
-| Error Payloads        | Connection URLs and stored values never appear in error `details`                                                |
-| Destructive Ops       | `flushNamespace()` is blocked in production unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped |
-| Lua Execution         | Scripts are registered by name; call sites pass keys and arguments, never a script body                          |
-| Cluster Safety        | `scan`, `keys`, `flushNamespace` and `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on one node    |
-| Transport             | `rediss://` sets TLS on the client; `connection.tls` covers a custom CA or mTLS                                  |
-| Supply Chain          | Nothing is bundled and every dependency is a peer you pin; published with npm provenance                         |
+| Layer                 | Implementation                                                                                                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tenant Isolation      | Every key and channel is composed by `KeyBuilder`; no bare-key path in the typed API                                                                                                                                                       |
+| Namespace Validation  | An empty, separator-containing or glob-metacharacter namespace is rejected at bootstrap (`INVALID_NAMESPACE`)                                                                                                                              |
+| Key Validation        | An empty `prefix` or `id` is rejected (`INVALID_KEY`); `keyEscaping: 'strict'` makes the composition injective                                                                                                                             |
+| Admin Scope Allowlist | Scopes are declared at wiring and frozen; a caller names a scope by id and never supplies a pattern                                                                                                                                        |
+| Admin Read-Only       | `/admin` issues no mutating command, enforced by the `check:admin-readonly` build gate                                                                                                                                                     |
+| Deserialization       | A payload that is not valid JSON throws `DESERIALIZATION_FAILED`; valid JSON is not checked against `T`                                                                                                                                    |
+| Error Payloads        | The library puts no connection URL and no stored value in error `details`; the driver's own message (`originalError` of a failed script, `error` of a connection failure) and `cause` can carry more, so keep them out of client responses |
+| Destructive Ops       | `flushNamespace()` is blocked in production unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped                                                                                                                           |
+| Lua Execution         | Scripts are registered by name; call sites pass keys and arguments, never a script body                                                                                                                                                    |
+| Cluster Safety        | `scan`, `keys`, `flushNamespace` and `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on one node                                                                                                                              |
+| Transport             | `rediss://` sets TLS on the client; `connection.tls` covers a custom CA or mTLS                                                                                                                                                            |
+| Supply Chain          | Nothing is bundled and every dependency is a peer you pin; published with npm provenance                                                                                                                                                   |
 
 > [!IMPORTANT]
 > The namespace is the isolation boundary. Anything reached through `getClient()` or `pipeline()` sits outside it.
