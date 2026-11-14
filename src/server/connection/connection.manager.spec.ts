@@ -228,6 +228,7 @@ describe('ConnectionManager', () => {
       expect(opts['password']).toBe('p')
       expect(opts['role']).toBe('master')
       expect(opts['natMap']).toBe(natMap)
+      expect(opts['disconnectTimeout']).toBe(1)
     })
 
     // With TLS configured for the data nodes, the sentinel connection uses it too: without these
@@ -349,7 +350,12 @@ describe('ConnectionManager', () => {
       expect(clusterInstances[0]?.options).toEqual({
         enableOfflineQueue: false,
         enableReadyCheck: true,
-        redisOptions: { connectTimeout: 10_000, commandTimeout: 5_000, maxRetriesPerRequest: 3 }
+        redisOptions: {
+          connectTimeout: 10_000,
+          commandTimeout: 5_000,
+          maxRetriesPerRequest: 3,
+          disconnectTimeout: 1
+        }
       })
       expect(clusterInstances[0]?.nodes).toEqual([{ host: 'c', port: 6379 }])
     })
@@ -365,7 +371,29 @@ describe('ConnectionManager', () => {
       manager.getClient()
       expect(clusterInstances[0]?.options).toEqual({
         enableOfflineQueue: false,
-        redisOptions: { connectTimeout: 10_000, commandTimeout: 5_000, maxRetriesPerRequest: 3 }
+        redisOptions: {
+          connectTimeout: 10_000,
+          commandTimeout: 5_000,
+          maxRetriesPerRequest: 3,
+          disconnectTimeout: 1
+        }
+      })
+    })
+
+    // The nodes of a cluster are created with the same short `disconnectTimeout` as every other client,
+    // and a value the host sets on `redisOptions` is the one used.
+    it('lets the host set the disconnectTimeout of the cluster nodes', () => {
+      const manager = makeManager({
+        mode: 'cluster',
+        cluster: {
+          nodes: [{ host: 'c', port: 6379 }],
+          options: { redisOptions: { disconnectTimeout: 5_000 } }
+        }
+      })
+
+      manager.getClient()
+      expect(clusterInstances[0]?.options).toMatchObject({
+        redisOptions: { disconnectTimeout: 5_000 }
       })
     })
 
@@ -422,6 +450,8 @@ describe('ConnectionManager', () => {
       expect(redisInstances).toHaveLength(2)
       expect(redisInstances[0]?.options['enableOfflineQueue']).toBe(false)
       expect(redisInstances[1]?.options['enableOfflineQueue']).toBe(true)
+      expect(redisInstances[0]?.options['disconnectTimeout']).toBe(1)
+      expect(redisInstances[1]?.options['disconnectTimeout']).toBe(1)
       redisInstances[1]?.emit('connect')
       expect(onEvent).toHaveBeenCalledWith('connect', { role: 'subscriber' })
     })

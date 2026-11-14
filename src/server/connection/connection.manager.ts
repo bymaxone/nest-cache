@@ -23,7 +23,8 @@ import {
   DEFAULT_CONNECT_TIMEOUT_MS,
   DEFAULT_MAX_RETRIES_PER_REQUEST,
   DEFAULT_RETRY_BASE_MS,
-  DEFAULT_RETRY_MAX_MS
+  DEFAULT_RETRY_MAX_MS,
+  DISCONNECT_TIMEOUT_MS
 } from '../constants/default-timeouts'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
@@ -292,6 +293,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
           connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
           commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
           maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
+          disconnectTimeout: DISCONNECT_TIMEOUT_MS,
           ...supplied.redisOptions
         }
       } as OwnedClusterOptions)
@@ -344,6 +346,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       connectTimeout: c.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS,
       commandTimeout: c.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
       maxRetriesPerRequest: c.maxRetriesPerRequest ?? DEFAULT_MAX_RETRIES_PER_REQUEST,
+      disconnectTimeout: DISCONNECT_TIMEOUT_MS,
       enableReadyCheck: c.enableReadyCheck ?? true,
       enableOfflineQueue: c.enableOfflineQueue ?? false,
       retryStrategy: c.retryStrategy ?? this.defaultRetryStrategy,

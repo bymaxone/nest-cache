@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A client closed while it is reconnecting no longer keeps the process alive for two seconds. With the default retry strategy a
+  client whose server stopped sits between two attempts with no open stream; `disconnect()` armed ioredis's teardown timer there,
+  which only the stream's `close` clears and a stream that is already closed never emits, so the process exited about 2 000 ms
+  after the shutdown (measured 2 001 to 2 003 ms with a stopped server, 1 to 3 ms after this change). Every client the library
+  creates (the main client, the Pub/Sub subscriber, the sentinel client and the nodes of a cluster) now has a `disconnectTimeout`
+  of 1 ms. A forced `disconnect()` on a client with an open stream now destroys that stream 1 ms after ending it, where it waited
+  up to 2 s for the server to close its side; a client that has ended is still not disconnected.
+
+  **Apply to a consumer:** nothing to change. A host that sets `disconnectTimeout` in `cluster.options.redisOptions` keeps its own
+  value; the connection options of the other modes have no such field.
+
 ## [1.2.16] - 2026-11-14
 
 ### Fixed
