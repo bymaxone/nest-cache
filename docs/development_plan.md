@@ -65,7 +65,7 @@ The phase order respects the dependency graph (Appendix A): contracts before imp
 | **Events callback instead of embedded logger**  | The connection emits events via `ICacheEvents.onEvent` — the consumer plugs in `@bymax-one/nest-logger` or another logger.                                                                |
 | **Error code pattern `cache.<scope>_<reason>`** | Same `CACHE_ERROR_CODES` from spec §12; human messages tabulated in `CACHE_ERROR_MESSAGES`.                                                                                               |
 | **Fail fast on offline**                        | `enableOfflineQueue: false` by default — we prefer an immediate error over OOM from silent buffering.                                                                                     |
-| **Conventional Commits**                        | `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`. Drives the semver bump on release.                                                                                              |
+| **Conventional Commits**                        | `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`. Names the kind of change; the release number is set by policy.                                                                  |
 
 ### 1.3 Phase summary
 
