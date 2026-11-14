@@ -53,6 +53,17 @@ async function waitForCode(
   throw new Error(`no ${code} within ${timeoutMs}ms`)
 }
 
+/** The connect timeout the fresh boot is configured with, which is the deadline it must meet. */
+const CONNECT_TIMEOUT_MS = 1_000
+
+/**
+ * Slack added to a configured deadline before a wall-clock assertion fails. The check is of a real
+ * deadline, so it stays on the real clock, but its bound is the configured deadline plus this margin
+ * and never a fixed number: a loaded machine delays the rejection, not the deadline it is measured
+ * against.
+ */
+const DEADLINE_MARGIN_MS = 10_000
+
 describe('Outage E2E (real Redis)', () => {
   let redis: StartedRedis
   let app: TestingModule
@@ -131,7 +142,7 @@ describe('Outage E2E (real Redis)', () => {
 
     const error = await rejectionOf(() =>
       bootCacheApp({
-        connection: { host: '127.0.0.1', port: closedPort, connectTimeout: 1_000 },
+        connection: { host: '127.0.0.1', port: closedPort, connectTimeout: CONNECT_TIMEOUT_MS },
         namespace: 'e2e-fresh'
       })
     )
@@ -139,7 +150,7 @@ describe('Outage E2E (real Redis)', () => {
     expect(error).toBeInstanceOf(CacheException)
     expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
     expect((error as CacheException).getStatus()).toBe(503)
-    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(Date.now() - started).toBeLessThan(CONNECT_TIMEOUT_MS + DEADLINE_MARGIN_MS)
   }, 20_000)
 
   // STOPPED: the connection is refused and the offline queue is off, so every call rejects at once

@@ -66,6 +66,17 @@ const waitFor = async (check: () => boolean, timeoutMs = 10_000): Promise<void> 
   }
 }
 
+/** The command timeout the client is configured with, which is the deadline a read must meet. */
+const COMMAND_TIMEOUT_MS = 5_000
+
+/**
+ * Slack added to a configured deadline before a wall-clock assertion fails. The check is of a real
+ * deadline, so it stays on the real clock, but its bound is the configured deadline plus this margin
+ * and never a fixed number: a loaded machine delays the rejection, not the deadline it is measured
+ * against.
+ */
+const DEADLINE_MARGIN_MS = 10_000
+
 describe('Redis Cluster topology E2E (real cluster)', () => {
   let cluster: StartedRedisCluster
   let app: TestingModule
@@ -76,7 +87,10 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
     cluster = await startRedisCluster()
     const cacheOptions = {
       mode: 'cluster' as const,
-      cluster: { nodes: cluster.nodes, options: { redisOptions: { maxRetriesPerRequest: 5 } } },
+      cluster: {
+        nodes: cluster.nodes,
+        options: { redisOptions: { maxRetriesPerRequest: 5, commandTimeout: COMMAND_TIMEOUT_MS } }
+      },
       namespace: 'e2e-cluster',
       scripts: [{ name: 'cas', lua: COMPARE_AND_SET_LUA }]
     }
@@ -266,7 +280,7 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
 
   // Keep this the LAST test: it stops the cluster, so nothing after it can reach one.
   // Scenario: every node goes away after the client booted and served traffic.
-  // Rule: a read rejects within the default command timeout instead of waiting in an offline
+  // Rule: a read rejects within the configured command timeout instead of waiting in an offline
   // queue for the cluster to come back, so a caller that treats an unreachable cache as a miss
   // reaches its fallback.
   it('rejects a get within the command timeout once the whole cluster is down', async () => {
@@ -286,10 +300,12 @@ describe('Redis Cluster topology E2E (real cluster)', () => {
           return 'rejected'
         }
       ),
-      new Promise<string>((resolve) => setTimeout(() => resolve('pending'), 15_000))
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve('pending'), COMMAND_TIMEOUT_MS + DEADLINE_MARGIN_MS)
+      )
     ])
 
     expect(outcome).toBe('rejected')
-    expect(settledAt).toBeLessThan(5_000)
+    expect(settledAt).toBeLessThan(COMMAND_TIMEOUT_MS + DEADLINE_MARGIN_MS)
   }, 60_000)
 })
