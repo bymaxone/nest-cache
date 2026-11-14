@@ -59,12 +59,12 @@ const ROOT = pkg.root
 // consumer's runtime.
 //
 // The server budget covers the key escape (the token writer and decoder, the escape sets and the
-// `KeyBuilder` helpers), the read-validation routing, the timer-delay checks, the command-failure mapping and the error catalog. Its margin is small on
-// purpose: 10.27 kB against a measured 10.23 kB. The older notes above call a margin this small too tight
+// `KeyBuilder` helpers), the read-validation routing, the timer-delay checks, the command-failure mapping, the scan hint clamp and the error catalog. Its margin is small on
+// purpose: 10.34 kB against a measured 10.30 kB. The older notes above call a margin this small too tight
 // to absorb ordinary growth; here that is intended, so growth past the margin is raised and justified in
 // review. Measured sizes are taken after the comments are stripped.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 10.27 * 1024 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 10.34 * 1024 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5.3 * 1024 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }
