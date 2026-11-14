@@ -14,6 +14,11 @@ export { ConnectionManager } from './connection/connection.manager'
 export { createConnectionManager } from './connection/create-connection-manager'
 export { KeyBuilder } from './utils/key-builder'
 
+// Shared with the `./admin` subpath, which is a separate bundle that imports this package by name.
+// Marked `@internal`: the build strips it from the declarations, so it is not part of the public API.
+/** @internal */
+export { guardClient } from './utils/guard-client'
+
 // Cache service + default serializer
 export { CacheService } from './services/cache.service'
 export { JsonSerializer } from './utils/json-serializer'

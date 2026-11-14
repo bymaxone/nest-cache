@@ -8,6 +8,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- HTTP statuses now follow one rule: a backing service that is unavailable or too slow answers 503, a caller's mistake a 4xx, and
+  only an internal fault or a boot-time configuration error 500. `cache.command_timeout` moves from 504 to 503 (it was never
+  thrown before the command mapping of this release, so nothing depends on 504), the readiness failure of the boot wait
+  (`cache.connection_failed`: an error, the end of the connection, or no `ready` within `connectTimeout`) answers 503 while the
+  configuration errors of the same code keep 500, and `cache.scope_not_found` and `cache.key_not_in_scope` answer 404. A key
+  outside a scope is refused from the scope's pattern alone, with no Redis command, so the answer is the same for a key that
+  exists and one that does not.
+
 - The `keepAlive` default is now 30 000 ms, as in ioredis, instead of 0. A zero left the operating system's own delay, which on
   Linux is two hours, so a connection that went half-open (a NAT idle drop, a failover without a reset) stayed silent that
   long; the dedicated Pub/Sub connection has no command traffic to notice it otherwise.
@@ -26,6 +34,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A timeout or an offline connection while a script loads or runs, a message is published or a channel subscribed, or the
+  `/admin` surface reads, is now `cache.command_timeout` or `cache.connection_lost` (503) with the original on `cause`, as it
+  already was for `CacheService`. Before, `ScriptManagerService` wrapped every failure as `cache.script_execution_failed` (500)
+  and `PubSubService` and `/admin` let ioredis's bare `Error` through. `cache.script_execution_failed` is now only what the script
+  or the server said: a Lua runtime error or a failed NOSCRIPT retry. `getClient()` and `pipeline()` still hand out the raw client.
 - The `COUNT` hint of `CacheService.scan()` is a whole number from 1 to 10 000: a larger value is clamped, a smaller one raised to 1,
   and a value that is not a whole number (`NaN`, `Infinity`, `2.5`) falls back to 100. An application that forwarded a caller's
   value could ask Redis for a batch of any size.
@@ -65,6 +78,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `isReadable: false`.
 
 #### Apply to a consumer
+
+A host that mapped `cache.command_timeout` to 504 now sees 503, the same status as `cache.connection_lost`: treat both as "retry
+later". `cache.connection_failed` from the boot wait is 503; a missing or malformed `connection.url` stays 500. Code that caught
+the bare ioredis `Error` ("Command timed out", "Stream isn't writeable...") from `PubSubService`, `ScriptManagerService` or `/admin`
+now receives a `CacheException` with the same text on `cause`; code that matched `cache.script_execution_failed` to detect an
+unavailable Redis during a script now matches `cache.command_timeout` or `cache.connection_lost`. `cache.scope_not_found` and
+`cache.key_not_in_scope` are 404, not 500.
 
 A `listKeys` page can now be incomplete and empty with a `cursor`: loop on `listKeys(scopeId, { cursor })` until `isComplete` is
 `true` (each request makes at most `scanRoundsLimit` round trips). While keys are written `SCAN` can return a key twice, so
