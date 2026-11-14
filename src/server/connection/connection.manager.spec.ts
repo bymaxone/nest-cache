@@ -242,6 +242,21 @@ describe('ConnectionManager', () => {
       expect(opts['sentinelTLS']).toBe(tls)
     })
 
+    // A rediss:// url gives the data nodes TLS through the same resolved options, so the sentinels get it
+    // too; reading only connection.tls left them in cleartext in this case.
+    it('enables TLS toward the sentinels when a rediss:// connection.url sets it', () => {
+      const manager = makeManager({
+        mode: 'sentinel',
+        connection: { url: 'rediss://h:6379' },
+        sentinel: { name: 'mymaster', sentinels: [{ host: 's', port: 26379 }] }
+      })
+
+      manager.getClient()
+      const opts = redisInstances[0]?.options ?? {}
+      expect(opts['enableTLSForSentinelMode']).toBe(true)
+      expect(opts['sentinelTLS']).toEqual({})
+    })
+
     // Without connection.tls nothing changes: no TLS option reaches the sentinel connection.
     it('does not enable TLS toward the sentinels when connection.tls is unset', () => {
       const manager = makeManager({

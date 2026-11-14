@@ -12,7 +12,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 'invalid connection.url'`, no URL) in every mode. In `sentinel` and `cluster` mode the check was skipped and the raw
   parse error escaped the connection manager's constructor; that error's enumerable `input` holds the whole URL, so a
   credential in it reached whatever logged the boot failure.
-- In `sentinel` mode with `connection.tls` set, TLS now also applies to the connection to the sentinels
+- In `sentinel` mode with TLS configured for the data nodes (`connection.tls`, or a `rediss://` `connection.url`), TLS now also applies to the connection to the sentinels
   (`enableTLSForSentinelMode` and `sentinelTLS`). Before, `sentinelPassword` and the master discovery went to the
   sentinels in cleartext while only the data nodes used TLS.
 - Admin scopes now deny first. A key's value is revealed only when every scope whose pattern matches it is readable, so
@@ -22,7 +22,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 #### Apply to a consumer
 
-If you configure sentinels with `connection.tls`, check that your sentinels accept TLS: the sentinel connection now uses
+If you configure sentinels with `connection.tls` or a `rediss://` url, check that your sentinels accept TLS: the sentinel connection now uses
 the same TLS options. If your admin scopes overlap, a key matched by a withheld scope is now withheld whichever scope the
 caller names. A malformed `connection.url` in `sentinel` or `cluster` mode now fails at registration, as it already did
 in `standalone`.

@@ -256,11 +256,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
           role: sentinel.role === 'replica' ? 'slave' : sentinel.role
         }),
         ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap }),
-        // TLS configured for the data nodes covers the sentinels too: without these two options
+        // TLS configured for the data nodes (`connection.tls` or a `rediss://` url) covers the sentinels too: without these two options
         // ioredis talks to them in cleartext, `sentinelPassword` and discovery included.
-        ...(this.options.connection?.tls !== undefined && {
+        ...(this.#redisOptionsResolved.tls !== undefined && {
           enableTLSForSentinelMode: true,
-          sentinelTLS: this.options.connection.tls
+          sentinelTLS: this.#redisOptionsResolved.tls
         })
       } as OwnedRedisOptions)
     }
