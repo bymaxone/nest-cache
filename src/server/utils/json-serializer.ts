@@ -15,7 +15,6 @@ import { Injectable } from '@nestjs/common'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
-import { describeError } from './describe-error'
 
 /**
  * Fixed `details.error` of a failed decode. The engine's own `JSON.parse` message is
@@ -54,8 +53,8 @@ export class JsonSerializer implements ISerializer {
    *   stringified. This covers `JSON.stringify` throwing (circular reference,
    *   `BigInt`) AND the silent cases where a top-level `undefined`, function, or
    *   `symbol` would make `JSON.stringify` return the JS value `undefined`
-   *   instead of a string. The original message is attached under
-   *   `details.error`; the value itself is never echoed, as it may carry secrets
+   *   instead of a string. `details.error` is fixed text and the
+   *   error `JSON.stringify` threw, when it threw, is on `cause`; the value itself is never echoed, as it may carry secrets
    *   (CLAUDE.md §4).
    */
   serialize<T>(value: T): string {
@@ -73,9 +72,12 @@ export class JsonSerializer implements ISerializer {
     try {
       return JSON.stringify(value)
     } catch (err) {
-      throw new CacheException(CACHE_ERROR_CODES.SERIALIZATION_FAILED, {
-        error: describeError(err)
-      })
+      throw new CacheException(
+        CACHE_ERROR_CODES.SERIALIZATION_FAILED,
+        { error: 'the value could not be encoded as JSON' },
+        undefined,
+        err
+      )
     }
   }
 

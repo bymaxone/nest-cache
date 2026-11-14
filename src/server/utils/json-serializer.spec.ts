@@ -59,13 +59,14 @@ describe('JsonSerializer', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(CacheException)
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
-      expect((error as CacheException).details?.['error']).toBe('unprintable error')
+      expect((error as CacheException).details?.['error']).toBe(
+        'the value could not be encoded as JSON'
+      )
     }
   })
 
-  // A `toJSON` hook can throw a non-Error value; the error describer must fall
-  // back to String(err) so `details.error` is still populated (covers the
-  // non-Error branch of describeError that JSON.parse alone cannot reach).
+  // A `toJSON` hook can throw a non-Error value; `details.error` is still the fixed text and the
+  // thrown value is kept on `cause`.
   it('stringifies a non-Error throw from a toJSON hook', () => {
     const hostile = {
       toJSON(): never {
@@ -78,7 +79,10 @@ describe('JsonSerializer', () => {
       throw new Error('expected serialize to throw')
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SERIALIZATION_FAILED)
-      expect((error as CacheException).details?.['error']).toBe('boom-as-string')
+      expect((error as CacheException).details?.['error']).toBe(
+        'the value could not be encoded as JSON'
+      )
+      expect((error as CacheException).cause).toBe('boom-as-string')
     }
   })
 

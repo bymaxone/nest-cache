@@ -174,7 +174,10 @@ describe('ConnectionManager', () => {
       await init.catch((error: unknown) => {
         expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
         // `ObjectLiteral → {}` would empty these details — fails this toEqual.
-        expect((error as CacheException).details).toEqual({ error: 'boom' })
+        expect((error as CacheException).details).toEqual({
+          error: 'connection error before ready'
+        })
+        expect(((error as CacheException).cause as Error).message).toBe('boom')
       })
       // cleanup() must remove both the 'ready' and 'error' listeners on reject.
       expect(offSpy).toHaveBeenCalledWith('ready', expect.any(Function))

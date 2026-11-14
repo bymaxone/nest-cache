@@ -6,6 +6,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The `details` of these errors no longer carry a message written by a driver, a script or a host. `details` is serialised verbatim
+  into the HTTP body of a `CacheException`, and those messages can name a host and a port (`connect ECONNREFUSED 10.0.0.5:6379`),
+  quote a command's arguments or quote a value. The `cache.connection_failed` that `onModuleInit` throws when the client errors
+  before it is ready now has `details.error` `connection error before ready`, `cache.script_execution_failed` has
+  `details.error` `the script did not run to completion` in place of `details.originalError`, and `cache.serialization_failed`
+  of the default JSON serializer has `details.error` `the value could not be encoded as JSON`. The original error is on `cause`
+  in each, which a response body never carries. The README lists the values `details` still echoes back, which are the
+  caller's own or the configuration's.
+
+  **Apply to a consumer:** a host that read `details.originalError` or the driver's text in `details.error` to log or branch on
+  it reads `cause` instead (`error.cause.message`); a host that forwards `details` to an HTTP client can now do so for these
+  codes. The keys of `details` are otherwise unchanged, except that `originalError` of `cache.script_execution_failed` is gone.
+
 ### Fixed
 
 - A client closed while it is reconnecting no longer keeps the process alive for two seconds. With the default retry strategy a

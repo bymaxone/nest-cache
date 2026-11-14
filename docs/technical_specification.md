@@ -1040,7 +1040,8 @@ export class ScriptManagerService implements OnApplicationBootstrap {
    * - standalone / sentinel: EVALSHA; on NOSCRIPT, reloads once and retries.
    * - cluster: plain EVAL; at least one key is required for slot routing.
    * A failure of the call, of the reload or of the retry surfaces as
-   * CacheException(SCRIPT_EXECUTION_FAILED, { name, originalError }); a cluster call with
+   * CacheException(SCRIPT_EXECUTION_FAILED, { name, error }) with fixed text and the original on
+   * `cause`; a cluster call with
    * no keys throws the same code with { name, reason } before any command is sent; an
    * unknown name throws SCRIPT_NOT_REGISTERED.
    */

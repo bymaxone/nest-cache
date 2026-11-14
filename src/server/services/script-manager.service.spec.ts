@@ -123,8 +123,8 @@ describe('ScriptManagerService', () => {
   })
 
   // If the retry after a NOSCRIPT reload also fails, it must surface as
-  // SCRIPT_EXECUTION_FAILED (the inner retry catch) carrying the script name and
-  // the original retry error in details. The details assertion kills the
+  // SCRIPT_EXECUTION_FAILED (the inner retry catch) carrying the script name and fixed
+  // text in details, with the original retry error on cause. The details assertion kills the
   // ObjectLiteral mutant that empties the reload+retry catch's details to `{}`.
   it('wraps a failed NOSCRIPT retry as SCRIPT_EXECUTION_FAILED', async () => {
     evalsha
@@ -140,8 +140,9 @@ describe('ScriptManagerService', () => {
     expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
     expect((error as CacheException).details).toEqual({
       name: 'cas',
-      originalError: 'ERR retry failed'
+      error: 'the script did not run to completion'
     })
+    expect(((error as CacheException).cause as Error).message).toBe('ERR retry failed')
   })
 
   // If the NOSCRIPT reload (SCRIPT LOAD) itself fails, the failure must still be
@@ -161,7 +162,7 @@ describe('ScriptManagerService', () => {
   })
 
   // A non-NOSCRIPT error must be wrapped as SCRIPT_EXECUTION_FAILED with the
-  // original message preserved in details (Error branch of describeError),
+  // original message kept on cause, not in details,
   // and must FAIL FAST — no reload (SCRIPT LOAD) and no retry. The pre-load +
   // mockClear isolates the lazy first load so the call counts pin the NOSCRIPT
   // guard: they kill the `NOSCRIPT_MARKER = ''` mutant, under which `.includes('')`
@@ -176,22 +177,26 @@ describe('ScriptManagerService', () => {
 
     expect(error).toBeInstanceOf(CacheException)
     expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
-    expect((error as CacheException).details?.['originalError']).toBe('ERR something broke')
+    expect((error as CacheException).details?.['error']).toBe(
+      'the script did not run to completion'
+    )
+    expect(((error as CacheException).cause as Error).message).toBe('ERR something broke')
     expect(script).not.toHaveBeenCalled()
     expect(evalsha).toHaveBeenCalledTimes(1)
   })
 
-  // A non-Error rejection must still be stringified into details (the non-Error
-  // branch of describeError) and wrapped as SCRIPT_EXECUTION_FAILED.
-  it('stringifies a non-Error rejection into the wrapped error', async () => {
-    expect.assertions(3)
+  // A non-Error rejection must still be wrapped as SCRIPT_EXECUTION_FAILED, with fixed text in
+  // details and the rejected value kept on `cause`.
+  it('wraps a non-Error rejection, keeping it on the cause', async () => {
+    expect.assertions(4)
     evalsha.mockRejectedValue('plain-string-failure')
 
     const caught = await registry.eval('cas', [], []).catch((e: unknown) => e)
     expect(caught).toBeInstanceOf(CacheException)
     if (!(caught instanceof CacheException)) throw caught
     expect(caught.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
-    expect(caught.details?.['originalError']).toBe('plain-string-failure')
+    expect(caught.details?.['error']).toBe('the script did not run to completion')
+    expect(caught.cause).toBe('plain-string-failure')
   })
 
   // A rejection that cannot be printed (no prototype, so `String()` throws) must still be
@@ -204,7 +209,7 @@ describe('ScriptManagerService', () => {
     expect(caught).toBeInstanceOf(CacheException)
     if (!(caught instanceof CacheException)) throw caught
     expect(caught.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
-    expect(caught.details?.['originalError']).toBe('unprintable error')
+    expect(caught.details?.['error']).toBe('the script did not run to completion')
   })
 
   // In cluster mode eval must use EVAL with the full Lua body (routed by key),
@@ -222,7 +227,7 @@ describe('ScriptManagerService', () => {
   })
 
   // A cluster EVAL failure must surface as SCRIPT_EXECUTION_FAILED with the
-  // original error in details (the cluster branch's catch) — and never echo the
+  // original error on cause (the cluster branch's catch) — and never echo the
   // Lua source.
   it('wraps a cluster EVAL failure as SCRIPT_EXECUTION_FAILED', async () => {
     const cluster = build({ mode: 'cluster' })
@@ -234,8 +239,11 @@ describe('ScriptManagerService', () => {
     expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
     expect((error as CacheException).details).toEqual({
       name: 'cas',
-      originalError: 'CLUSTERDOWN Hash slot not served'
+      error: 'the script did not run to completion'
     })
+    expect(((error as CacheException).cause as Error).message).toBe(
+      'CLUSTERDOWN Hash slot not served'
+    )
   })
 
   // A cluster EVAL with zero keys would execute on an arbitrary node instead of

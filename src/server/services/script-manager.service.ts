@@ -38,7 +38,8 @@ interface ScriptEntry {
  *
  * A timeout or an offline connection reaches here already mapped to a `CacheException` by the
  * guarded client (a backing service problem, 503) and passes through unchanged. Anything else is
- * what the script or the server said, reported as `SCRIPT_EXECUTION_FAILED` with the driver's text.
+ * what the script or the server said, reported as `SCRIPT_EXECUTION_FAILED` with fixed text in
+ * `details` and the original error on `cause`, since `details` is serialised into the HTTP body.
  *
  * @param name - The script's registered name.
  * @param err - What the call rejected with.
@@ -47,10 +48,12 @@ interface ScriptEntry {
 function scriptFailure(name: string, err: unknown): CacheException {
   return err instanceof CacheException
     ? err
-    : new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
-        name,
-        originalError: describeError(err)
-      })
+    : new CacheException(
+        CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED,
+        { name, error: 'the script did not run to completion' },
+        undefined,
+        err
+      )
 }
 
 @Injectable()
