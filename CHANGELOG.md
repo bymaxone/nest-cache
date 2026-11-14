@@ -14,8 +14,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   connection, or no `ready` within `connectTimeout`) the client is disconnected on purpose, but `getClient()` (and with it every
   `CacheService`, script, Pub/Sub and admin call) and the Pub/Sub subscriber then opened a new one that nothing had waited for,
   which reconnected behind a boot that had reported the connection as failed. They now answer with
-  `cache.connection_failed` (503, `details.reason` `boot_failed`) and open nothing. The boot's own error, which can name a host and
-  a port, stays on `cause` and is never part of the response body.
+  `cache.connection_failed` (503, `details.reason` `boot_failed`) and open nothing. On these later refusals the boot's own error,
+  which can name a host and a port, stays on `cause` and is never part of the response body. The boot rejection itself, the
+  `cache.connection_failed` that `onModuleInit` throws, still carries the driver's message in `details.error`, as it did before this
+  release; a host that forwards `details` to an HTTP client should not forward that one.
   The declarations of `ConnectionManager` name its private guard `assertCanOpen` where they named `assertNotShutDown`; a private
   member is not part of the API.
 
