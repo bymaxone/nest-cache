@@ -116,10 +116,24 @@ describe('CacheService command timeout', () => {
 
   // Every command goes through the one accessor that maps the error, so a method added later
   // cannot bypass it by reaching for the connection directly. The only other reader is the public
-  // `getClient()`, which hands out the raw client on purpose.
+  // `getClient()`, which hands out the raw client on purpose. Each reader is attributed to the
+  // method that encloses it. A mutation run executes this spec inside a sandbox whose sources are
+  // instrumented, so the pristine file is read from the repository instead.
   it('reaches the client only through the mapping accessor and the public getClient', () => {
-    const source = readFileSync(join(__dirname, 'cache.service.ts'), 'utf8')
+    const pristine = __dirname.replace(/[\\/]\.stryker-tmp[\\/]sandbox-[^\\/]+/, '')
+    const lines = readFileSync(join(pristine, 'cache.service.ts'), 'utf8').split('\n')
+    const readers = new Set<string>()
+    let method = ''
+    for (const line of lines) {
+      const declaration = /^ {2}(?:private |async )*(\w+)(?:<[^>]*>)?\(/.exec(line)
+      if (declaration?.[1] !== undefined) {
+        method = declaration[1]
+      }
+      if (line.includes('connection.getClient()')) {
+        readers.add(method)
+      }
+    }
 
-    expect(source.match(/connection\.getClient\(\)/g)).toHaveLength(2)
+    expect([...readers].sort()).toEqual(['client', 'getClient'])
   })
 })
