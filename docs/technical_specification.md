@@ -1174,7 +1174,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   /**
    * quit() raced against shutdownTimeoutMs (a SHUTDOWN_TIMEOUT CacheException rejects the race).
    * On timeout or failure: emits onEvent('error', { role: 'main', reason: 'forced_disconnect', shutdownTimeoutMs })
-   * and calls disconnect().
+   * and calls disconnect(). The Pub/Sub subscriber is closed the same way, with `role: 'subscriber'`.
    */
   onApplicationShutdown(): Promise<void>
 }
@@ -1208,7 +1208,7 @@ export interface ICacheEvents {
 | --------------------- | --------------------------------------------------------------- | ---------------------------------------- |
 | _(absent)_            | ioredis socket error                                            | `error` (message)                        |
 | `'handler_error'`     | A Pub/Sub handler threw or a payload failed to deserialize (§8) | `role: 'subscriber'`, `channel`, `error` |
-| `'forced_disconnect'` | Graceful `quit()` exceeded `shutdownTimeoutMs` (shutdown)       | `role: 'main'`, `shutdownTimeoutMs`      |
+| `'forced_disconnect'` | Graceful `quit()` exceeded `shutdownTimeoutMs` (shutdown)       | `role`, `shutdownTimeoutMs`              |
 
 ### 11.3 `parseRedisUrl`
 

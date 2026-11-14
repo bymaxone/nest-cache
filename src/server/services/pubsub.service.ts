@@ -31,11 +31,11 @@ import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import type { IPubSubHandler, IPubSubPatternHandler } from '../interfaces/pubsub-handler.interface'
 import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { closeClient } from '../utils/close-client'
 import { describeError } from '../utils/describe-error'
 import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
-import { releaseClient } from '../utils/release-client'
 import { resolveSerializer } from '../utils/resolve-serializer'
 import { validateRead } from '../utils/validate-read'
 
@@ -75,8 +75,11 @@ export class PubSubService implements OnApplicationShutdown {
   /** Resolved serializer: explicit option wins, then injected token, then JSON. */
   private readonly serializer: ISerializer
 
+  /** How long the subscriber's graceful quit may take at shutdown. */
+  private readonly shutdownTimeoutMs: number
+
   /**
-   * @param options - Resolved module options. Supplies the serializer.
+   * @param options - Resolved module options. Supplies the serializer and the shutdown timeout.
    * @param connection - Owns the main client and mints subscriber connections.
    *   Explicit `@Inject` — the published bundle is built without
    *   emitDecoratorMetadata, so type-only DI cannot resolve a class provider
@@ -94,6 +97,7 @@ export class PubSubService implements OnApplicationShutdown {
     @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
   ) {
     this.serializer = guardSerializer(resolveSerializer(options, injectedSerializer))
+    this.shutdownTimeoutMs = options.shutdownTimeoutMs
   }
 
   /**
@@ -212,25 +216,18 @@ export class PubSubService implements OnApplicationShutdown {
   }
 
   /**
-   * Closes the subscriber connection gracefully, forcing disconnect on failure. Runs on
-   * `onApplicationShutdown`, after the HTTP server has stopped, like the main client.
+   * Closes the subscriber connection gracefully within `shutdownTimeoutMs`, forcing a disconnect
+   * when the quit fails or is too slow. Runs on `onApplicationShutdown`, after the HTTP server has
+   * stopped, like the main client.
    */
   async onApplicationShutdown(): Promise<void> {
     this.#shutDown = true
-    if (!this.#subscriber) {
-      return
-    }
     const subscriber = this.#subscriber
-    this.#subscriber = null
-    // A subscriber that has ended has nothing to quit and nothing to disconnect.
-    if (subscriber.status === 'end') {
+    if (!subscriber) {
       return
     }
-    try {
-      await subscriber.quit()
-    } catch {
-      releaseClient(subscriber)
-    }
+    this.#subscriber = null
+    await closeClient(subscriber, this.shutdownTimeoutMs, () => this.emitForcedDisconnect())
   }
 
   // ─── Private ───────────────────────────────────────────────────────────────
@@ -364,6 +361,23 @@ export class PubSubService implements OnApplicationShutdown {
       })
     } catch {
       // Observability must never crash the subscriber connection.
+    }
+  }
+
+  /**
+   * Reports the forced teardown of the subscriber, the same `error` event with `reason:
+   * 'forced_disconnect'` the connection manager emits for the main client, so a silent teardown
+   * does not sit next to a signalled one. Swallows any throw from `onEvent`.
+   */
+  private emitForcedDisconnect(): void {
+    try {
+      this.events?.onEvent?.('error', {
+        role: 'subscriber',
+        reason: 'forced_disconnect',
+        shutdownTimeoutMs: this.shutdownTimeoutMs
+      })
+    } catch {
+      // Observability must never crash the shutdown.
     }
   }
 }
