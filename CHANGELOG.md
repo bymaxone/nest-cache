@@ -28,7 +28,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   spelled with, `%`, a digit, `A`-`F` or `u`, is never refused, and the check stops at a character class), and the new `KeyBuilder.idPrefixPattern` builds
   the pattern that matches the ids of one owner. A separator containing a glob character (`*`, `?`, `[`, `\`) is now
   rejected at registration under `'strict'`, since it widened every pattern built from it, `flushNamespace` included;
-  a separator holding an astral character, such as an emoji, is rejected there too (`INVALID_NAMESPACE`: use a BMP separator),
+  a separator holding an astral character, such as an emoji, or an unpaired surrogate is rejected there too (`INVALID_NAMESPACE`: use a BMP separator),
   since a pattern holding a surrogate cannot be judged exactly against the stored ids;
   under `'legacy'`, which still boots with such a separator, `idPrefixPattern` throws `INVALID_NAMESPACE` for a glob one, because
   every boundary of the composed pattern would be read as glob syntax.

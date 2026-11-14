@@ -106,7 +106,8 @@ function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
  * @throws {CacheException} `INVALID_NAMESPACE` when the namespace is empty,
  *   the separator is empty, the namespace contains the separator, the
  *   namespace contains a Redis glob metacharacter, `keyEscaping` is neither mode,
- *   or the mode is `'strict'` and the separator contains the escape character.
+ *   or the mode is `'strict'` and the separator contains the escape character, a glob
+ *   metacharacter, or a surrogate code unit (an astral character or an unpaired surrogate).
  */
 function validateNamespace(namespace: string, separator: string, keyEscaping: string): void {
   if (!namespace || namespace.trim() === '') {
@@ -142,7 +143,7 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
   // reaches Redis as U+FFFD, a pair is escaped whole), so the separator is asked to be BMP.
   if (keyEscaping === 'strict' && /[\ud800-\udfff]/.test(separator)) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'key separator contains an astral character',
+      reason: 'key separator contains a surrogate code unit',
       separator
     })
   }

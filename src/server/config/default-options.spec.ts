@@ -359,8 +359,8 @@ describe('validateOptions', () => {
   // An astral character is two surrogate code units. Strict escapes each unit of the separator, so a
   // pattern holding the pair or one half of it cannot be judged exactly: strict refuses such a
   // separator at registration and asks for a BMP one.
-  it.each(['\u{1F600}', 'a\u{1F600}', '\u{10FFFF}'])(
-    'rejects the astral separator %j under strict escaping',
+  it.each(['\u{1F600}', 'a\u{1F600}', '\u{10FFFF}', '\uD800', 'a\uDE00'])(
+    'rejects the surrogate-bearing separator %j under strict escaping',
     (separator) => {
       let caught: unknown
       try {
@@ -376,10 +376,10 @@ describe('validateOptions', () => {
       expect(caught).toBeInstanceOf(CacheException)
       expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
       expect((caught as CacheException).details).toEqual({
-        reason: 'key separator contains an astral character',
+        reason: 'key separator contains a surrogate code unit',
         separator
       })
-      expect((caught as Error).message).toContain('astral')
+      expect((caught as Error).message).toContain('unpaired surrogate')
     }
   )
 
