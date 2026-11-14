@@ -779,9 +779,10 @@ The same collision exists below the namespace: under `keyEscaping: 'legacy'` (th
 Error `details` are built to be safe to log:
 
 - A malformed `connection.url` throws `CONNECTION_FAILED` with `reason: 'invalid connection.url'` — the URL is omitted, because it may embed a password.
-- `SERIALIZATION_FAILED` carries the encoder's message, never the value being encoded.
+- `SERIALIZATION_FAILED` carries a fixed `error` text, never the encoder's message or the value being encoded. The encoder's own error is on `cause`.
 - `DESERIALIZATION_FAILED` carries a fixed `error` text and the `length` of the stored value, and nothing from its content — not a preview, not the parser's message, which quotes the start of its input. The exception is an `HttpException`, so a default Nest filter sends `details` to the HTTP client; a cached record holding PII or a token must never reach it.
-- `SCRIPT_EXECUTION_FAILED` (`originalError`) and `CONNECTION_FAILED` (`error`) carry the driver's own message: a Lua `error()` or a failing command can quote its arguments, and a connection error names the host and port. `cause` holds the original error. Log them, but do not forward them to an HTTP client.
+- `SCRIPT_EXECUTION_FAILED` and `CONNECTION_FAILED` carry a fixed `error` text and no driver message: a Lua `error()` or a failing command can quote its arguments, and a connection error names the host and port. `cause` holds the original error, and is never part of the response body. Log `cause`, do not forward it to an HTTP client.
+- `details` also carries values the caller or the host's own configuration supplied, echoed back as given: the key in `KEY_NOT_IN_SCOPE`, the `scopeId`, `name`, `pattern`, `namespace` and `separator` of the scope, script and namespace errors, and the option names and values of an invalid option. They reach the principal who sent them. A host that forwards `details` to a different principal than the caller should not forward these.
 
 ### Destructive operations are guarded in production
 
@@ -819,20 +820,20 @@ When integrating `@bymax-one/nest-cache` in production, verify each of the follo
 
 ## 🛡️ Security Table
 
-| Layer                 | Implementation                                                                                                                                                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Tenant Isolation      | Every key and channel is composed by `KeyBuilder`; no bare-key path in the typed API                                                                                                                                                       |
-| Namespace Validation  | An empty, separator-containing or glob-metacharacter namespace is rejected at bootstrap (`INVALID_NAMESPACE`)                                                                                                                              |
-| Key Validation        | An empty `prefix` or `id` is rejected (`INVALID_KEY`); `keyEscaping: 'strict'` makes the composition injective                                                                                                                             |
-| Admin Scope Allowlist | Scopes are declared at wiring and frozen; a caller names a scope by id and never supplies a pattern                                                                                                                                        |
-| Admin Read-Only       | `/admin` issues no mutating command, enforced by the `check:admin-readonly` build gate                                                                                                                                                     |
-| Deserialization       | A payload that is not valid JSON throws `DESERIALIZATION_FAILED`; valid JSON is not checked against `T`                                                                                                                                    |
-| Error Payloads        | The library puts no connection URL and no stored value in error `details`; the driver's own message (`originalError` of a failed script, `error` of a connection failure) and `cause` can carry more, so keep them out of client responses |
-| Destructive Ops       | `flushNamespace()` is blocked in production unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped                                                                                                                           |
-| Lua Execution         | Scripts are registered by name; call sites pass keys and arguments, never a script body                                                                                                                                                    |
-| Cluster Safety        | `scan`, `keys`, `flushNamespace` and `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on one node                                                                                                                              |
-| Transport             | `rediss://` sets TLS on the client; `connection.tls` covers a custom CA or mTLS                                                                                                                                                            |
-| Supply Chain          | Nothing is bundled and every dependency is a peer you pin; published with npm provenance                                                                                                                                                   |
+| Layer                 | Implementation                                                                                                                                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tenant Isolation      | Every key and channel is composed by `KeyBuilder`; no bare-key path in the typed API                                                                                                                  |
+| Namespace Validation  | An empty, separator-containing or glob-metacharacter namespace is rejected at bootstrap (`INVALID_NAMESPACE`)                                                                                         |
+| Key Validation        | An empty `prefix` or `id` is rejected (`INVALID_KEY`); `keyEscaping: 'strict'` makes the composition injective                                                                                        |
+| Admin Scope Allowlist | Scopes are declared at wiring and frozen; a caller names a scope by id and never supplies a pattern                                                                                                   |
+| Admin Read-Only       | `/admin` issues no mutating command, enforced by the `check:admin-readonly` build gate                                                                                                                |
+| Deserialization       | A payload that is not valid JSON throws `DESERIALIZATION_FAILED`; valid JSON is not checked against `T`                                                                                               |
+| Error Payloads        | The library puts no connection URL and no stored value in error `details`; the driver's own message is on `cause` only, and `cause` can carry more than `details`, so keep it out of client responses |
+| Destructive Ops       | `flushNamespace()` is blocked in production unless `allowFlushInProduction`; `SCAN` + `UNLINK`, namespace-scoped                                                                                      |
+| Lua Execution         | Scripts are registered by name; call sites pass keys and arguments, never a script body                                                                                                               |
+| Cluster Safety        | `scan`, `keys`, `flushNamespace` and `getClient` throw `UNSUPPORTED_IN_CLUSTER` instead of acting on one node                                                                                         |
+| Transport             | `rediss://` sets TLS on the client; `connection.tls` covers a custom CA or mTLS                                                                                                                       |
+| Supply Chain          | Nothing is bundled and every dependency is a peer you pin; published with npm provenance                                                                                                              |
 
 > [!IMPORTANT]
 > The namespace is the isolation boundary. Anything reached through `getClient()` or `pipeline()` sits outside it.

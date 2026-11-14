@@ -64,8 +64,9 @@ const ROOT = pkg.root
 // to absorb ordinary growth; here that is intended, so growth past the margin is raised and justified in
 // review. Measured sizes are taken after the comments are stripped.
 //
-// Server budget: 10 800 B, the 10 769 B measured plus 31 B of headroom. The measurement includes the
-// refusal of a client after a failed boot and the short `disconnectTimeout` every client is created with.
+// Server budget: 10 800 B, the 10 790 B measured plus 10 B of headroom. The measurement includes the
+// refusal of a client after a failed boot, the short `disconnectTimeout` every client is created with
+// and the fixed text that replaces a third party's message in `details`.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 10_800 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5.3 * 1024 },

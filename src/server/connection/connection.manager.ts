@@ -409,18 +409,21 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
           client.off('end', onEnd)
           outcome()
         }
-        const refuse = (error: string): void =>
+        // `details` is serialised into the HTTP body and the driver's message can name a host and a
+        // port, so it holds fixed text and the driver's error stays on `cause`.
+        const refuse = (error: string, cause?: unknown): void =>
           settle(() =>
             reject(
               new CacheException(
                 CACHE_ERROR_CODES.CONNECTION_FAILED,
                 { error },
-                HttpStatus.SERVICE_UNAVAILABLE
+                HttpStatus.SERVICE_UNAVAILABLE,
+                cause
               )
             )
           )
         const onReady = (): void => settle(resolve)
-        const onError = (err: Error): void => refuse(err.message)
+        const onError = (err: Error): void => refuse('connection error before ready', err)
         const onEnd = (): void => refuse('connection ended before ready')
         const timer = setTimeout(() => refuse('not ready within connectTimeout'), deadline)
         client.once('ready', onReady)

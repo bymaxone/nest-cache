@@ -15,7 +15,6 @@ import { Injectable } from '@nestjs/common'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ISerializer } from '../interfaces/serializer.interface'
-import { describeError } from './describe-error'
 
 /**
  * Fixed `details.error` of a failed decode. The engine's own `JSON.parse` message is
@@ -73,9 +72,12 @@ export class JsonSerializer implements ISerializer {
     try {
       return JSON.stringify(value)
     } catch (err) {
-      throw new CacheException(CACHE_ERROR_CODES.SERIALIZATION_FAILED, {
-        error: describeError(err)
-      })
+      throw new CacheException(
+        CACHE_ERROR_CODES.SERIALIZATION_FAILED,
+        { error: 'the value could not be encoded as JSON' },
+        undefined,
+        err
+      )
     }
   }
 

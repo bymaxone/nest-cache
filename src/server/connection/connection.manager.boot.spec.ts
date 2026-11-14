@@ -208,7 +208,12 @@ describe('ConnectionManager boot wait', () => {
     expect((thrown as CacheException).getStatus()).toBe(503)
     expect((thrown as CacheException).details).toEqual({ reason: 'boot_failed' })
     expect(JSON.stringify((thrown as CacheException).getResponse())).not.toContain('boom')
-    expect(((thrown as CacheException).cause as CacheException).details).toEqual({ error: 'boom' })
+    expect(((thrown as CacheException).cause as CacheException).details).toEqual({
+      error: 'connection error before ready'
+    })
+    expect((((thrown as CacheException).cause as CacheException).cause as Error).message).toBe(
+      'boom'
+    )
     expect(redisInstances).toHaveLength(opened)
   })
 
