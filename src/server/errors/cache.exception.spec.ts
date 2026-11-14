@@ -98,12 +98,50 @@ describe('CacheException', () => {
   // Codes with a non-500 entry in the error catalog (§12.2) default to their
   // canonical status without the caller passing `statusCode`.
   it.each([
-    [CACHE_ERROR_CODES.COMMAND_TIMEOUT, HttpStatus.GATEWAY_TIMEOUT],
+    [CACHE_ERROR_CODES.COMMAND_TIMEOUT, HttpStatus.SERVICE_UNAVAILABLE],
     [CACHE_ERROR_CODES.CONNECTION_LOST, HttpStatus.SERVICE_UNAVAILABLE],
     [CACHE_ERROR_CODES.INVALID_KEY, HttpStatus.BAD_REQUEST],
+    [CACHE_ERROR_CODES.INVALID_TTL, HttpStatus.BAD_REQUEST],
+    [CACHE_ERROR_CODES.SCOPE_NOT_FOUND, HttpStatus.NOT_FOUND],
+    [CACHE_ERROR_CODES.KEY_NOT_IN_SCOPE, HttpStatus.NOT_FOUND],
     [CACHE_ERROR_CODES.FLUSH_DISABLED_IN_PRODUCTION, HttpStatus.FORBIDDEN]
   ])('defaults %s to its canonical HTTP status', (code, status) => {
     expect(new CacheException(code).getStatus()).toBe(status)
+  })
+
+  // The whole table, so a code added or re-mapped later is a visible decision: an unavailable or
+  // timed-out backing service and a refused connection answer 503 (one "retry later" status), a
+  // caller's mistake a 4xx, and only a genuine internal fault or a boot-time configuration error 500.
+  it('maps every error code to the documented HTTP status', () => {
+    const status = (code: CacheErrorCode): number => new CacheException(code).getStatus()
+    const table = Object.fromEntries(
+      Object.values(CACHE_ERROR_CODES).map((code) => [code, status(code)])
+    )
+
+    expect(table).toEqual({
+      'cache.connection_failed': 500,
+      'cache.command_timeout': 503,
+      'cache.connection_lost': 503,
+      'cache.serialization_failed': 500,
+      'cache.deserialization_failed': 500,
+      'cache.invalid_namespace': 500,
+      'cache.invalid_key': 400,
+      'cache.script_not_registered': 500,
+      'cache.script_execution_failed': 500,
+      'cache.script_registry_missing': 500,
+      'cache.flush_disabled_in_production': 403,
+      'cache.cluster_misconfigured': 500,
+      'cache.sentinel_misconfigured': 500,
+      'cache.shutdown_timeout': 500,
+      'cache.unsupported_in_cluster': 500,
+      'cache.invalid_scope': 500,
+      'cache.scope_not_found': 404,
+      'cache.scope_not_readable': 500,
+      'cache.key_not_in_scope': 404,
+      'cache.invalid_ttl': 400,
+      'cache.validation_failed': 500,
+      'cache.invalid_options': 500
+    })
   })
 
   // A catalog code whose canonical status is 500 falls back to it.
