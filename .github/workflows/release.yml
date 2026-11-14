@@ -82,6 +82,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # `pnpm check:published`, inside `prepublishOnly`, checks the CHANGELOG against the git tags
+          # and fails on a shallow checkout that carries none.
+          fetch-depth: 0
           # Nothing here pushes: no credential is left in .git/config for the install to read.
           persist-credentials: false
 
