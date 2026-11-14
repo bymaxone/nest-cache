@@ -382,7 +382,7 @@ export interface BymaxCacheStandaloneConnection {
   retryStrategy?: (times: number) => number | null | void
   /** Default: reconnects only on 'READONLY' (replica failover) */
   reconnectOnError?: (err: Error) => boolean | 1 | 2
-  keepAlive?: number // Default: 0
+  keepAlive?: number // Default: 30000
   noDelay?: boolean // Default: true
   family?: 4 | 6 // Default: 4
 }
@@ -482,7 +482,7 @@ export interface BymaxCacheModuleAsyncOptions {
 | `connection.enableOfflineQueue`   | `boolean`                                 | No       | `false`                  |
 | `connection.retryStrategy`        | `function`                                | No       | exp. backoff             |
 | `connection.reconnectOnError`     | `function`                                | No       | reconnects on `READONLY` |
-| `connection.keepAlive`            | `number`                                  | No       | `0`                      |
+| `connection.keepAlive`            | `number`                                  | No       | `30000`                  |
 | `connection.noDelay`              | `boolean`                                 | No       | `true`                   |
 | `connection.family`               | `4 \| 6`                                  | No       | `4`                      |
 | `sentinel.sentinels`              | `SentinelAddress[]`                       | \*\*     | —                        |

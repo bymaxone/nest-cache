@@ -6,6 +6,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The `keepAlive` default is now 30 000 ms, as in ioredis, instead of 0. A zero left the operating system's own delay, which on
+  Linux is two hours, so a connection that went half-open (a NAT idle drop, a failover without a reset) stayed silent that
+  long; the dedicated Pub/Sub connection has no command traffic to notice it otherwise.
+
+### Fixed
+
+- The production guard of `flushNamespace()` now reads `NODE_ENV` trimmed and without regard to case, so `Production` or
+  `PRODUCTION` is production too. `prod` and other names are still not guessed at.
+- The README no longer says that `cache.connection_lost` is never thrown, that `cache.connection_failed` follows retries, or that
+  no error detail can carry a driver message: it documents what each code carries, the `lazyConnect` caveat with the default
+  `enableOfflineQueue: false`, and the new `keepAlive` default.
+
+#### Apply to a consumer
+
+A connection that went half-open is now probed after 30 s of idleness instead of the operating system's much longer delay;
+set `connection.keepAlive: 0` to keep the old behaviour. A deployment whose `NODE_ENV` is `Production` now has the flush guard
+that `production` always had.
+
 ### Fixed
 
 - The readiness wait at boot is bounded and cleans up after itself. It had no deadline and ignored the end of the connection, so a

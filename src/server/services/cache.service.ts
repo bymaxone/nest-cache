@@ -649,7 +649,10 @@ export class CacheService {
    *   (no usable top-level `scanStream`).
    */
   async flushNamespace(): Promise<number> {
-    if (process.env['NODE_ENV'] === PRODUCTION_ENV && !this.options.allowFlushInProduction) {
+    if (
+      process.env['NODE_ENV']?.trim().toLowerCase() === PRODUCTION_ENV &&
+      !this.options.allowFlushInProduction
+    ) {
       throw new CacheException(CACHE_ERROR_CODES.FLUSH_DISABLED_IN_PRODUCTION)
     }
 

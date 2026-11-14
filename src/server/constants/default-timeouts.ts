@@ -14,6 +14,13 @@ export const DEFAULT_COMMAND_TIMEOUT_MS = 5_000
 /** Default graceful-shutdown timeout when `shutdownTimeoutMs` is omitted. */
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000
 
+/**
+ * Default TCP keep-alive delay (ms), the ioredis default. A zero would leave the operating system's
+ * own delay, which on Linux is two hours, so a connection that went half-open (a NAT idle drop, a
+ * failover without a reset) would stay silent for that long.
+ */
+export const DEFAULT_KEEP_ALIVE_MS = 30_000
+
 /** Default `maxRetriesPerRequest` (NOT `null` — that value is BullMQ-specific). */
 export const DEFAULT_MAX_RETRIES_PER_REQUEST = 3
 

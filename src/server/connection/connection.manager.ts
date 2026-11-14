@@ -19,6 +19,7 @@ import { BYMAX_CACHE_EVENTS, BYMAX_CACHE_OPTIONS } from '../bymax-cache.constant
 import type { ResolvedOptions } from '../config/resolved-options'
 import {
   DEFAULT_COMMAND_TIMEOUT_MS,
+  DEFAULT_KEEP_ALIVE_MS,
   DEFAULT_CONNECT_TIMEOUT_MS,
   DEFAULT_MAX_RETRIES_PER_REQUEST,
   DEFAULT_RETRY_BASE_MS,
@@ -321,7 +322,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       enableOfflineQueue: c.enableOfflineQueue ?? false,
       retryStrategy: c.retryStrategy ?? this.defaultRetryStrategy,
       reconnectOnError: c.reconnectOnError ?? this.defaultReconnectOnError,
-      keepAlive: c.keepAlive ?? 0,
+      keepAlive: c.keepAlive ?? DEFAULT_KEEP_ALIVE_MS,
       noDelay: c.noDelay ?? true,
       family: c.family ?? 4,
       ...(c.host !== undefined && { host: c.host }),

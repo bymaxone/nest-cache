@@ -663,7 +663,7 @@ describe('ConnectionManager', () => {
       expect(opts['maxRetriesPerRequest']).toBe(3)
       expect(opts['enableReadyCheck']).toBe(true)
       expect(opts['enableOfflineQueue']).toBe(false)
-      expect(opts['keepAlive']).toBe(0)
+      expect(opts['keepAlive']).toBe(30_000)
       expect(opts['noDelay']).toBe(true)
       expect(opts['family']).toBe(4)
       expect('password' in opts).toBe(false)
