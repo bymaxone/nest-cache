@@ -31,7 +31,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `eslint-plugin-import-x` 4.18.1, reached only through test, mutation and lint tooling, so no dependency of the package moves
   (`dependencies` stays empty, the peers are unchanged). The newer lint plugin sorts parent before sibling imports as this
   repository's own configuration always asked, so seven source files reorder their import lines; that changes the order of
-  modules inside `dist/server` and nothing else: no code is added or removed.
+  modules inside `dist/server` and `dist/admin` and nothing else: no code is added or removed.
 
 ### Added
 
