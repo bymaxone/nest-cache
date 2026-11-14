@@ -23,6 +23,12 @@ export const GLOB_CHARS = '*?[\\'
 /** One escape token: `%XX` (ASCII) or `%uXXXX` (any other code unit). */
 const TOKEN = /(%[0-9A-F]{2}|%u[0-9A-F]{4})/
 
+/**
+ * The characters an escape token is spelled with: the escape character, the hex digits (uppercase) and
+ * the `u` of the long form. A separator character in this set also occurs inside tokens.
+ */
+const TOKEN_ALPHABET: ReadonlySet<string> = new Set('0123456789ABCDEFu%')
+
 /** Whether the code unit is a UTF-16 surrogate, which on its own has no UTF-8 encoding. */
 const isSurrogate = (unit: number): boolean => unit >= 0xd800 && unit <= 0xdfff
 
@@ -167,4 +173,58 @@ export function splitEscapedParts(
     }
   }
   return found && prefix !== '' && id !== '' ? { prefix, id } : null
+}
+
+/**
+ * Whether a glob pattern spells any code unit of `units` as a literal, before any character class.
+ *
+ * Up to the first unescaped `[` a pattern is plain characters, `*`, `?` and backslash escapes, so a
+ * unit it spells, raw or escaped, is one a stored id cannot supply. A character class is not parsed:
+ * Redis closes it by rules that include range endpoints and a leading closing bracket, a class can
+ * match text that holds none of its members, and a copy of those rules would be a second
+ * implementation to keep equal to the server's. A pattern with a class is therefore accepted from
+ * the bracket on, which can only let a pattern that matches nothing through, never refuse one that
+ * could match.
+ *
+ * @param pattern - The glob pattern.
+ * @param units - The code units to look for, one character each.
+ * @returns True when the pattern spells one of them before its first character class.
+ */
+export function holdsLiteralUnit(pattern: string, units: ReadonlySet<string>): boolean {
+  let escaped = false
+  for (const unit of pattern.split('')) {
+    if (escaped) {
+      escaped = false
+      if (units.has(unit)) {
+        return true
+      }
+    } else if (unit === '\\') {
+      escaped = true
+    } else if (unit === '[') {
+      return false
+    } else if (units.has(unit)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The code units of `separator` that no escape token is spelled with.
+ *
+ * Under strict escaping every separator character is rewritten, so a stored id never holds one of
+ * these: a pattern that does can never match. A separator character that is also a token
+ * character (a digit, `A`-`F`, `u`) is spelled inside tokens, so a pattern may hold it and still match,
+ * and it is left out. So is a surrogate unit: ioredis writes a key as UTF-8, where a lone surrogate
+ * becomes U+FFFD, which is not a separator unit, so a pattern holding one can match a stored id.
+ *
+ * @param separator - The configured key separator.
+ * @returns The code units a stored id cannot hold.
+ */
+export function unmatchableUnits(separator: string): ReadonlySet<string> {
+  return new Set(
+    separator
+      .split('')
+      .filter((unit) => !TOKEN_ALPHABET.has(unit) && !isSurrogate(unit.charCodeAt(0)))
+  )
 }

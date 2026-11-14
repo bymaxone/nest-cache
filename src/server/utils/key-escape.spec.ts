@@ -5,7 +5,14 @@
  * each token, the surrogate range edges and what the decoder accepts, so none of them can move
  * without a test failing.
  */
-import { buildEscapeSet, escapeKeyPart, splitEscapedParts, unescapeKeyPart } from './key-escape'
+import {
+  buildEscapeSet,
+  escapeKeyPart,
+  holdsLiteralUnit,
+  splitEscapedParts,
+  unescapeKeyPart,
+  unmatchableUnits
+} from './key-escape'
 
 /** Escapes `part` with the default separator and no glob characters. */
 const escape = (part: string, separator = ':', glob = false): string =>
@@ -155,5 +162,94 @@ describe('splitEscapedParts', () => {
   it('matches a multi-character separator whole', () => {
     expect(splitEscapedParts('a%61ab', 'ab')).toBeNull()
     expect(splitEscapedParts('xabz', 'ab')).toEqual({ prefix: 'x', id: 'z' })
+  })
+})
+
+describe('unmatchableUnits', () => {
+  // A separator character outside the token alphabet is spelled only raw, so a pattern holding it
+  // can never match; one inside the alphabet (a digit, uppercase hex, u) is also spelled in tokens.
+  it.each([
+    [':', [':']],
+    ['|', ['|']],
+    ['aa', ['a']],
+    ['G', ['G']],
+    ['v', ['v']],
+    ['/', ['/']],
+    ['6', []],
+    ['0', []],
+    ['9', []],
+    ['A', []],
+    ['F', []],
+    ['u', []],
+    ['25', []],
+    ['%', []],
+    ['\u{1F600}', []],
+    ['\u{1F600}:', [':']],
+    ['\uD83D', []],
+    ['\uDE00', []],
+    ['6:', [':']]
+  ])('keeps %j as %j', (separator, expected) => {
+    expect([...unmatchableUnits(separator)]).toEqual(expected)
+  })
+})
+
+describe('holdsLiteralUnit', () => {
+  const colon = new Set([':'])
+
+  // Without a character class the pattern is plain literals, `*`, `?` and escapes, so a separator
+  // unit it spells, raw or escaped, can never be matched by a stored id: the pattern is refused.
+  it.each(['u1:*', ':', 'a:b', 'ab:', 'a\\:b', 'x\\y:', 'u1:[a', '*:*'])(
+    'finds a literal : in %j before any class',
+    (pattern) => {
+      expect(holdsLiteralUnit(pattern, colon)).toBe(true)
+    }
+  )
+
+  // A class is not parsed. Redis closes it by rules this module does not copy (range endpoints, a
+  // closing bracket as the first member), so a pattern holding one is accepted whatever follows it.
+  it.each([
+    '[a:]*',
+    '[^:]*',
+    '[:]',
+    '[a-z:]x*',
+    '[a-]:]*',
+    '[a\\]:]*',
+    'x[a]:*',
+    '[',
+    'ab[',
+    'u1[a:]'
+  ])('accepts %j, which holds a character class', (pattern) => {
+    expect(holdsLiteralUnit(pattern, colon)).toBe(false)
+  })
+
+  // An escaped bracket is a plain character, not a class, so what follows it is still checked.
+  it('does not take an escaped bracket for a class', () => {
+    expect(holdsLiteralUnit('\\[:', colon)).toBe(true)
+    expect(holdsLiteralUnit('\\[a]:', colon)).toBe(true)
+  })
+
+  // Nothing is refused when the separator is not spelled at all.
+  it.each(['ab', '', '\\', 'a\\'])('finds no : in %j', (pattern) => {
+    expect(holdsLiteralUnit(pattern, colon)).toBe(false)
+  })
+
+  // An escape covers exactly one unit, so the unit after it keeps its meaning.
+  it('ends an escape after one unit, so the next unit keeps its glob meaning', () => {
+    expect(holdsLiteralUnit('\\x[a:]*', colon)).toBe(false)
+    expect(holdsLiteralUnit('\\x:[a]', colon)).toBe(true)
+    expect(holdsLiteralUnit('\\\\[a:]', colon)).toBe(false)
+  })
+
+  // A closing-bracket separator is a plain character outside a class, and refused there.
+  it('refuses a closing-bracket separator spelled outside a class', () => {
+    expect(holdsLiteralUnit('ab]', new Set([']']))).toBe(true)
+    expect(holdsLiteralUnit('[ab]*', new Set([']']))).toBe(false)
+    expect(holdsLiteralUnit('\\]', new Set([']']))).toBe(true)
+  })
+
+  // An empty set holds nothing, and the count is per code unit.
+  it('holds nothing for an empty set and counts each code unit', () => {
+    expect(holdsLiteralUnit(':', new Set())).toBe(false)
+    expect(holdsLiteralUnit('a\u{1F600}', new Set(['\uD83D']))).toBe(true)
   })
 })

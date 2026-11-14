@@ -97,22 +97,19 @@ function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
 }
 
 /**
- * Validates the namespace and key separator, the pair that forms this library's
- * isolation boundary.
+ * Validates the key separator and the escaping mode it is used with.
  *
- * @param namespace - The resolved namespace.
+ * Runs in the order the checks were written, which is the order a consumer is told about them:
+ * an empty separator, an unknown mode, then the strict-only restrictions.
+ *
  * @param separator - The resolved key separator.
  * @param keyEscaping - The resolved key composition mode.
- * @throws {CacheException} `INVALID_NAMESPACE` when the namespace is empty,
- *   the separator is empty, the namespace contains the separator, the
- *   namespace contains a Redis glob metacharacter, `keyEscaping` is neither mode,
- *   or the mode is `'strict'` and the separator contains the escape character.
+ * @throws {CacheException} `INVALID_NAMESPACE` when the separator is empty, `keyEscaping` is neither
+ *   mode, or the mode is `'strict'` and the separator contains the escape character, a surrogate
+ *   code unit (an astral character or an unpaired surrogate), or a glob metacharacter.
  */
-function validateNamespace(namespace: string, separator: string, keyEscaping: string): void {
-  if (!namespace || namespace.trim() === '') {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, { namespace })
-  }
-  // Checked before the `includes` guard below, which would otherwise absorb this
+function validateSeparator(separator: string, keyEscaping: string): void {
+  // Checked before the namespace `includes` guard, which would otherwise absorb this
   // case: `'anything'.includes('')` is true for every string, so an empty
   // separator used to be rejected by a check written for a different condition
   // and reported as "namespace contains key separator" — something the consumer
@@ -137,6 +134,42 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
       separator
     })
   }
+  // Only under strict. An astral character is two surrogate code units, and a pattern holding the
+  // pair or one half of it cannot be judged exactly against the ids strict stores (a lone surrogate
+  // reaches Redis as U+FFFD, a pair is escaped whole), so the separator is asked to be BMP.
+  if (keyEscaping === 'strict' && /[\ud800-\udfff]/.test(separator)) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+      reason: 'key separator contains a surrogate code unit',
+      separator
+    })
+  }
+  // Only under strict, like the `%` rule above. A glob character in the separator widens every
+  // pattern built from it, `flushNamespace`'s `{namespace}{separator}*` included.
+  const separatorGlob = keyEscaping === 'strict' ? findGlobMetacharacter(separator) : null
+  if (separatorGlob !== null) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+      reason: 'key separator contains glob metacharacter',
+      separator,
+      metacharacter: separatorGlob
+    })
+  }
+}
+
+/**
+ * Validates the namespace and key separator, the pair that forms this library's
+ * isolation boundary.
+ *
+ * @param namespace - The resolved namespace.
+ * @param separator - The resolved key separator.
+ * @param keyEscaping - The resolved key composition mode.
+ * @throws {CacheException} `INVALID_NAMESPACE` when the namespace is empty or contains a Redis glob
+ *   metacharacter or the separator, or when {@link validateSeparator} refuses the separator.
+ */
+function validateNamespace(namespace: string, separator: string, keyEscaping: string): void {
+  if (!namespace || namespace.trim() === '') {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, { namespace })
+  }
+  validateSeparator(separator, keyEscaping)
   const metacharacter = findGlobMetacharacter(namespace)
   if (metacharacter !== null) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {

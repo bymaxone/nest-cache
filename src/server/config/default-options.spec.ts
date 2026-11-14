@@ -329,6 +329,95 @@ describe('validateOptions', () => {
     )
   })
 
+  // A separator holding a glob character widens every pattern built from it, flushNamespace's
+  // included, so strict refuses it at registration, naming the character.
+  it.each(['*', '?', '[', '\\', 'a*b'])(
+    'rejects the separator %j under strict escaping',
+    (separator) => {
+      let caught: unknown
+      try {
+        validateOptions({
+          connection: { host: 'h' },
+          keyEscaping: 'strict',
+          keySeparator: separator
+        })
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+      expect((caught as CacheException).details).toEqual({
+        reason: 'key separator contains glob metacharacter',
+        separator,
+        metacharacter: separator.includes('*') ? '*' : separator
+      })
+      expect((caught as Error).message).toContain('glob metacharacter')
+    }
+  )
+
+  // An astral character is two surrogate code units. Strict escapes each unit of the separator, so a
+  // pattern holding the pair or one half of it cannot be judged exactly: strict refuses such a
+  // separator at registration and asks for a BMP one.
+  it.each(['\u{1F600}', 'a\u{1F600}', '\u{10FFFF}', '\uD800', 'a\uDE00'])(
+    'rejects the surrogate-bearing separator %j under strict escaping',
+    (separator) => {
+      let caught: unknown
+      try {
+        validateOptions({
+          connection: { host: 'h' },
+          keyEscaping: 'strict',
+          keySeparator: separator
+        })
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+      expect((caught as CacheException).details).toEqual({
+        reason: 'key separator contains a surrogate code unit',
+        separator
+      })
+      expect((caught as Error).message).toContain('unpaired surrogate')
+    }
+  )
+
+  // A BMP separator, accented or not, boots under strict, and legacy keeps booting with an astral one.
+  it('accepts a BMP separator under strict escaping and an astral one under legacy', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '\u00A7' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '\u2603' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keySeparator: '\u{1F600}' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({
+        connection: { host: 'h' },
+        keyEscaping: 'legacy',
+        keySeparator: '\u{1F600}'
+      })
+    ).not.toThrow()
+  })
+
+  // `]` alone is a literal to Redis, as for the namespace, and a plain separator is unaffected.
+  it('accepts a separator with ] or none of the glob characters under strict escaping', () => {
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: ']' })
+    ).not.toThrow()
+    expect(() =>
+      validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '|' })
+    ).not.toThrow()
+  })
+
+  // Legacy never rewrites a part, so a configuration that boots today keeps booting.
+  it('accepts a separator holding a glob character under legacy escaping', () => {
+    expect(() => validateOptions({ connection: { host: 'h' }, keySeparator: '*' })).not.toThrow()
+  })
+
   // The same separator boots under legacy: a patch must not start failing a configuration that
   // passes today.
   it('accepts a separator containing % under legacy escaping, explicit or default', () => {

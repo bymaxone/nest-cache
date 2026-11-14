@@ -331,7 +331,7 @@ Under `'strict'` each part is escaped, so **no two distinct `(prefix, id)` tuple
 The escape rewrites `%`, every character of the separator, glob metacharacters (`*`, `?`, `[`, `\`)
 in the `prefix`, and unpaired surrogates as `%XX` (ASCII) or `%uXXXX` tokens. A part holding none of
 those keeps its bytes, so most keys do not change. `keys()` and `scan()` escape only the `prefix` and
-pass the pattern through as a glob. A separator containing `%` is rejected under `'strict'`, and `escapePart` refuses it in either mode.
+pass the pattern through as a glob. A separator containing `%` or a glob character (`*`, `?`, `[`, `\`) is rejected under `'strict'`, and `escapePart` refuses a `%` separator in either mode. Under `'legacy'` a separator that is a glob character already makes every boundary of a `keys()` / `scan()` pattern glob syntax, and `idPrefixPattern` refuses that configuration (`INVALID_NAMESPACE`): use `'strict'`.
 
 ```ts
 BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'strict' })
@@ -339,6 +339,33 @@ BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, keyEscaping: 'stri
 
 Inject `KeyBuilder` for the helpers: `escapePart('tenant:7')` returns `'tenant%3A7'`, safe to join several
 fields into one `id`, and `parse('app:a%3Ab:c')` returns `{ prefix: 'a:b', id: 'c' }` under `'strict'`.
+
+The `scan()` / `keys()` pattern is a glob over the _escaped_ id, and a stored id holds no separator character under `'strict'`, so a pattern that spells one as a literal can never match and throws `INVALID_KEY` instead of returning nothing. A separator holding an astral character (an emoji, say) or an unpaired surrogate is rejected at registration under `'strict'`: use a BMP one. The check stops at the first character class (`[...]`): a class can match ids that hold none of its members, and Redis's rules for closing one are not copied here, so the pattern from the class on is accepted and may match nothing. A separator character that escape tokens are also spelled with is the exception: it cannot be told apart from a token, so it is never refused and a pattern holding it may match nothing. To sweep a composite id (every session of one user, say), build the ids from escaped fields and use `idPrefixPattern`:
+
+```ts
+import { Injectable } from '@nestjs/common'
+import { CacheService, KeyBuilder } from '@bymax-one/nest-cache'
+
+@Injectable()
+export class SessionStore {
+  constructor(
+    private readonly cache: CacheService,
+    private readonly keys: KeyBuilder
+  ) {}
+
+  async save(userId: string, sessionId: string): Promise<void> {
+    const id = [userId, sessionId].map((field) => this.keys.escapePart(field)).join(':')
+    await this.cache.set('sessions', id, { device: 'phone' })
+  }
+
+  async revokeAll(userId: string): Promise<void> {
+    // every key of userId, and no key of 'u10' when userId is 'u1'
+    for await (const key of this.cache.scan('sessions', this.keys.idPrefixPattern([userId]))) {
+      void key
+    }
+  }
+}
+```
 
 Turning `'strict'` on changes the key of every part the escape rewrites; a key with plain parts is the same in both modes, and `KeyBuilder.buildLegacy(prefix, id)` returns the unescaped key. Every instance sharing a Redis must run one mode: during a rolling deploy a lock or counter on a rewritten part is held once per mode. `CacheStatusService.config().keyEscaping` (from `./admin`) shows what an instance runs.
 

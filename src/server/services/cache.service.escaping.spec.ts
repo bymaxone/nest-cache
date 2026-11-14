@@ -7,6 +7,8 @@
  */
 import { applyDefaults } from '../config/default-options'
 import { ConnectionManager } from '../connection/connection.manager'
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
+import { CacheException } from '../errors/cache.exception'
 import { KeyBuilder } from '../utils/key-builder'
 import { CacheService } from './cache.service'
 
@@ -110,5 +112,60 @@ describe('CacheService under strict key escaping', () => {
       scanned.push(key)
     }
     expect(scanned).toEqual(['test:a]:x'])
+  })
+
+  // A sweep over a composite id works under strict through the helper and finds exactly the keys of
+  // that owner, not the neighbours whose escaped characters begin like it.
+  it('sweeps a composite id through idPrefixPattern, scan and keys', async () => {
+    const made = await setup('strict')
+    connection = made.connection
+    const builder = new KeyBuilder(
+      applyDefaults({ connection: { host: 'h' }, namespace: 'test', keyEscaping: 'strict' })
+    )
+    const idOf = (...fields: string[]): string => fields.map((f) => builder.escapePart(f)).join(':')
+    for (const fields of [
+      ['u1', 's1'],
+      ['u1', 's2'],
+      ['u10', 's1'],
+      ['u1%', 's1'],
+      ['u1*', 's1']
+    ]) {
+      await made.cache.set('sessions', idOf(...fields), fields.join('/'))
+    }
+    const pattern = builder.idPrefixPattern(['u1'])
+
+    const scanned: string[] = []
+    for await (const key of made.cache.scan('sessions', pattern)) {
+      scanned.push(key)
+    }
+
+    expect(scanned.sort()).toEqual(['test:sessions:u1%3As1', 'test:sessions:u1%3As2'])
+    expect((await made.cache.keys('sessions', pattern)).sort()).toEqual(scanned)
+  })
+
+  // The same sweep written with the raw separator can never match under strict, so it is refused
+  // instead of returning nothing.
+  it('refuses a raw-separator pattern on scan and on keys', async () => {
+    const made = await setup('strict')
+    connection = made.connection
+    await made.cache.set('sessions', 'u1:s1', 'a')
+
+    const onKeys = await made.cache.keys('sessions', 'u1:*').catch((error: unknown) => error)
+    const onScan = await (async (): Promise<unknown> => {
+      try {
+        for await (const _key of made.cache.scan('sessions', 'u1:*')) {
+          // drain
+        }
+      } catch (error) {
+        return error
+      }
+      return undefined
+    })()
+
+    for (const caught of [onKeys, onScan]) {
+      expect(caught).toBeInstanceOf(CacheException)
+      expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_KEY)
+      expect((caught as CacheException).details).toEqual({ reason: 'pattern_contains_separator' })
+    }
   })
 })

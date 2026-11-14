@@ -10,10 +10,13 @@ import { Inject, Injectable } from '@nestjs/common'
 import { BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
 import {
   ESCAPE_CHAR,
+  GLOB_CHARS,
   buildEscapeSet,
   escapeKeyPart,
+  holdsLiteralUnit,
   splitEscapedParts,
-  unescapeKeyPart
+  unescapeKeyPart,
+  unmatchableUnits
 } from './key-escape'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
@@ -35,6 +38,7 @@ export class KeyBuilder {
   private readonly strict: boolean
   private readonly partEscapes: ReadonlySet<string>
   private readonly prefixEscapes: ReadonlySet<string>
+  private readonly separatorUnits: ReadonlySet<string>
 
   /**
    * @param options - Resolved module options supplying the namespace, separator and escaping mode.
@@ -45,6 +49,7 @@ export class KeyBuilder {
     this.strict = options.keyEscaping === 'strict'
     this.partEscapes = buildEscapeSet(options.keySeparator, false)
     this.prefixEscapes = buildEscapeSet(options.keySeparator, true)
+    this.separatorUnits = unmatchableUnits(options.keySeparator)
   }
 
   /**
@@ -87,18 +92,72 @@ export class KeyBuilder {
    * Builds a `SCAN`/`KEYS` match pattern: the prefix is a literal and the pattern is a glob.
    *
    * Under `'strict'` the prefix is escaped, glob metacharacters included, so it cannot widen the
-   * match; the pattern is passed through untouched. Under `'legacy'` both are joined as given.
+   * match; the pattern is a glob over the escaped id and is passed through otherwise untouched.
+   * A stored id holds no separator character under `'strict'`, so a pattern that spells one as a
+   * literal before any character class can never match and is refused instead of returning nothing
+   * (a character class is not parsed, so a pattern with one is accepted); use {@link KeyBuilder.idPrefixPattern} to
+   * sweep a composite id. A separator character that is also spelled inside escape tokens (a digit,
+   * `A`-`F`, `u`) cannot be told apart from a token and is never refused. Under `'legacy'` both are
+   * joined as given.
    *
    * @param prefix - The entity-group prefix.
    * @param pattern - The glob for the id segment, e.g. `'*'`.
    * @returns `{namespace}{sep}{prefix}{sep}{pattern}`.
-   * @throws {CacheException} `INVALID_KEY` when `prefix` or `pattern` is empty.
+   * @throws {CacheException} `INVALID_KEY` when `prefix` or `pattern` is empty, or under `'strict'`
+   *   when `pattern` holds a character of the separator.
    */
   buildPattern(prefix: string, pattern: string): string {
     this.assertParts(prefix, pattern)
-    return this.strict
-      ? this.compose(escapeKeyPart(prefix, this.prefixEscapes), pattern)
-      : this.compose(prefix, pattern)
+    if (!this.strict) {
+      return this.compose(prefix, pattern)
+    }
+    if (holdsLiteralUnit(pattern, this.separatorUnits)) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, {
+        reason: 'pattern_contains_separator'
+      })
+    }
+    return this.compose(escapeKeyPart(prefix, this.prefixEscapes), pattern)
+  }
+
+  /**
+   * Builds the id-part glob that matches every composite id starting with the given leading fields.
+   *
+   * The ids are those composed the documented way: each field escaped with
+   * {@link KeyBuilder.escapePart}, joined with the separator and passed to `build()`. The trailing
+   * separator belongs to the prefix, so `['u1']` matches `u1:s1` and not `u10:s1`. Every field is
+   * escaped, so no glob character of its own survives and the trailing `*` is the only wildcard.
+   * Both modes escape the fields; only `'strict'` also escapes the joined id, as `build()` does.
+   * Under `'legacy'` a separator that is a glob character (`*`, `?`, `[`, `\`) makes every
+   * boundary of the composed pattern glob syntax, so it is refused: use `keyEscaping: 'strict'`.
+   *
+   * @param segments - The leading fields of the composite id, at least one, none empty.
+   * @returns The glob to pass to `scan()` or `keys()` as `pattern`.
+   * @throws {CacheException} `INVALID_KEY` when there is no field or one is empty, and
+   *   `INVALID_NAMESPACE` under `'legacy'` when the separator is a glob character.
+   */
+  idPrefixPattern(segments: readonly string[]): string {
+    if (segments.length === 0) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, { reason: 'empty_segments' })
+    }
+    if (segments.includes('')) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_KEY, { reason: 'empty_id' })
+    }
+    const fields = segments.map((segment) => this.escapePart(segment))
+    if (this.strict) {
+      return `${escapeKeyPart(fields.join(this.separator) + this.separator, this.partEscapes)}*`
+    }
+    // Legacy stores the joined id as it is, and `compose()` leaves the namespace and prefix boundaries
+    // of every pattern as the raw separator, so a separator that is a glob character would turn those
+    // boundaries into glob syntax that reaches into the owner field. Escaping only this part cannot fix that.
+    const glob = this.separator.split('').find((unit) => GLOB_CHARS.includes(unit))
+    if (glob !== undefined) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
+        reason: 'key separator contains glob metacharacter',
+        separator: this.separator,
+        metacharacter: glob
+      })
+    }
+    return `${fields.join(this.separator)}${this.separator}*`
   }
 
   /**
