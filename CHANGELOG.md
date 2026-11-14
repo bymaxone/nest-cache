@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.2.13] - 2026-11-12
+## [1.2.13] - 2026-11-13
 
 ### Added
 
@@ -69,7 +69,7 @@ A `shutdownTimeoutMs`, `connection.connectTimeout`, `connection.commandTimeout` 
 now refuses at registration; such a value never waited, so set the intended finite delay.
 
 Under `keyEscaping: 'strict'`, replace a `scan`/`keys` pattern that holds the separator with
-`KeyBuilder.idPrefixPattern`, and use a BMP separator without `*`, `?`, `[` or `\` (no emoji); nothing changes under `'legacy'`.
+`KeyBuilder.idPrefixPattern`, and use a BMP separator without `*`, `?`, `[` or `\` (no emoji). Under `'legacy'`, which still boots with such a separator, `idPrefixPattern` now throws `INVALID_NAMESPACE` for a separator holding `*`, `?`, `[` or `\`, where it used to return a pattern that could match other ids: pick a separator without those characters, or stop using `idPrefixPattern`.
 
 Code that matched on `error.message` to equal "Cache Exception" must match on `error.code` instead; the code and
 the `details` are unchanged. Code that caught the raw error a custom serializer threw must catch `CacheException`
