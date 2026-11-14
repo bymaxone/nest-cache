@@ -229,6 +229,54 @@ describe('ConnectionManager', () => {
       }
     })
 
+    // A cluster takes its timers from cluster.options.redisOptions, so the boot deadline is that
+    // connectTimeout and not the default (10 s) nor a `connection` value a cluster ignores.
+    it('uses the cluster redisOptions.connectTimeout as the boot deadline', async () => {
+      jest.useFakeTimers()
+      try {
+        const manager = makeManager({
+          mode: 'cluster',
+          cluster: {
+            nodes: [{ host: 'c', port: 6379 }],
+            options: { redisOptions: { connectTimeout: 60_000 } }
+          }
+        })
+
+        const init = manager.onModuleInit()
+        const settled = init.then(
+          () => 'resolved',
+          (error: unknown) => error
+        )
+        await jest.advanceTimersByTimeAsync(59_999)
+        expect(clusterInstances[0]?.disconnect).not.toHaveBeenCalled()
+        await jest.advanceTimersByTimeAsync(1)
+
+        await expect(settled).resolves.toMatchObject({
+          code: CACHE_ERROR_CODES.CONNECTION_FAILED,
+          details: { error: 'not ready within connectTimeout' }
+        })
+        expect(clusterInstances[0]?.disconnect).toHaveBeenCalledTimes(1)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    // A boot that failed released its client, so the shutdown Nest runs afterwards finds nothing to
+    // quit and reports no forced disconnect for a connection that was already closed.
+    it('leaves nothing to quit or report at shutdown after a failed boot', async () => {
+      const events: [string, Record<string, unknown>][] = []
+      const manager = makeManager({}, { onEvent: (name, data) => void events.push([name, data]) })
+
+      const init = manager.onModuleInit()
+      const client = redisInstances[0]
+      client?.emit('error', new Error('boom'))
+      await init.catch(() => undefined)
+      await manager.onApplicationShutdown()
+
+      expect(client?.quit).not.toHaveBeenCalled()
+      expect(events.filter(([, data]) => data['reason'] === 'forced_disconnect')).toEqual([])
+    })
+
     // A client that becomes ready leaves no timer behind and is not disconnected.
     it('clears the deadline and keeps the client when it becomes ready', async () => {
       jest.useFakeTimers()

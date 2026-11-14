@@ -30,7 +30,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 A host that catches errors from `CacheService` and keys on `cache.command_timeout` now sees it for a timed-out command, and
 `cache.connection_lost` (`reason: 'offline'`) while the connection is down; treat a timed-out write as unknown, not failed. If you set `connection.password`, `username`, `tls` or `lazyConnect` with `mode: 'cluster'`,
 move them to `cluster.options.redisOptions` (`lazyConnect` to `cluster.options`): they were ignored and are now refused. A boot that
-waited without limit, a server loading a large dataset included, now fails with `cache.connection_failed` after `connectTimeout`: raise `connection.connectTimeout` if your server takes longer to become ready.
+waited without limit, a server loading a large dataset included, now fails with `cache.connection_failed` after `connectTimeout`: raise `connection.connectTimeout` (`cluster.options.redisOptions.connectTimeout` in cluster mode) if your server takes longer to become ready.
 
 ### Fixed
 

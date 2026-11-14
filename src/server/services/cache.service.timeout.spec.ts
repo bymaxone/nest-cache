@@ -39,7 +39,10 @@ describe('CacheService command timeout', () => {
   })
 
   /** Makes the next `command` on the underlying client reject with `error`. */
-  const failWith = (command: 'get' | 'set' | 'incr', error: Error): void => {
+  const failWith = (
+    command: 'get' | 'set' | 'incr' | 'expire' | 'sismember',
+    error: Error
+  ): void => {
     jest.spyOn(connection.getClient(), command as 'get').mockRejectedValue(error)
   }
 
@@ -80,7 +83,9 @@ describe('CacheService command timeout', () => {
   // needs the distinct code: it must not assume the write failed.
   it.each([
     ['set', (): Promise<unknown> => cache.set('user', '1', { a: 1 })],
-    ['incr', (): Promise<unknown> => cache.incr('user', '1')]
+    ['incr', (): Promise<unknown> => cache.incr('user', '1')],
+    ['expire', (): Promise<unknown> => cache.expire('user', '1', 60)],
+    ['sismember', (): Promise<unknown> => cache.sismember('user', '1', 'm')]
   ] as const)('reports a timed-out %s as COMMAND_TIMEOUT', async (command, call) => {
     failWith(command, new Error('Command timed out'))
 
@@ -140,17 +145,13 @@ describe('CacheService command timeout', () => {
   // instrumented, so the pristine file is read from the repository instead.
   it('reaches the client only through the mapping accessor and the public getClient', () => {
     const pristine = __dirname.replace(/[\\/]\.stryker-tmp[\\/]sandbox-[^\\/]+/, '')
-    const lines = readFileSync(join(pristine, 'cache.service.ts'), 'utf8').split('\n')
+    const source = readFileSync(join(pristine, 'cache.service.ts'), 'utf8')
+    // A call may be split over lines (`this.connection\n  .getClient()`), so the whole file is scanned.
+    const declarations = [...source.matchAll(/^ {2}(?:private |async )*(\w+)(?:<[^>]*>)?\(/gm)]
     const readers = new Set<string>()
-    let method = ''
-    for (const line of lines) {
-      const declaration = /^ {2}(?:private |async )*(\w+)(?:<[^>]*>)?\(/.exec(line)
-      if (declaration?.[1] !== undefined) {
-        method = declaration[1]
-      }
-      if (line.includes('connection.getClient()')) {
-        readers.add(method)
-      }
+    for (const read of source.matchAll(/connection\s*\.\s*getClient\s*\(\)/g)) {
+      const enclosing = declarations.filter((d) => d.index < read.index).pop()
+      readers.add(enclosing?.[1] ?? '')
     }
 
     expect([...readers].sort()).toEqual(['client', 'getClient'])

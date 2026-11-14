@@ -288,9 +288,7 @@ export class CacheService {
    */
   async expire(prefix: string, id: string, ttlSeconds: number): Promise<boolean> {
     assertTtlSeconds(ttlSeconds, undefined)
-    const result = await this.connection
-      .getClient()
-      .expire(this.keyBuilder.build(prefix, id), ttlSeconds)
+    const result = await this.client().expire(this.keyBuilder.build(prefix, id), ttlSeconds)
     return result === 1
   }
 
@@ -515,9 +513,7 @@ export class CacheService {
    * @returns `true` when the member is present, otherwise `false`.
    */
   async sismember(prefix: string, id: string, member: string): Promise<boolean> {
-    const result = await this.connection
-      .getClient()
-      .sismember(this.keyBuilder.build(prefix, id), member)
+    const result = await this.client().sismember(this.keyBuilder.build(prefix, id), member)
     return result === 1
   }
 

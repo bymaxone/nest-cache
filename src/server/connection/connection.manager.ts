@@ -364,7 +364,12 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     if (client.status === 'ready') {
       return
     }
-    const deadline = this.options.connection?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
+    // A cluster takes its timers from `cluster.options.redisOptions`, every other mode from `connection`.
+    const timers =
+      this.options.mode === 'cluster'
+        ? this.options.cluster?.options?.redisOptions
+        : this.options.connection
+    const deadline = timers?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
     try {
       await new Promise<void>((resolve, reject) => {
         const settle = (outcome: () => void): void => {
@@ -385,8 +390,10 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         client.once('end', onEnd)
       })
     } catch (error) {
-      // A failed boot must not leave a client that keeps reconnecting.
+      // A failed boot must not leave a client that keeps reconnecting, nor one the shutdown that
+      // follows would try to quit.
       client.disconnect()
+      this.#client = null
       throw error
     }
   }
