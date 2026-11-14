@@ -78,6 +78,8 @@ export interface KeyspacePage {
   readonly isComplete: boolean
   /** The cap this page was read under, so a caller can say why it stopped. */
   readonly scanLimit: number
+  /** The most `SCAN` round trips this page was allowed, so a caller can say why it stopped. */
+  readonly scanRoundsLimit: number
   /** Cursor to continue from, or `null` when the scope was exhausted. */
   readonly cursor: string | null
 }

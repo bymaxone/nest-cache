@@ -39,6 +39,9 @@ const PRODUCTION_ENV = 'production'
 /** SCAN batch hint for the iterating helpers (`scan`, `flushNamespace`). */
 const SCAN_COUNT = 100
 
+/** Largest `COUNT` hint a `scan` call passes to Redis. */
+const MAX_SCAN_COUNT = 10_000
+
 /** Larger SCAN batch hint for the bulk delete path. */
 const FLUSH_SCAN_COUNT = 1000
 
@@ -564,7 +567,9 @@ export class CacheService {
    *
    * @param prefix - Entity-group prefix.
    * @param pattern - Glob pattern for the id segment, e.g. `'*'`.
-   * @param count - Per-batch hint passed to `SCAN` (not a hard limit).
+   * @param count - Per-batch hint passed to `SCAN` (not a hard limit): a whole number from 1 to
+   *   10 000. Anything else is clamped into that range, and a value that is not a whole number
+   *   falls back to 100.
    * @returns An async iterable of fully-namespaced keys.
    * @throws {CacheException} `UNSUPPORTED_IN_CLUSTER` when called in cluster mode
    *   (no usable top-level `scanStream`).
@@ -581,7 +586,8 @@ export class CacheService {
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'scan' })
     }
-    const stream = client.scanStream({ match: fullPattern, count })
+    const hint = Number.isInteger(count) ? Math.min(Math.max(count, 1), MAX_SCAN_COUNT) : SCAN_COUNT
+    const stream = client.scanStream({ match: fullPattern, count: hint })
     for await (const chunk of stream) {
       for (const key of chunk as string[]) {
         // ScanStream pushes string[] batches — ioredis internal contract

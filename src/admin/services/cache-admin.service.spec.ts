@@ -52,6 +52,7 @@ class FakeReader implements IRedisReader {
   readonly pipelines: FakePipeline[] = []
   readonly calls: string[][] = []
   private scanIndex = 0
+  readonly scanCursors: string[] = [] // the cursor each SCAN was issued with
 
   constructor(
     private readonly scans: readonly ScanStep[] = [['0', []]],
@@ -67,7 +68,12 @@ class FakeReader implements IRedisReader {
     } = {}
   ) {}
 
-  async scan(): Promise<[string, string[]]> {
+  async scan(cursor: string): Promise<[string, string[]]> {
+    // A scan that never ends would starve the microtask queue instead of failing a test.
+    if (this.scanIndex >= 1_000) {
+      throw new Error('runaway scan')
+    }
+    this.scanCursors.push(cursor)
     const step = this.scans[Math.min(this.scanIndex, this.scans.length - 1)]
     this.scanIndex += 1
     return [step![0], step![1]]
@@ -156,6 +162,43 @@ describe('CacheAdminService.listKeys', () => {
       { key: 'app:b', type: 'hash', ttl: { kind: 'persistent' }, sizeBytes: null }
     ])
     expect(page.sampledCount).toBe(2)
+  })
+
+  // A sparse scope never reaches the key limit, so the round cap bounds the request: the page is
+  // incomplete, empty here, and carries the cursor to continue from.
+  it('stops after scanRoundsLimit SCAN rounds and returns the cursor to resume from', async () => {
+    const reader = new FakeReader([['7', []]])
+    const page = await build(reader, { scanRoundsLimit: 3 }).listKeys('cache')
+
+    expect(reader.scanCursors).toEqual(['0', '7', '7'])
+    expect(page).toMatchObject({ isComplete: false, cursor: '7', scanRoundsLimit: 3, entries: [] })
+  })
+
+  it('caps a request at 100 SCAN rounds by default', async () => {
+    const reader = new FakeReader([['7', []]])
+    const page = await build(reader).listKeys('cache')
+
+    expect(reader.scanCursors).toHaveLength(100)
+    expect(page).toMatchObject({ isComplete: false, cursor: '7', scanRoundsLimit: 100 })
+  })
+
+  // Resuming from the returned cursor continues the walk: with the keyspace unchanged in between,
+  // no key comes back twice and none is skipped.
+  it('resumes from the cursor without repeating a key when the keyspace is unchanged', async () => {
+    const reader = new FakeReader(
+      [
+        ['7', ['app:a']],
+        ['0', ['app:b']]
+      ],
+      { pipelineReplies: describeReplies([['string', -1]]) }
+    )
+    const service = build(reader, { scanRoundsLimit: 1 })
+    const first = await service.listKeys('cache')
+    const second = await service.listKeys('cache', { cursor: first.cursor ?? '' })
+
+    expect(reader.scanCursors).toEqual(['0', '7'])
+    expect([first.isComplete, second.isComplete, second.cursor]).toEqual([false, true, null])
+    expect([...first.entries, ...second.entries].map((e) => e.key)).toEqual(['app:a', 'app:b'])
   })
 
   // `commandBatchLimit` caps the commands queued per Redis round-trip, and the

@@ -17,8 +17,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   below their minimum, not a finite integer, or above 2147483647 ms. `details` are unchanged. The admin
   `probeTimeoutMs` keeps `cache.invalid_scope`, the administration surface's code.
 
+### Added
+
+- `scanRoundsLimit` (admin option, default 100, a whole number from 1 to 10 000, refused with `cache.invalid_scope` naming the option
+  otherwise) caps the `SCAN` round trips one `listKeys` request makes, and `KeyspacePage` carries it as `scanRoundsLimit`. A scope
+  that matches few keys never reached `scanLimit`, so one request walked the whole keyspace serially on the shared connection. Past
+  the cap the page is incomplete, possibly empty, and `cursor` says where to continue.
+
 ### Fixed
 
+- The `COUNT` hint of `CacheService.scan()` is a whole number from 1 to 10 000: a larger value is clamped, a smaller one raised to 1,
+  and a value that is not a whole number (`NaN`, `Infinity`, `2.5`) falls back to 100. An application that forwarded a caller's
+  value could ask Redis for a batch of any size.
 - The production guard of `flushNamespace()` now reads `NODE_ENV` trimmed and without regard to case, so `Production` or
   `PRODUCTION` is production too. `prod` and other names are still not guessed at.
 - The README no longer says that `cache.connection_lost` is never thrown, that `cache.connection_failed` follows retries, or that
@@ -55,6 +65,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `isReadable: false`.
 
 #### Apply to a consumer
+
+A `listKeys` page can now be incomplete and empty with a `cursor`: loop on `listKeys(scopeId, { cursor })` until `isComplete` is
+`true` (each request makes at most `scanRoundsLimit` round trips). While keys are written `SCAN` can return a key twice, so
+deduplicate if it matters. `KeyspacePage` has a new `scanRoundsLimit` field.
 
 A connection that went half-open is now probed after 30 s of idleness instead of the operating system's much longer delay;
 set `connection.keepAlive: 0` to keep the old behaviour. A deployment whose `NODE_ENV` is `Production` now has the flush guard

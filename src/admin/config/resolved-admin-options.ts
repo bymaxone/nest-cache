@@ -12,6 +12,8 @@ import {
   DEFAULT_DEGRADED_ABOVE_MS,
   DEFAULT_PROBE_TIMEOUT_MS,
   DEFAULT_SCAN_LIMIT,
+  DEFAULT_SCAN_ROUNDS_LIMIT,
+  MAX_SCAN_ROUNDS_LIMIT,
   DEFAULT_COMMAND_BATCH_LIMIT,
   DEFAULT_REVEAL_LIMIT,
   DEFAULT_REVEAL_STRING_LIMIT
@@ -28,6 +30,7 @@ export interface ResolvedAdminOptions {
   readonly degradedAboveMs: number
   readonly probeTimeoutMs: number
   readonly scanLimit: number
+  readonly scanRoundsLimit: number
   readonly commandBatchLimit: number
   readonly revealLimit: number
   readonly revealStringLimit: number
@@ -78,6 +81,7 @@ export function resolveAdminOptions(
     degradedAboveMs: options.degradedAboveMs ?? DEFAULT_DEGRADED_ABOVE_MS,
     probeTimeoutMs: options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
     scanLimit: options.scanLimit ?? DEFAULT_SCAN_LIMIT,
+    scanRoundsLimit: options.scanRoundsLimit ?? DEFAULT_SCAN_ROUNDS_LIMIT,
     commandBatchLimit: options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT,
     revealLimit: options.revealLimit ?? DEFAULT_REVEAL_LIMIT,
     revealStringLimit: options.revealStringLimit ?? DEFAULT_REVEAL_STRING_LIMIT,
@@ -95,6 +99,15 @@ export function resolveAdminOptions(
     })
   }
   requirePositiveInteger('scanLimit', resolved.scanLimit)
+  requirePositiveInteger('scanRoundsLimit', resolved.scanRoundsLimit)
+  if (resolved.scanRoundsLimit > MAX_SCAN_ROUNDS_LIMIT) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
+      reason: 'threshold too large',
+      option: 'scanRoundsLimit',
+      value: resolved.scanRoundsLimit,
+      max: MAX_SCAN_ROUNDS_LIMIT
+    })
+  }
   requirePositiveInteger('commandBatchLimit', resolved.commandBatchLimit)
   requirePositiveInteger('revealLimit', resolved.revealLimit)
   requirePositiveInteger('revealStringLimit', resolved.revealStringLimit)
