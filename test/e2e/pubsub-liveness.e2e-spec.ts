@@ -77,8 +77,8 @@ describe('Pub/Sub liveness (real Redis)', () => {
   }, 30_000)
 
   // The server executes the UNSUBSCRIBE but its reply never reaches the client, so the call rejects
-  // at the command timeout. ioredis only forgets a channel when the reply arrives, so the reconnect
-  // that follows would subscribe it again: the application released it and the server holds it.
+  // at the command timeout. The reconnect that follows must not subscribe the channel again: the
+  // server must not hold a subscription the application released.
   it('leaves no server-side subscription after an unsubscribe whose reply was lost', async () => {
     const proxy = new TcpProxy(await getFreePort(), {
       host: '127.0.0.1',
@@ -118,8 +118,8 @@ describe('Pub/Sub liveness (real Redis)', () => {
     }
   }, 30_000)
 
-  // The server stops answering and the application shuts down. The subscriber's QUIT is bounded only
-  // by the command timeout, so a long command timeout must not stretch a short shutdown timeout.
+  // The server stops answering and the application shuts down. An unresponsive subscriber must close
+  // within the shutdown deadline even when its command timeout is longer.
   it('ends the shutdown of an unresponsive server within shutdownTimeoutMs', async () => {
     const app = await bootCacheApp({
       connection: { url: redis.url, commandTimeout: 8_000 },
