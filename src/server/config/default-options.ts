@@ -201,18 +201,6 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
 }
 
 /**
- * The `connection` options a cluster ignores, each with the place a cluster takes it from. The
- * cluster client is built from `cluster`, so setting one here would leave a password or TLS silently
- * unconfigured.
- */
-const CLUSTER_IGNORED_CONNECTION_OPTIONS = [
-  ['password', 'cluster.options.redisOptions.password'],
-  ['username', 'cluster.options.redisOptions.username'],
-  ['tls', 'cluster.options.redisOptions.tls'],
-  ['lazyConnect', 'cluster.options.lazyConnect']
-] as const
-
-/**
  * Validates the cluster-specific options.
  *
  * @param options - The raw consumer options, already known to carry a `cluster` block.
@@ -220,8 +208,17 @@ const CLUSTER_IGNORED_CONNECTION_OPTIONS = [
  *   set, or when a timer in `cluster.options.redisOptions` is out of range.
  */
 function validateClusterOptions(options: BymaxCacheModuleOptions): void {
-  for (const [option, target] of CLUSTER_IGNORED_CONNECTION_OPTIONS) {
-    if (options.connection?.[option] !== undefined) {
+  const connection = options.connection
+  // Each option a cluster ignores, with the place a cluster takes it from: the cluster client is
+  // built from `cluster`, so one set here would leave a password or TLS silently unconfigured.
+  const ignored = [
+    ['password', connection?.password, 'cluster.options.redisOptions.password'],
+    ['username', connection?.username, 'cluster.options.redisOptions.username'],
+    ['tls', connection?.tls, 'cluster.options.redisOptions.tls'],
+    ['lazyConnect', connection?.lazyConnect, 'cluster.options.lazyConnect']
+  ] as const
+  for (const [option, value, target] of ignored) {
+    if (value !== undefined) {
       throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
         reason: `connection.${option} is ignored in cluster mode; set ${target}`,
         option: `connection.${option}`

@@ -8,6 +8,31 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The readiness wait at boot is bounded and cleans up after itself. It had no deadline and ignored the end of the connection, so a
+  server that accepts the socket and never answers, or a `retryStrategy` that returns `null`, held `onModuleInit` forever, and a
+  failed wait left the client reconnecting with nothing left to close it. It now ends at `connectTimeout` or when the client
+  ends, rejects with `cache.connection_failed` and disconnects the client.
+- Cluster mode validates what it uses. The timers in `cluster.options.redisOptions` (`connectTimeout`, `commandTimeout`) get the
+  same rule as the standalone ones, so `NaN` or a delay above 2147483647 ms no longer times every command out at once. The
+  `connection` options a cluster ignored without a word (`password`, `username`, `tls`, `lazyConnect`) are refused at registration
+  with `cache.invalid_options`, naming where to set each. A cluster created with `cluster.options.lazyConnect` no longer waits for
+  readiness at init.
+- A command that exceeds `commandTimeout` through `CacheService` now rejects with `cache.command_timeout` (HTTP 504), with ioredis's
+  error on `cause`, instead of a bare `Error`. The server may still have applied the command, so a timed-out `incr`, `setNx` or
+  `eval` is not known to have failed. With the offline queue off (the default here), a call while the connection is down, which
+  ioredis rejects at once with `Stream isn't writeable and enableOfflineQueue options is false`, now rejects with
+  `cache.connection_lost` (HTTP 503, `details.reason: 'offline'`, the original on `cause`). `getClient()` still returns the raw
+  client, and `ScriptManagerService` and `PubSubService` are not mapped.
+
+#### Apply to a consumer
+
+A host that catches errors from `CacheService` and keys on `cache.command_timeout` now sees it for a timed-out command, and
+`cache.connection_lost` (`reason: 'offline'`) while the connection is down; treat a timed-out write as unknown, not failed. If you set `connection.password`, `username`, `tls` or `lazyConnect` with `mode: 'cluster'`,
+move them to `cluster.options.redisOptions` (`lazyConnect` to `cluster.options`): they were ignored and are now refused. A boot that
+waited without limit now fails with `cache.connection_failed` after `connectTimeout`.
+
+### Fixed
+
 - A malformed `connection.url` is now refused with the structured `cache.connection_failed` (`details.reason:
 'invalid connection.url'`, no URL) in every mode. In `sentinel` and `cluster` mode the check was skipped and the raw
   parse error escaped the connection manager's constructor; that error's enumerable `input` holds the whole URL, so a

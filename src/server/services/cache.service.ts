@@ -26,6 +26,7 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
@@ -60,6 +61,7 @@ const isScannableClient = (client: Redis | Cluster): client is Redis =>
 export class CacheService {
   /** Resolved serializer: explicit option wins, then injected token, then JSON. */
   private readonly serializer: ISerializer
+  #guarded?: { client: object; proxy: ReturnType<ConnectionManager['getClient']> }
 
   /**
    * @param options - Resolved module options (frozen). Supplies `serializer`
@@ -87,6 +89,19 @@ export class CacheService {
     this.serializer = guardSerializer(resolveSerializer(options, injectedSerializer))
   }
 
+  /**
+   * The client every command goes through, wrapped so a timed-out command reports `COMMAND_TIMEOUT`.
+   *
+   * @returns The connection's client behind the timeout mapping.
+   */
+  private client(): ReturnType<ConnectionManager['getClient']> {
+    const client = this.connection.getClient()
+    if (this.#guarded?.client !== client) {
+      this.#guarded = { client, proxy: guardClient(client) }
+    }
+    return this.#guarded.proxy
+  }
+
   // ─── String / value commands ───────────────────────────────────────────────
 
   /**
@@ -104,7 +119,7 @@ export class CacheService {
    */
   async get<T>(prefix: string, id: string, options?: ReadOptions<T>): Promise<T | null> {
     const key = this.keyBuilder.build(prefix, id)
-    const raw = await this.connection.getClient().get(key)
+    const raw = await this.client().get(key)
     if (raw === null) {
       return null
     }
@@ -119,7 +134,7 @@ export class CacheService {
    * @returns The raw string, or `null` when the key does not exist.
    */
   async getRaw(prefix: string, id: string): Promise<string | null> {
-    return this.connection.getClient().get(this.keyBuilder.build(prefix, id))
+    return this.client().get(this.keyBuilder.build(prefix, id))
   }
 
   /**
@@ -140,9 +155,9 @@ export class CacheService {
     const raw = this.serializer.serialize(value)
     if (ttlSeconds !== undefined) {
       assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
-      await this.connection.getClient().set(key, raw, 'EX', ttlSeconds)
+      await this.client().set(key, raw, 'EX', ttlSeconds)
     } else {
-      await this.connection.getClient().set(key, raw)
+      await this.client().set(key, raw)
     }
   }
 
@@ -161,9 +176,9 @@ export class CacheService {
     const key = this.keyBuilder.build(prefix, id)
     if (ttlSeconds !== undefined) {
       assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
-      await this.connection.getClient().set(key, value, 'EX', ttlSeconds)
+      await this.client().set(key, value, 'EX', ttlSeconds)
     } else {
-      await this.connection.getClient().set(key, value)
+      await this.client().set(key, value)
     }
   }
 
@@ -186,8 +201,8 @@ export class CacheService {
     if (ttlSeconds !== undefined) assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
     const result =
       ttlSeconds !== undefined
-        ? await this.connection.getClient().set(key, raw, 'EX', ttlSeconds, 'NX')
-        : await this.connection.getClient().set(key, raw, 'NX')
+        ? await this.client().set(key, raw, 'EX', ttlSeconds, 'NX')
+        : await this.client().set(key, raw, 'NX')
     return result === 'OK'
   }
 
@@ -199,7 +214,7 @@ export class CacheService {
    * @returns The number of keys removed (`0` or `1`).
    */
   async del(prefix: string, id: string): Promise<number> {
-    return this.connection.getClient().del(this.keyBuilder.build(prefix, id))
+    return this.client().del(this.keyBuilder.build(prefix, id))
   }
 
   /**
@@ -214,7 +229,7 @@ export class CacheService {
       return 0
     }
     const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
-    return this.connection.getClient().del(...keys)
+    return this.client().del(...keys)
   }
 
   /**
@@ -225,7 +240,7 @@ export class CacheService {
    * @returns `true` when the key exists, otherwise `false`.
    */
   async exists(prefix: string, id: string): Promise<boolean> {
-    const count = await this.connection.getClient().exists(this.keyBuilder.build(prefix, id))
+    const count = await this.client().exists(this.keyBuilder.build(prefix, id))
     return count > 0
   }
 
@@ -242,9 +257,7 @@ export class CacheService {
    */
   async incr(prefix: string, id: string, by = 1): Promise<number> {
     const key = this.keyBuilder.build(prefix, id)
-    return by === 1
-      ? this.connection.getClient().incr(key)
-      : this.connection.getClient().incrby(key, by)
+    return by === 1 ? this.client().incr(key) : this.client().incrby(key, by)
   }
 
   /**
@@ -258,9 +271,7 @@ export class CacheService {
    */
   async decr(prefix: string, id: string, by = 1): Promise<number> {
     const key = this.keyBuilder.build(prefix, id)
-    return by === 1
-      ? this.connection.getClient().decr(key)
-      : this.connection.getClient().decrby(key, by)
+    return by === 1 ? this.client().decr(key) : this.client().decrby(key, by)
   }
 
   // ─── Expiration commands ───────────────────────────────────────────────────
@@ -292,7 +303,7 @@ export class CacheService {
    *   exists with no expiration.
    */
   async ttl(prefix: string, id: string): Promise<number> {
-    return this.connection.getClient().ttl(this.keyBuilder.build(prefix, id))
+    return this.client().ttl(this.keyBuilder.build(prefix, id))
   }
 
   /**
@@ -304,7 +315,7 @@ export class CacheService {
    *   or does not exist.
    */
   async persist(prefix: string, id: string): Promise<boolean> {
-    const result = await this.connection.getClient().persist(this.keyBuilder.build(prefix, id))
+    const result = await this.client().persist(this.keyBuilder.build(prefix, id))
     return result === 1
   }
 
@@ -331,7 +342,7 @@ export class CacheService {
       return []
     }
     const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
-    const values = await this.connection.getClient().mget(...keys)
+    const values = await this.client().mget(...keys)
     const decoded: Array<T | null> = []
     // One at a time, in order, so the element a failure names is the first bad one.
     for (const [index, value] of values.entries()) {
@@ -357,7 +368,7 @@ export class CacheService {
     for (const [id, value] of entries) {
       pairs.push(this.keyBuilder.build(prefix, id), this.serializer.serialize(value))
     }
-    await this.connection.getClient().mset(...pairs)
+    await this.client().mset(...pairs)
   }
 
   // ─── Hash commands ─────────────────────────────────────────────────────────
@@ -382,7 +393,7 @@ export class CacheService {
     options?: ReadOptions<T>
   ): Promise<T | null> {
     const key = this.keyBuilder.build(prefix, id)
-    const raw = await this.connection.getClient().hget(key, field)
+    const raw = await this.client().hget(key, field)
     if (raw === null) {
       return null
     }
@@ -402,7 +413,7 @@ export class CacheService {
    */
   async hset<T>(prefix: string, id: string, field: string, value: T): Promise<number> {
     const key = this.keyBuilder.build(prefix, id)
-    return this.connection.getClient().hset(key, field, this.serializer.serialize(value))
+    return this.client().hset(key, field, this.serializer.serialize(value))
   }
 
   /**
@@ -423,7 +434,7 @@ export class CacheService {
     options?: ReadOptions<T>
   ): Promise<Record<string, T>> {
     const key = this.keyBuilder.build(prefix, id)
-    const all = await this.connection.getClient().hgetall(key)
+    const all = await this.client().hgetall(key)
     // Build the record via fromEntries rather than a dynamic `result[field] = …`
     // write — the latter is a flagged object-injection sink (security plugin).
     const entries: Array<[string, T]> = []
@@ -446,7 +457,7 @@ export class CacheService {
       return 0
     }
     const key = this.keyBuilder.build(prefix, id)
-    return this.connection.getClient().hdel(key, ...fields)
+    return this.client().hdel(key, ...fields)
   }
 
   // ─── Set commands ──────────────────────────────────────────────────────────
@@ -466,7 +477,7 @@ export class CacheService {
     if (members.length === 0) {
       return 0
     }
-    return this.connection.getClient().sadd(this.keyBuilder.build(prefix, id), ...members)
+    return this.client().sadd(this.keyBuilder.build(prefix, id), ...members)
   }
 
   /**
@@ -481,7 +492,7 @@ export class CacheService {
     if (members.length === 0) {
       return 0
     }
-    return this.connection.getClient().srem(this.keyBuilder.build(prefix, id), ...members)
+    return this.client().srem(this.keyBuilder.build(prefix, id), ...members)
   }
 
   /**
@@ -492,7 +503,7 @@ export class CacheService {
    * @returns The raw string members; `[]` when the set does not exist.
    */
   async smembers(prefix: string, id: string): Promise<string[]> {
-    return this.connection.getClient().smembers(this.keyBuilder.build(prefix, id))
+    return this.client().smembers(this.keyBuilder.build(prefix, id))
   }
 
   /**
@@ -518,7 +529,7 @@ export class CacheService {
    * @returns The member count; `0` when the set does not exist.
    */
   async scard(prefix: string, id: string): Promise<number> {
-    return this.connection.getClient().scard(this.keyBuilder.build(prefix, id))
+    return this.client().scard(this.keyBuilder.build(prefix, id))
   }
 
   // ─── Iteration ─────────────────────────────────────────────────────────────
@@ -542,7 +553,7 @@ export class CacheService {
    */
   async keys(prefix: string, pattern: string): Promise<string[]> {
     const fullPattern = this.keyBuilder.buildPattern(prefix, pattern)
-    const client = this.connection.getClient()
+    const client = this.client()
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'keys' })
     }
@@ -570,7 +581,7 @@ export class CacheService {
    */
   async *scan(prefix: string, pattern: string, count = SCAN_COUNT): AsyncIterable<string> {
     const fullPattern = this.keyBuilder.buildPattern(prefix, pattern)
-    const client = this.connection.getClient()
+    const client = this.client()
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'scan' })
     }
@@ -601,7 +612,7 @@ export class CacheService {
    * ```
    */
   pipeline(): ChainableCommander {
-    return this.connection.getClient().pipeline()
+    return this.client().pipeline()
   }
 
   /**
@@ -646,7 +657,7 @@ export class CacheService {
       throw new CacheException(CACHE_ERROR_CODES.FLUSH_DISABLED_IN_PRODUCTION)
     }
 
-    const client = this.connection.getClient()
+    const client = this.client()
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, {
         operation: 'flushNamespace'
@@ -710,7 +721,7 @@ export class CacheService {
    */
   async isHealthy(): Promise<boolean> {
     try {
-      const pong = await this.connection.getClient().ping()
+      const pong = await this.client().ping()
       return pong === 'PONG'
     } catch {
       return false
@@ -725,7 +736,7 @@ export class CacheService {
    * @throws The underlying ioredis error when the connection is down.
    */
   async ping(): Promise<string> {
-    return this.connection.getClient().ping()
+    return this.client().ping()
   }
 
   /**
@@ -736,7 +747,7 @@ export class CacheService {
    * @returns The `INFO` text.
    */
   async info(section?: string): Promise<string> {
-    const client = this.connection.getClient()
+    const client = this.client()
     return section === undefined ? client.info() : client.info(section)
   }
 
