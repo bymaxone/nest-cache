@@ -123,8 +123,8 @@ describe('ScriptManagerService', () => {
   })
 
   // If the retry after a NOSCRIPT reload also fails, it must surface as
-  // SCRIPT_EXECUTION_FAILED (the inner retry catch) carrying the script name and
-  // the original retry error in details. The details assertion kills the
+  // SCRIPT_EXECUTION_FAILED (the inner retry catch) carrying the script name and fixed
+  // text in details, with the original retry error on cause. The details assertion kills the
   // ObjectLiteral mutant that empties the reload+retry catch's details to `{}`.
   it('wraps a failed NOSCRIPT retry as SCRIPT_EXECUTION_FAILED', async () => {
     evalsha
@@ -162,7 +162,7 @@ describe('ScriptManagerService', () => {
   })
 
   // A non-NOSCRIPT error must be wrapped as SCRIPT_EXECUTION_FAILED with the
-  // original message preserved in details (Error branch of describeError),
+  // original message kept on cause, not in details,
   // and must FAIL FAST — no reload (SCRIPT LOAD) and no retry. The pre-load +
   // mockClear isolates the lazy first load so the call counts pin the NOSCRIPT
   // guard: they kill the `NOSCRIPT_MARKER = ''` mutant, under which `.includes('')`
@@ -227,7 +227,7 @@ describe('ScriptManagerService', () => {
   })
 
   // A cluster EVAL failure must surface as SCRIPT_EXECUTION_FAILED with the
-  // original error in details (the cluster branch's catch) — and never echo the
+  // original error on cause (the cluster branch's catch) — and never echo the
   // Lua source.
   it('wraps a cluster EVAL failure as SCRIPT_EXECUTION_FAILED', async () => {
     const cluster = build({ mode: 'cluster' })
