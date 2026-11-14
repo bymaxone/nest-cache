@@ -21,6 +21,14 @@ export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000
  */
 export const DEFAULT_KEEP_ALIVE_MS = 30_000
 
+/**
+ * The `disconnectTimeout` every client is created with (ms). `disconnect()` arms a timer of that
+ * length that only the stream's `close` clears. A client between two reconnection attempts has no
+ * open stream and emits none, so ioredis's default of 2 000 ms keeps the process alive 2 s after
+ * shutdown.
+ */
+export const DISCONNECT_TIMEOUT_MS = 1
+
 /** Default `maxRetriesPerRequest` (NOT `null` — that value is BullMQ-specific). */
 export const DEFAULT_MAX_RETRIES_PER_REQUEST = 3
 

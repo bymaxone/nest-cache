@@ -1,9 +1,10 @@
 /**
  * Disconnects a client unless it has already ended.
  *
- * Layer: server. ioredis arms a 2 s teardown timer in `disconnect()` and clears it only when the
+ * Layer: server. ioredis arms a teardown timer in `disconnect()` and clears it only when the
  * stream emits `close`. A client in status `end` has already closed its stream and never emits
- * `close` again, so disconnecting it keeps the process alive 2 s longer for nothing.
+ * `close` again, so disconnecting it has nothing to close and leaves that timer armed until it
+ * fires.
  */
 
 /** The part of an ioredis client (standalone or cluster) that release needs. */
