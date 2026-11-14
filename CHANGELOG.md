@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.16] - 2026-11-14
+
 ### Fixed
 
 - A failed boot no longer lets a later call reopen the client it closed. When the readiness wait fails (an error, the end of the
@@ -14,6 +16,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   which reconnected behind a boot that had reported the connection as failed. They now answer with
   `cache.connection_failed` (503, `details.reason` `boot_failed`) and open nothing. The boot's own error, which can name a host and
   a port, stays on `cause` and is never part of the response body.
+  The declarations of `ConnectionManager` name its private guard `assertCanOpen` where they named `assertNotShutDown`; a private
+  member is not part of the API.
 
   **Apply to a consumer:** a host that caught the boot failure and kept the application running now gets that error from every
   cache call instead of a silently reopened connection. Restart the application, or build a new module, to try the connection
@@ -857,7 +861,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.15...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.16...HEAD
+[1.2.16]: https://github.com/bymaxone/nest-cache/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/bymaxone/nest-cache/compare/v1.2.14...v1.2.15
 [1.2.14]: https://github.com/bymaxone/nest-cache/compare/v1.2.13...v1.2.14
 [1.2.13]: https://github.com/bymaxone/nest-cache/compare/v1.2.12...v1.2.13
