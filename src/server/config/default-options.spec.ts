@@ -3,6 +3,7 @@ import { inspect } from 'node:util'
 import { DEFAULT_KEY_SEPARATOR, DEFAULT_NAMESPACE } from '../constants/default-namespace'
 import {
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  MAX_TIMER_DELAY_MS,
   MIN_CONNECT_TIMEOUT_MS,
   MIN_SHUTDOWN_TIMEOUT_MS
 } from '../constants/default-timeouts'
@@ -472,6 +473,39 @@ describe('validateOptions', () => {
   it('accepts a connect timeout exactly at the minimum', () => {
     expect(() =>
       validateOptions({ connection: { host: 'h', connectTimeout: MIN_CONNECT_TIMEOUT_MS } })
+    ).not.toThrow()
+  })
+
+  // setTimeout stores a delay above 2^31-1 ms as 1 ms and NaN as 1 ms, so a shutdown or connect
+  // timeout outside the finite-integer range would fire at once instead of waiting.
+  it.each([
+    ['shutdownTimeoutMs', NaN],
+    ['shutdownTimeoutMs', 2 ** 31],
+    ['shutdownTimeoutMs', Infinity],
+    ['shutdownTimeoutMs', 150.5],
+    ['connectTimeout', NaN],
+    ['connectTimeout', 2 ** 31],
+    ['connectTimeout', Infinity],
+    ['connectTimeout', 150.5]
+  ])('rejects %s of %p as not a valid timer delay', (field, value) => {
+    const options =
+      field === 'shutdownTimeoutMs'
+        ? { connection: { host: 'h' }, shutdownTimeoutMs: value }
+        : { connection: { host: 'h', connectTimeout: value } }
+    expectCode(() => validateOptions(options), CACHE_ERROR_CODES.CONNECTION_FAILED, {
+      reason: `${field} not a valid timer delay`,
+      value,
+      max: MAX_TIMER_DELAY_MS
+    })
+  })
+
+  // The largest delay setTimeout honours is accepted — pins the `>` boundary.
+  it('accepts a timer delay of exactly 2^31-1', () => {
+    expect(() =>
+      validateOptions({
+        connection: { host: 'h', connectTimeout: 2 ** 31 - 1 },
+        shutdownTimeoutMs: 2 ** 31 - 1
+      })
     ).not.toThrow()
   })
 

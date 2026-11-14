@@ -34,6 +34,9 @@ export interface ResolvedAdminOptions {
   readonly isGlobal: boolean
 }
 
+/** Largest delay (ms) `setTimeout` honours; a larger one is stored as 1 ms and fires at once. */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
+
 /**
  * Rejects a threshold that is not a positive integer.
  *
@@ -83,6 +86,14 @@ export function resolveAdminOptions(
 
   requirePositiveInteger('degradedAboveMs', resolved.degradedAboveMs)
   requirePositiveInteger('probeTimeoutMs', resolved.probeTimeoutMs)
+  if (resolved.probeTimeoutMs > MAX_TIMER_DELAY_MS) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
+      reason: 'timer delay too large',
+      option: 'probeTimeoutMs',
+      value: resolved.probeTimeoutMs,
+      max: MAX_TIMER_DELAY_MS
+    })
+  }
   requirePositiveInteger('scanLimit', resolved.scanLimit)
   requirePositiveInteger('commandBatchLimit', resolved.commandBatchLimit)
   requirePositiveInteger('revealLimit', resolved.revealLimit)

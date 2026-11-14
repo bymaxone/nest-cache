@@ -20,6 +20,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A timeout option outside what `setTimeout` honours is now refused at registration instead of firing at once. Node stores
+  a delay of `NaN` or above 2147483647 ms (2^31-1) as 1 ms, so `shutdownTimeoutMs: 2 ** 31` released the connection
+  without waiting for in-flight commands, `connection.connectTimeout` fired before the socket could connect, and the
+  admin `probeTimeoutMs` reported the cache down without asking it. `shutdownTimeoutMs` and `connection.connectTimeout`
+  must now be finite integers from their minimum to 2147483647 (`CONNECTION_FAILED`), and `probeTimeoutMs` at most
+  2147483647 (`INVALID_SCOPE`). `NaN` previously passed the minimum check because `NaN < 100` is false.
+
 - The message of a `CacheException` is now the catalog text for its code. An object response left `Error.message`
   as the class-name default, so a refusal at boot surfaced only as "Cache Exception". The `cache.invalid_namespace`
   text now names its rules, including that a separator containing `%` is rejected under `keyEscaping: 'strict'`
@@ -57,6 +64,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 New: pass `{ validate }` to a read to check its shape, and treat `cache.validation_failed` as a miss (the README shows the
 rolling-deploy pattern). Nothing changes if you do not.
+A `shutdownTimeoutMs`, `connection.connectTimeout` or admin `probeTimeoutMs` of `NaN`, a fraction or above 2147483647
+now refuses at registration; such a value never waited, so set the intended finite delay.
 
 Under `keyEscaping: 'strict'`, replace a `scan`/`keys` pattern that holds the separator with
 `KeyBuilder.idPrefixPattern`, and use a BMP separator without `*`, `?`, `[` or `\` (no emoji); nothing changes under `'legacy'`.

@@ -15,6 +15,7 @@ import {
 } from '../constants/default-namespace'
 import {
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  MAX_TIMER_DELAY_MS,
   MIN_CONNECT_TIMEOUT_MS,
   MIN_SHUTDOWN_TIMEOUT_MS
 } from '../constants/default-timeouts'
@@ -219,6 +220,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   )
 
   const shutdown = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
+  requireTimerDelay('shutdownTimeoutMs', shutdown)
   if (shutdown < MIN_SHUTDOWN_TIMEOUT_MS) {
     throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
       reason: 'shutdownTimeoutMs too low',
@@ -228,11 +230,32 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   }
 
   const connectTimeout = options.connection?.connectTimeout
+  if (connectTimeout !== undefined) {
+    requireTimerDelay('connectTimeout', connectTimeout)
+  }
   if (connectTimeout !== undefined && connectTimeout < MIN_CONNECT_TIMEOUT_MS) {
     throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
       reason: 'connectTimeout too low',
       value: connectTimeout,
       min: MIN_CONNECT_TIMEOUT_MS
+    })
+  }
+}
+
+/**
+ * Rejects a timeout that `setTimeout` would not honour: `NaN`, a fraction, an infinity or a delay
+ * above 2^31-1 ms is stored as 1 ms, so the timer fires at once.
+ *
+ * @param option - The option name, echoed in the error details.
+ * @param value - The configured delay in milliseconds.
+ * @throws {CacheException} `CONNECTION_FAILED` when the value is not a finite integer within range.
+ */
+function requireTimerDelay(option: string, value: number): void {
+  if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
+    throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
+      reason: `${option} not a valid timer delay`,
+      value,
+      max: MAX_TIMER_DELAY_MS
     })
   }
 }
