@@ -14,7 +14,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   after the shutdown (measured 2 001 to 2 003 ms with a stopped server, 1 to 3 ms after this change). Every client the library
   creates (the main client, the Pub/Sub subscriber, the sentinel client and the nodes of a cluster) now has a `disconnectTimeout`
   of 1 ms. A forced `disconnect()` on a client with an open stream now destroys that stream 1 ms after ending it, where it waited
-  up to 2 s for the server to close its side; a client that has ended is still not disconnected.
+  up to 2 s for the server to close its side. That includes the disconnect ioredis makes itself before it reconnects (after a
+  `READONLY` reply or a sentinel failover), which abandons the old stream anyway. A client that has ended is still not disconnected.
 
   **Apply to a consumer:** nothing to change. A host that sets `disconnectTimeout` in `cluster.options.redisOptions` keeps its own
   value; the connection options of the other modes have no such field.
