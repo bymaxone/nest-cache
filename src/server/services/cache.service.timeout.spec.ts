@@ -102,6 +102,13 @@ describe('CacheService command timeout', () => {
     expect((error as CacheException).cause).toBe(original)
   })
 
+  // A rejection that is not an Error (a library can reject with anything) reaches the caller as it is.
+  it('passes a rejection that is not an Error through unchanged', async () => {
+    jest.spyOn(connection.getClient(), 'get').mockRejectedValue('Command timed out')
+
+    expect(await rejectionOf(() => cache.get('user', '1'))).toBe('Command timed out')
+  })
+
   // The wrapped client is built once per client, not once per call.
   it("wraps the connection's client once however many calls it serves", async () => {
     const guard = jest.spyOn(guardClientModule, 'guardClient')
