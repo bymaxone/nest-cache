@@ -115,7 +115,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    */
   async onModuleInit(): Promise<void> {
     const client = this.ensureClient()
-    if (!this.options.connection?.lazyConnect) {
+    const lazy =
+      this.options.mode === 'cluster'
+        ? this.options.cluster?.options?.lazyConnect
+        : this.options.connection?.lazyConnect
+    if (!lazy) {
       await this.waitUntilReady(client)
     }
   }

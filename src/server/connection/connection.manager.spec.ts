@@ -245,6 +245,17 @@ describe('ConnectionManager', () => {
       }
     })
 
+    // A cluster created with `cluster.options.lazyConnect` connects on first command, like a lazy
+    // standalone client: init must not wait for a `ready` that has not been asked for.
+    it('does not await readiness when the cluster is lazy', async () => {
+      const manager = makeManager({
+        mode: 'cluster',
+        cluster: { nodes: [{ host: 'c', port: 6379 }], options: { lazyConnect: true } }
+      })
+
+      await expect(manager.onModuleInit()).resolves.toBeUndefined()
+    })
+
     // A consumer can reach the cache before this hook runs — NestJS orders
     // onModuleInit by module depth, and `app.get()` works between
     // `NestFactory.create()` and `app.init()`. Init must then ADOPT that client:
