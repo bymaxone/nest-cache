@@ -14,6 +14,7 @@ import type {
   PipelineReply
 } from '../../interfaces/redis-reader.interface'
 
+/** The declared scopes: a readable one (`cache`) and a withheld one (`auth`, another package's). */
 export const SCOPES: readonly CacheScope[] = [
   { id: 'cache', label: 'Cache', pattern: 'app:*', isReadable: true, origin: 'the namespace' },
   {
