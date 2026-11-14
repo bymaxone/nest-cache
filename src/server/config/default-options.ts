@@ -7,7 +7,6 @@
  * fields cannot be reassigned once registered. See
  * `docs/technical_specification.md` §4.6.
  */
-import type { ResolvedOptions } from './resolved-options'
 import {
   DEFAULT_KEY_ESCAPING,
   DEFAULT_KEY_SEPARATOR,
@@ -25,6 +24,7 @@ import { CacheException } from '../errors/cache.exception'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
+import type { ResolvedOptions } from './resolved-options'
 
 /**
  * Characters Redis reads as glob metacharacters inside a `SCAN` / `KEYS` match
