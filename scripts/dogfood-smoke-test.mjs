@@ -26,7 +26,14 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { execSync, spawnSync } from 'node:child_process'
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+import { resolvePackageRoot } from './lib/package-root.mjs'
+
+// Every check reads the package from the working tree, or from the unpacked tarball when
+// `PACKAGE_TARBALL` names one (the release workflow does), so the gate sees what is published.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const pkg = resolvePackageRoot({ linkDependencies: true })
+const ROOT = pkg.root
+process.on('exit', () => pkg.cleanup())
 // Created lazily inside section 6 (not at module load) so the earlier
 // build-artifact check can `process.exit(2)` without leaking a temp dir.
 let consumerDir
@@ -185,21 +192,40 @@ for (const entry of ['server', 'admin', 'shared', 'metrics']) {
   }
 }
 
-// ── 5. Tarball contents ──────────────────────────────────────────────────────
-
-section('5. Tarball contents (npm pack --dry-run)')
-try {
-  const packOut = execSync('npm pack --dry-run 2>&1', { cwd: ROOT, encoding: 'utf8' })
-  // extract the paths listed under "Tarball Contents"
+/**
+ * Lists the files the package ships: the given tarball's entries, or what `npm pack --dry-run`
+ * would put in one when no tarball was given.
+ *
+ * @returns {string[]} Paths relative to the package root.
+ */
+function listTarballEntries() {
+  if (pkg.tarball !== undefined) {
+    const listed = spawnSync('tar', ['-tzf', pkg.tarball], { encoding: 'utf8' })
+    if (listed.status !== 0) {
+      throw new Error('tar could not list the tarball')
+    }
+    return listed.stdout
+      .split('\n')
+      .map((l) => l.replace(/^package\//, '').trim())
+      .filter((l) => l !== '' && l !== 'package')
+  }
+  const packOut = execSync('npm pack --dry-run 2>&1', { cwd: REPO_ROOT, encoding: 'utf8' })
   // Lines with file sizes look like: "npm notice  2.4kB  CHANGELOG.md"
   // Match B, kB, KB, MB etc. Exclude metadata lines (shasum, integrity, total-files).
   const SIZE_RE = /\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+\S+/
   const SIZE_STRIP_RE = /.*npm notice\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+/
-  const contentLines = packOut
+  return packOut
     .split('\n')
     .filter((l) => l.includes('npm notice') && SIZE_RE.test(l))
     .map((l) => l.replace(SIZE_STRIP_RE, '').trim())
     .filter((l) => Boolean(l) && !l.startsWith('npm notice') && !/^sha\d+:/i.test(l))
+}
+
+// ── 5. Tarball contents ──────────────────────────────────────────────────────
+
+section('5. Tarball contents')
+try {
+  const contentLines = listTarballEntries()
 
   const unexpectedFiles = contentLines.filter(
     // Exact match for meta files; prefix match only for directory entries
@@ -217,9 +243,8 @@ try {
       fail(`Unexpected file in tarball: ${f}`)
     }
   }
-  // No cleanup needed: `npm pack --dry-run` never writes a .tgz to disk.
 } catch (err) {
-  fail(`npm pack --dry-run failed: ${String(err.message)}`)
+  fail(`Listing the tarball failed: ${String(err.message)}`)
 }
 
 // ── 6. Consumer file: link smoke ─────────────────────────────────────────────
@@ -235,13 +260,13 @@ try {
     version: '0.0.1',
     type: 'module',
     dependencies: {
-      '@bymax-one/nest-cache': `file:${ROOT}`
+      '@bymax-one/nest-cache': `file:${pkg.tarball ?? REPO_ROOT}`
     }
   }
   writeFileSync(resolve(consumerDir, 'package.json'), JSON.stringify(consumerPkgJson, null, 2))
 
   // Install via pnpm (resolves the file: link)
-  const installResult = spawnSync('pnpm', ['install', '--no-frozen-lockfile'], {
+  const installResult = spawnSync('pnpm', ['install', '--no-frozen-lockfile', '--ignore-scripts'], {
     cwd: consumerDir,
     encoding: 'utf8',
     timeout: 60_000
