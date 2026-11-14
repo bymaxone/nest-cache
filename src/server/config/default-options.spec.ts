@@ -439,9 +439,8 @@ describe('validateOptions', () => {
     ).not.toThrow()
   })
 
-  // A malformed connection.url is refused in every mode, with the structured error and no URL. In
-  // sentinel and cluster mode the raw parse error used to escape at construction, and its enumerable
-  // `input` holds the whole URL, credentials included.
+  // A malformed connection.url is refused in every mode with the structured error and no URL: a raw
+  // parse error carries the whole URL in an enumerable `input`, credentials included.
   it.each([
     ['standalone', { connection: { host: 'h', url: 'redis://u:p@ss@@:bad' } }],
     [

@@ -241,28 +241,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       if (!sentinel) {
         throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode: 'sentinel' })
       }
-      return new Redis({
-        ...this.#redisOptionsResolved,
-        ...overrides,
-        sentinels: sentinel.sentinels,
-        name: sentinel.name,
-        ...(sentinel.sentinelPassword !== undefined && {
-          sentinelPassword: sentinel.sentinelPassword
-        }),
-        ...(sentinel.password !== undefined && { password: sentinel.password }),
-        // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
-        // wire level; our public interface accepts 'replica' per Redis 7 naming.
-        ...(sentinel.role !== undefined && {
-          role: sentinel.role === 'replica' ? 'slave' : sentinel.role
-        }),
-        ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap }),
-        // TLS configured for the data nodes (`connection.tls` or a `rediss://` url) covers the sentinels too: without these two options
-        // ioredis talks to them in cleartext, `sentinelPassword` and discovery included.
-        ...(this.#redisOptionsResolved.tls !== undefined && {
-          enableTLSForSentinelMode: true,
-          sentinelTLS: this.#redisOptionsResolved.tls
-        })
-      } as OwnedRedisOptions)
+      return new Redis(this.sentinelOptions(sentinel, overrides))
     }
     if (this.options.mode === 'cluster') {
       const cluster = this.options.cluster
@@ -287,6 +266,42 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       } as OwnedClusterOptions)
     }
     return new Redis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
+  }
+
+  /**
+   * Builds the options of a sentinel-mode client.
+   *
+   * @param sentinel - The resolved sentinel block.
+   * @param overrides - Extra `RedisOptions` merged over the resolved defaults.
+   * @returns The options handed to `ioredis`.
+   */
+  private sentinelOptions(
+    sentinel: NonNullable<ResolvedOptions['sentinel']>,
+    overrides?: Partial<RedisOptions>
+  ): OwnedRedisOptions {
+    return {
+      ...this.#redisOptionsResolved,
+      ...overrides,
+      sentinels: sentinel.sentinels,
+      name: sentinel.name,
+      ...(sentinel.sentinelPassword !== undefined && {
+        sentinelPassword: sentinel.sentinelPassword
+      }),
+      ...(sentinel.password !== undefined && { password: sentinel.password }),
+      // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
+      // wire level; our public interface accepts 'replica' per Redis 7 naming.
+      ...(sentinel.role !== undefined && {
+        role: sentinel.role === 'replica' ? 'slave' : sentinel.role
+      }),
+      ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap }),
+      // TLS configured for the data nodes (`connection.tls` or a `rediss://` url) covers the sentinels
+      // too: without these two options ioredis talks to them in cleartext, `sentinelPassword` and
+      // discovery included.
+      ...(this.#redisOptionsResolved.tls !== undefined && {
+        enableTLSForSentinelMode: true,
+        sentinelTLS: this.#redisOptionsResolved.tls
+      })
+    } as OwnedRedisOptions
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */
