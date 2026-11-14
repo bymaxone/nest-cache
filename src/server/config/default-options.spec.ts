@@ -477,6 +477,83 @@ describe('validateOptions', () => {
     }
   )
 
+  // Cluster mode builds its client from `cluster`, so `connection.*` credentials and TLS never reach
+  // it. Refusing them at boot, with the place to set each, stops a deployer from believing a password
+  // or TLS is configured when it is not.
+  it.each([
+    ['password', 'secret', 'cluster.options.redisOptions.password'],
+    ['username', 'user', 'cluster.options.redisOptions.username'],
+    ['tls', {}, 'cluster.options.redisOptions.tls'],
+    ['lazyConnect', true, 'cluster.options.lazyConnect']
+  ] as [string, unknown, string][])(
+    'refuses connection.%s in cluster mode and names where to set it',
+    (option, value, target) => {
+      let thrown: unknown
+      try {
+        validateOptions({
+          mode: 'cluster',
+          cluster: { nodes: [{ host: 'n', port: 6379 }] },
+          connection: { host: 'h', [option]: value }
+        })
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(CacheException)
+      expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+      expect((thrown as CacheException).details).toEqual({
+        reason: `connection.${option} is ignored in cluster mode; set ${target}`,
+        option: `connection.${option}`
+      })
+      expect(JSON.stringify(thrown)).not.toContain('secret')
+    }
+  )
+
+  // In cluster mode the timers live in cluster.options.redisOptions; they get the same rule as the
+  // standalone ones, or NaN and 2^31 would still fire at once.
+  it.each([
+    ['connectTimeout', NaN],
+    ['connectTimeout', 2 ** 31],
+    ['connectTimeout', 50],
+    ['commandTimeout', NaN],
+    ['commandTimeout', 2 ** 31],
+    ['commandTimeout', 0]
+  ])('refuses cluster.options.redisOptions.%s of %p', (field, value) => {
+    let thrown: unknown
+    try {
+      validateOptions({
+        mode: 'cluster',
+        cluster: {
+          nodes: [{ host: 'n', port: 6379 }],
+          options: { redisOptions: { [field]: value } }
+        }
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CacheException)
+    expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    const reason =
+      typeof value === 'number' && Number.isInteger(value) && value < 2 ** 31
+        ? `${field} too low`
+        : `${field} not a valid timer delay`
+    expect((thrown as CacheException).details).toMatchObject({ value, reason })
+  })
+
+  // The valid cluster settings still pass.
+  it('accepts a cluster with valid redisOptions timers and no connection block', () => {
+    expect(() =>
+      validateOptions({
+        mode: 'cluster',
+        cluster: {
+          nodes: [{ host: 'n', port: 6379 }],
+          options: { redisOptions: { connectTimeout: 2_000, commandTimeout: 1, password: 'p' } }
+        }
+      })
+    ).not.toThrow()
+  })
+
   // A shutdown timeout below the minimum must throw INVALID_OPTIONS — too short
   // a window risks killing in-flight commands. Pins the `{ reason, value, min }`
   // details payload.

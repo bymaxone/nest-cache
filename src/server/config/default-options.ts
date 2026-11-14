@@ -201,6 +201,36 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
 }
 
 /**
+ * Validates the cluster-specific options.
+ *
+ * @param options - The raw consumer options, already known to carry a `cluster` block.
+ * @throws {CacheException} `INVALID_OPTIONS` when a `connection` option that a cluster ignores is
+ *   set, or when a timer in `cluster.options.redisOptions` is out of range.
+ */
+function validateClusterOptions(options: BymaxCacheModuleOptions): void {
+  const connection = options.connection
+  // Each option a cluster ignores, with the place a cluster takes it from: the cluster client is
+  // built from `cluster`, so one set here would leave a password or TLS silently unconfigured.
+  const ignored = [
+    ['password', connection?.password, 'cluster.options.redisOptions.password'],
+    ['username', connection?.username, 'cluster.options.redisOptions.username'],
+    ['tls', connection?.tls, 'cluster.options.redisOptions.tls'],
+    ['lazyConnect', connection?.lazyConnect, 'cluster.options.lazyConnect']
+  ] as const
+  for (const [option, value, target] of ignored) {
+    if (value !== undefined) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
+        reason: `connection.${option} is ignored in cluster mode; set ${target}`,
+        option: `connection.${option}`
+      })
+    }
+  }
+  const redisOptions = options.cluster?.options?.redisOptions
+  requireTimerDelay('connectTimeout', redisOptions?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
+  requireTimerDelay('commandTimeout', redisOptions?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+}
+
+/**
  * Validates consumer options at module bootstrap, throwing actionable
  * {@link CacheException}s when an invariant is violated.
  *
@@ -220,6 +250,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
     if (!options.cluster || !options.cluster.nodes?.length) {
       throw new CacheException(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode })
     }
+    validateClusterOptions(options)
   }
   validateConnectionUrl(options.connection?.url)
   if (mode === 'standalone') {

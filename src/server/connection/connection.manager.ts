@@ -115,7 +115,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    */
   async onModuleInit(): Promise<void> {
     const client = this.ensureClient()
-    if (!this.options.connection?.lazyConnect) {
+    const lazy =
+      this.options.mode === 'cluster'
+        ? this.options.cluster?.options?.lazyConnect
+        : this.options.connection?.lazyConnect
+    if (!lazy) {
       await this.waitUntilReady(client)
     }
   }
@@ -349,26 +353,48 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     client.on('end', () => this.emit('end', { role }))
   }
 
-  /** Resolves once the client is ready; rejects (wrapped) on connection error. */
+  /**
+   * Resolves once the client is ready.
+   *
+   * Rejects with `CONNECTION_FAILED` on a connection error, when the client ends (no more
+   * reconnection), or when it is not ready within `connectTimeout`, and disconnects the client so a
+   * failed boot leaves nothing reconnecting.
+   */
   private async waitUntilReady(client: AnyRedis): Promise<void> {
     if (client.status === 'ready') {
       return
     }
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = (): void => {
-        client.off('ready', onReady)
-        client.off('error', onError)
-      }
-      const onReady = (): void => {
-        cleanup()
-        resolve()
-      }
-      const onError = (err: Error): void => {
-        cleanup()
-        reject(new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, { error: err.message }))
-      }
-      client.once('ready', onReady)
-      client.once('error', onError)
-    })
+    // A cluster takes its timers from `cluster.options.redisOptions`, every other mode from `connection`.
+    const timers =
+      this.options.mode === 'cluster'
+        ? this.options.cluster?.options?.redisOptions
+        : this.options.connection
+    const deadline = timers?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const settle = (outcome: () => void): void => {
+          clearTimeout(timer)
+          client.off('ready', onReady)
+          client.off('error', onError)
+          client.off('end', onEnd)
+          outcome()
+        }
+        const refuse = (error: string): void =>
+          settle(() => reject(new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, { error })))
+        const onReady = (): void => settle(resolve)
+        const onError = (err: Error): void => refuse(err.message)
+        const onEnd = (): void => refuse('connection ended before ready')
+        const timer = setTimeout(() => refuse('not ready within connectTimeout'), deadline)
+        client.once('ready', onReady)
+        client.once('error', onError)
+        client.once('end', onEnd)
+      })
+    } catch (error) {
+      // A failed boot must not leave a client that keeps reconnecting, nor one the shutdown that
+      // follows would try to quit.
+      client.disconnect()
+      this.#client = null
+      throw error
+    }
   }
 }
