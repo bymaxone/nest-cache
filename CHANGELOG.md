@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.17] - 2026-11-14
+
 ### Changed
 
 - The `details` of these errors no longer carry a message written by a driver, a script or a host. `details` is serialised verbatim
@@ -892,7 +894,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.16...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.17...HEAD
+[1.2.17]: https://github.com/bymaxone/nest-cache/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/bymaxone/nest-cache/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/bymaxone/nest-cache/compare/v1.2.14...v1.2.15
 [1.2.14]: https://github.com/bymaxone/nest-cache/compare/v1.2.13...v1.2.14
