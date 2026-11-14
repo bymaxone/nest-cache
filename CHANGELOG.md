@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The default message of `cache.connection_failed` now states what the code does. It read "Could not connect to Redis after
+  retries.", but the code covers a missing or malformed `connection.url`/`connection.host` (no connection is attempted) and a
+  boot wait that ends on a connection error, the end of the connection, or no `ready` within `connectTimeout`; no retry count is
+  involved. It now reads "Could not establish the Redis connection: the connection options are missing or invalid, or the client
+  did not become ready." The code, the HTTP status and `details` are unchanged.
+
+  **Apply to a consumer:** match on `code` (`cache.connection_failed`), never on the message text. A test, log filter or alert
+  that matches the old sentence must match the new one or, better, the code.
+
 ### Fixed
 
 - A client that has already ended is no longer disconnected. ioredis arms a 2 s teardown timer in `disconnect()` and clears it only
