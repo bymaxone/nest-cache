@@ -54,11 +54,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // server's, the externalisation has broken and DI is about to fail at a
 // consumer's runtime.
 //
-// 1.2.13: server 9.20 -> 9.59 kB (measured 9.55 kB). Read validation (about +0.37 kB) and the timer-delay
-// ceiling on the shutdown, connect and command timeouts. The PM approved measured + 0.04 kB.
-//
 // The server budget covers the key escape (the token writer and decoder, the escape sets and the
-// `KeyBuilder` helpers). Every budget keeps about 10% of headroom over the measured bundle, which is
+// `KeyBuilder` helpers), the read-validation routing and the timer-delay checks. It sits 0.04 kB above
+// the measured 9.55 kB, so any growth shows up here before it ships. Every budget keeps about 10% of headroom over the measured bundle, which is
 // taken after the comments are stripped.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 9.59 * 1024 },
