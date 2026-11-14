@@ -9,9 +9,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - The readiness wait at boot is bounded and cleans up after itself. It had no deadline and ignored the end of the connection, so a
-  server that accepts the socket and never answers, or a `retryStrategy` that returns `null`, held `onModuleInit` forever, and a
-  failed wait left the client reconnecting with nothing left to close it. It now ends at `connectTimeout` or when the client
-  ends, rejects with `cache.connection_failed` and disconnects the client.
+  `retryStrategy` that returns `null` (the client ends and emits no error), or a server still loading its dataset (ioredis polls
+  until it has loaded), held `onModuleInit` without limit, and a failed wait left the client reconnecting with nothing left to
+  close it. It now ends at `connectTimeout` or when the client ends, rejects with `cache.connection_failed` and disconnects the
+  client.
 - Cluster mode validates what it uses. The timers in `cluster.options.redisOptions` (`connectTimeout`, `commandTimeout`) get the
   same rule as the standalone ones, so `NaN` or a delay above 2147483647 ms no longer times every command out at once. The
   `connection` options a cluster ignored without a word (`password`, `username`, `tls`, `lazyConnect`) are refused at registration
@@ -29,7 +30,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 A host that catches errors from `CacheService` and keys on `cache.command_timeout` now sees it for a timed-out command, and
 `cache.connection_lost` (`reason: 'offline'`) while the connection is down; treat a timed-out write as unknown, not failed. If you set `connection.password`, `username`, `tls` or `lazyConnect` with `mode: 'cluster'`,
 move them to `cluster.options.redisOptions` (`lazyConnect` to `cluster.options`): they were ignored and are now refused. A boot that
-waited without limit now fails with `cache.connection_failed` after `connectTimeout`.
+waited without limit, a server loading a large dataset included, now fails with `cache.connection_failed` after `connectTimeout`: raise `connection.connectTimeout` if your server takes longer to become ready.
 
 ### Fixed
 
