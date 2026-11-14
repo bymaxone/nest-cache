@@ -8,7 +8,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.2.13] - 2026-11-12
 
+### Added
+
+- Opt-in read validation. `get`, `mget`, `hget`, `hgetall`, `subscribe` and `psubscribe` take a trailing
+  `{ validate }` option: a type predicate or any Standard Schema validator (zod, valibot, arktype), declared
+  structurally so the library imports none of them and gains no dependency. `T` is inferred from the validator. A value
+  that does not satisfy it throws `CacheException` with the new code `cache.validation_failed` (HTTP 500): `details`
+  hold fixed text (`index` or `field` for a batch read), never the value or the validator's
+  messages, and the issues are on `cause`; the entry is left in place. A subscriber's message that fails is not
+  delivered and takes the handler-error path. Without `validate` nothing changes and no validator runs.
+
 ### Fixed
+
+- A timeout option outside what `setTimeout` honours is now refused at registration instead of firing at once. Node stores
+  a delay of `NaN` or above 2147483647 ms (2^31-1) as 1 ms, so `shutdownTimeoutMs: 2 ** 31` released the connection
+  without waiting for in-flight commands, `connection.connectTimeout` fired before the socket could connect, `connection.commandTimeout` timed every command out
+  at about 1 ms, and the
+  admin `probeTimeoutMs` reported the cache down without asking it. `shutdownTimeoutMs`, `connection.connectTimeout` and `connection.commandTimeout`
+  must now be finite integers from their minimum (1 ms for the command timeout) to 2147483647 (`CONNECTION_FAILED`), and `probeTimeoutMs` at most
+  2147483647 (`INVALID_SCOPE`). `NaN` previously passed the minimum check because `NaN < 100` is false.
 
 - The message of a `CacheException` is now the catalog text for its code. An object response left `Error.message`
   as the class-name default, so a refusal at boot surfaced only as "Cache Exception". The `cache.invalid_namespace`
@@ -44,6 +62,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The Security Table is a compact table, one line per control.
 
 #### Apply to a consumer
+
+New: pass `{ validate }` to a read to check its shape, and treat `cache.validation_failed` as a miss (the README shows the
+rolling-deploy pattern). Nothing changes if you do not.
+A `shutdownTimeoutMs`, `connection.connectTimeout`, `connection.commandTimeout` or admin `probeTimeoutMs` of `NaN`, a fraction or above 2147483647
+now refuses at registration; such a value never waited, so set the intended finite delay.
 
 Under `keyEscaping: 'strict'`, replace a `scan`/`keys` pattern that holds the separator with
 `KeyBuilder.idPrefixPattern`, and use a BMP separator without `*`, `?`, `[` or `\` (no emoji); nothing changes under `'legacy'`.

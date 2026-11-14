@@ -16,6 +16,11 @@ describe('CACHE_ERROR_CODES', () => {
     expect(new Set(values).size).toBe(values.length)
   })
 
+  // The read-validation code is part of the public contract and must stay stable.
+  it('maps VALIDATION_FAILED to its stable wire value', () => {
+    expect(CACHE_ERROR_CODES.VALIDATION_FAILED).toBe('cache.validation_failed')
+  })
+
   // Lock the most common code's wire value explicitly (it is part of the
   // public contract and must stay stable across minor versions).
   it('maps CONNECTION_FAILED to its stable wire value', () => {

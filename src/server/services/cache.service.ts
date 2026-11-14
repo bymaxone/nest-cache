@@ -24,11 +24,13 @@ import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
 import { assertTtlSeconds, MIN_WRITE_TTL_SECONDS } from '../utils/ttl'
+import { validateRead } from '../utils/validate-read'
 
 /** Production value of `NODE_ENV` that gates the destructive flush guard. */
 const PRODUCTION_ENV = 'production'
@@ -94,16 +96,19 @@ export class CacheService {
    * @param prefix - Entity-group prefix (e.g. `'users'`).
    * @param id - Entity id.
    * @returns The decoded value, or `null` when the key does not exist.
+   * @param options - Optional read options. `validate` checks the decoded value against a type
+   *   predicate or a Standard Schema validator; with none, the value is returned as decoded.
    * @throws {CacheException} `DESERIALIZATION_FAILED` when the stored payload is
-   *   not decodable as `T`.
+   *   not decodable as `T`, and `VALIDATION_FAILED` when `validate` is given and the decoded value
+   *   does not satisfy it (the entry is left in place).
    */
-  async get<T>(prefix: string, id: string): Promise<T | null> {
+  async get<T>(prefix: string, id: string, options?: ReadOptions<T>): Promise<T | null> {
     const key = this.keyBuilder.build(prefix, id)
     const raw = await this.connection.getClient().get(key)
     if (raw === null) {
       return null
     }
-    return this.serializer.deserialize<T>(raw)
+    return this.decode<T>(raw, options)
   }
 
   /**
@@ -312,16 +317,27 @@ export class CacheService {
    * @param prefix - Entity-group prefix shared by every id.
    * @param ids - Entity ids to read. An empty list returns `[]` with no Redis call.
    * @returns Values positionally aligned with `ids`; `null` for missing keys.
+   * @param options - Optional read options; `validate` is applied to every present value.
    * @throws {CacheException} `DESERIALIZATION_FAILED` when any present payload is
-   *   not decodable as `T`.
+   *   not decodable as `T`, and `VALIDATION_FAILED` (naming `details.index`) for the first present
+   *   value that does not satisfy `validate`.
    */
-  async mget<T>(prefix: string, ids: readonly string[]): Promise<Array<T | null>> {
+  async mget<T>(
+    prefix: string,
+    ids: readonly string[],
+    options?: ReadOptions<T>
+  ): Promise<Array<T | null>> {
     if (ids.length === 0) {
       return []
     }
     const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
     const values = await this.connection.getClient().mget(...keys)
-    return values.map((value) => (value === null ? null : this.serializer.deserialize<T>(value)))
+    const decoded: Array<T | null> = []
+    // One at a time, in order, so the element a failure names is the first bad one.
+    for (const [index, value] of values.entries()) {
+      decoded.push(value === null ? null : await this.decode<T>(value, options, { index }))
+    }
+    return decoded
   }
 
   /**
@@ -354,16 +370,23 @@ export class CacheService {
    * @param id - Entity id (the hash key).
    * @param field - Hash field name (kept raw, never serialized).
    * @returns The decoded field value, or `null` when the field does not exist.
+   * @param options - Optional read options; `validate` is applied to the decoded field value.
    * @throws {CacheException} `DESERIALIZATION_FAILED` when the field payload is
-   *   not decodable as `T`.
+   *   not decodable as `T`, and `VALIDATION_FAILED` when `validate` is given and the value does not
+   *   satisfy it.
    */
-  async hget<T>(prefix: string, id: string, field: string): Promise<T | null> {
+  async hget<T>(
+    prefix: string,
+    id: string,
+    field: string,
+    options?: ReadOptions<T>
+  ): Promise<T | null> {
     const key = this.keyBuilder.build(prefix, id)
     const raw = await this.connection.getClient().hget(key, field)
     if (raw === null) {
       return null
     }
-    return this.serializer.deserialize<T>(raw)
+    return this.decode<T>(raw, options)
   }
 
   /**
@@ -389,18 +412,24 @@ export class CacheService {
    * @param prefix - Entity-group prefix.
    * @param id - Entity id (the hash key).
    * @returns A record of field → decoded value; `{}` when the hash does not exist.
+   * @param options - Optional read options; `validate` is applied to every field value.
    * @throws {CacheException} `DESERIALIZATION_FAILED` when any field payload is
-   *   not decodable as `T`.
+   *   not decodable as `T`, and `VALIDATION_FAILED` (naming `details.field`) for the first field
+   *   that does not satisfy `validate`.
    */
-  async hgetall<T>(prefix: string, id: string): Promise<Record<string, T>> {
+  async hgetall<T>(
+    prefix: string,
+    id: string,
+    options?: ReadOptions<T>
+  ): Promise<Record<string, T>> {
     const key = this.keyBuilder.build(prefix, id)
     const all = await this.connection.getClient().hgetall(key)
     // Build the record via fromEntries rather than a dynamic `result[field] = …`
     // write — the latter is a flagged object-injection sink (security plugin).
-    const entries = Object.entries(all).map(([field, raw]): [string, T] => [
-      field,
-      this.serializer.deserialize<T>(raw)
-    ])
+    const entries: Array<[string, T]> = []
+    for (const [field, raw] of Object.entries(all)) {
+      entries.push([field, await this.decode<T>(raw, options, { field })])
+    }
     return Object.fromEntries(entries)
   }
 
@@ -709,5 +738,23 @@ export class CacheService {
   async info(section?: string): Promise<string> {
     const client = this.connection.getClient()
     return section === undefined ? client.info() : client.info(section)
+  }
+
+  /**
+   * Decodes one stored payload and, when the caller passed `validate`, checks it.
+   *
+   * @typeParam T - The expected decoded type.
+   * @param raw - The stored string.
+   * @param options - The read options of the calling method.
+   * @param location - Where the value came from (`{ index }`, `{ field }`), named in a failure.
+   * @returns The decoded value; the validator's output when it transforms.
+   */
+  private async decode<T>(
+    raw: string,
+    options: ReadOptions<T> | undefined,
+    location?: Record<string, unknown>
+  ): Promise<T> {
+    const value = this.serializer.deserialize<T>(raw)
+    return options?.validate === undefined ? value : validateRead(value, options.validate, location)
   }
 }

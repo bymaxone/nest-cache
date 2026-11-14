@@ -15,6 +15,8 @@ import {
 } from '../constants/default-namespace'
 import {
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  MAX_TIMER_DELAY_MS,
+  MIN_COMMAND_TIMEOUT_MS,
   MIN_CONNECT_TIMEOUT_MS,
   MIN_SHUTDOWN_TIMEOUT_MS
 } from '../constants/default-timeouts'
@@ -218,21 +220,40 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
     options.keyEscaping ?? DEFAULT_KEY_ESCAPING
   )
 
-  const shutdown = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
-  if (shutdown < MIN_SHUTDOWN_TIMEOUT_MS) {
+  requireTimerDelay(
+    'shutdownTimeoutMs',
+    options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
+    MIN_SHUTDOWN_TIMEOUT_MS
+  )
+  requireTimerDelay('connectTimeout', options.connection?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
+  requireTimerDelay('commandTimeout', options.connection?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+}
+
+/**
+ * Rejects a timeout that `setTimeout` would not honour or that is below its minimum: `NaN`, a
+ * fraction, an infinity or a delay above 2^31-1 ms is stored as 1 ms, so the timer fires at once.
+ *
+ * @param option - The option name, echoed in the error details.
+ * @param value - The configured delay in milliseconds; `undefined` means the option is unset.
+ * @param min - The smallest accepted delay.
+ * @throws {CacheException} `CONNECTION_FAILED` when the value is not a finite integer within range.
+ */
+function requireTimerDelay(option: string, value: number | undefined, min: number): void {
+  if (value === undefined) {
+    return
+  }
+  if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
     throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
-      reason: 'shutdownTimeoutMs too low',
-      value: shutdown,
-      min: MIN_SHUTDOWN_TIMEOUT_MS
+      reason: `${option} not a valid timer delay`,
+      value,
+      max: MAX_TIMER_DELAY_MS
     })
   }
-
-  const connectTimeout = options.connection?.connectTimeout
-  if (connectTimeout !== undefined && connectTimeout < MIN_CONNECT_TIMEOUT_MS) {
+  if (value < min) {
     throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
-      reason: 'connectTimeout too low',
-      value: connectTimeout,
-      min: MIN_CONNECT_TIMEOUT_MS
+      reason: `${option} too low`,
+      value,
+      min
     })
   }
 }

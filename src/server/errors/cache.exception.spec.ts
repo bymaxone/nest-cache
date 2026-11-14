@@ -54,6 +54,15 @@ describe('CacheException', () => {
     ).toBe(0)
   })
 
+  // A stored value of the wrong shape is a server-side data fault, like a payload that cannot be
+  // decoded, so it is a 500 and not a client error.
+  it('defaults VALIDATION_FAILED to INTERNAL_SERVER_ERROR with its catalog message', () => {
+    const ex = new CacheException(CACHE_ERROR_CODES.VALIDATION_FAILED)
+
+    expect(ex.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
+    expect(ex.message).toBe('The stored value does not match the expected shape.')
+  })
+
   // An unknown code must fall back to the generic message, never `undefined`.
   it('falls back to a generic message for an unknown code', () => {
     const ex = new CacheException('cache.not_a_real_code' as CacheErrorCode)

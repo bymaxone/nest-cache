@@ -99,6 +99,27 @@ describe('resolveAdminOptions', () => {
     expect(() => resolveAdminOptions({ scopes: SCOPES, [field]: value })).toThrow(CacheException)
   })
 
+  // The probe timeout feeds setTimeout, which stores a delay above 2^31-1 ms as 1 ms: the probe
+  // would report the cache down before asking it anything.
+  it('rejects a probe timeout above the largest delay setTimeout honours', () => {
+    expectCode(
+      () => resolveAdminOptions({ scopes: SCOPES, probeTimeoutMs: 2 ** 31 }),
+      CACHE_ERROR_CODES.INVALID_SCOPE,
+      {
+        reason: 'timer delay too large',
+        option: 'probeTimeoutMs',
+        value: 2 ** 31,
+        max: 2 ** 31 - 1
+      }
+    )
+  })
+
+  it('accepts a probe timeout of exactly 2^31-1', () => {
+    expect(
+      resolveAdminOptions({ scopes: SCOPES, probeTimeoutMs: 2 ** 31 - 1 }).probeTimeoutMs
+    ).toBe(2 ** 31 - 1)
+  })
+
   // The rejection names the option and the value, so a consumer fixes the line
   // they wrote rather than searching for it.
   it('names the offending option and value', () => {

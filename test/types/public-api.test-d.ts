@@ -97,6 +97,45 @@ type _ScriptLua = Expect<Equal<IScriptDefinition['lua'], string>>
 // assignable to its declared type.
 type _OnEvent = Expect<Equal<undefined extends ICacheEvents['onEvent'] ? true : false, true>>
 
+// ─── read validation ─────────────────────────────────────────────────────────
+
+import * as v from 'valibot'
+import { z } from 'zod'
+
+import type { ReadOptions, ReadValidator, StandardSchemaLike } from '@bymax-one/nest-cache'
+
+declare const isDoc: (value: unknown) => value is Doc
+
+// With a type predicate `T` is inferred from it, so no cast is needed and the miss stays `null`.
+type _ValidatedGet = Expect<Equal<ReturnType<typeof cache.get<Doc>>, Promise<Doc | null>>>
+export const inferredFromPredicate = cache.get('doc', 'id', { validate: isDoc })
+type _InferredPredicate = Expect<Equal<Awaited<typeof inferredFromPredicate>, Doc | null>>
+
+// A real zod 4 or valibot schema satisfies the structural Standard Schema shape, and `T` is its output.
+export const zodSchema = z.object({ id: z.number(), tags: z.array(z.string()) })
+export const valibotSchema = v.object({ id: v.number(), tags: v.array(v.string()) })
+export const inferredFromZod = cache.get('doc', 'id', { validate: zodSchema })
+export const inferredFromValibot = cache.get('doc', 'id', { validate: valibotSchema })
+type _ZodOut = Expect<Equal<Awaited<typeof inferredFromZod>, { id: number; tags: string[] } | null>>
+type _ValibotOut = Expect<
+  Equal<Awaited<typeof inferredFromValibot>, { id: number; tags: string[] } | null>
+>
+
+// The option is a pure addition: every earlier call shape still compiles.
+export const stillTwoArguments = cache.get<Doc>('doc', 'id')
+export const stillBatch = cache.mget<Doc>('doc', ['a', 'b'])
+type _ReadValidator = Expect<
+  Equal<
+    ReadValidator<Doc> extends StandardSchemaLike<Doc> | ((value: unknown) => value is Doc)
+      ? true
+      : false,
+    true
+  >
+>
+type _OptionsValidateOptional = Expect<
+  Equal<undefined extends ReadOptions<Doc>['validate'] ? true : false, true>
+>
+
 // ─── admin subpath ───────────────────────────────────────────────────────────
 
 // The administration surface reads through a narrow, read-only capability

@@ -37,6 +37,12 @@ export type {
   SentinelAddress
 } from './interfaces/cache-module-options.interface'
 export type { ICacheEvents } from './interfaces/cache-events.interface'
+export type {
+  ReadOptions,
+  ReadValidator,
+  StandardSchemaLike,
+  StandardSchemaResult
+} from './interfaces/read-options.interface'
 export type { ISerializer } from './interfaces/serializer.interface'
 export type { IScriptDefinition } from './interfaces/script-definition.interface'
 export type { IPubSubHandler, IPubSubPatternHandler } from './interfaces/pubsub-handler.interface'

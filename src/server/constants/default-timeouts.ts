@@ -28,3 +28,12 @@ export const MIN_SHUTDOWN_TIMEOUT_MS = 100
 
 /** Lower bound for `connectTimeout` validation (ms). */
 export const MIN_CONNECT_TIMEOUT_MS = 100
+
+/**
+ * Largest delay (ms) `setTimeout` honours. A larger or non-finite delay is stored as 1 ms, so a
+ * timeout option above it fires at once instead of waiting.
+ */
+export const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
+
+/** Lower bound for `commandTimeout` validation (ms): the smallest delay that waits at all. */
+export const MIN_COMMAND_TIMEOUT_MS = 1

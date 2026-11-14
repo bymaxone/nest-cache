@@ -29,11 +29,13 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import type { IPubSubHandler, IPubSubPatternHandler } from '../interfaces/pubsub-handler.interface'
+import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
 import { describeError } from '../utils/describe-error'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
+import { validateRead } from '../utils/validate-read'
 
 /** Detaches a subscription's listener and unsubscribes its channel/pattern. */
 export type Unsubscribe = () => Promise<void>
@@ -118,11 +120,18 @@ export class PubSubService implements OnApplicationShutdown {
    * @typeParam T - The expected message payload type.
    * @param channel - Bare channel name (namespaced before subscribing).
    * @param handler - Invoked per message with `(message, channel)`.
+   * @param options - Optional read options. With `validate`, a message that does not satisfy it is
+   *   not delivered: it takes the handler-error path (an `error` event with the catalog text and no
+   *   part of the payload).
    * @returns An {@link Unsubscribe} that detaches THIS listener; the channel is
    *   only UNSUBSCRIBE'd once its last listener is removed, so unsubscribing one
    *   handler never breaks others subscribed to the same channel.
    */
-  async subscribe<T>(channel: string, handler: IPubSubHandler<T>): Promise<Unsubscribe> {
+  async subscribe<T>(
+    channel: string,
+    handler: IPubSubHandler<T>,
+    options?: ReadOptions<T>
+  ): Promise<Unsubscribe> {
     const fullChannel = this.keyBuilder.applyNamespace(channel)
     const subscriber = this.ensureSubscriber()
     const ref = await this.retainSubscription(this.channelRefs, fullChannel, () =>
@@ -137,7 +146,8 @@ export class PubSubService implements OnApplicationShutdown {
         return
       }
       Promise.resolve()
-        .then(() => handler(this.serializer.deserialize<T>(raw), incoming))
+        .then(() => this.decode<T>(raw, options))
+        .then((message) => handler(message, incoming))
         .catch((error: unknown) => {
           this.emitHandlerError(incoming, error)
         })
@@ -161,10 +171,15 @@ export class PubSubService implements OnApplicationShutdown {
    * @param pattern - Bare glob pattern (namespaced before subscribing).
    * @param handler - Invoked per message with `(message, channel, pattern)`,
    *   both in their full namespaced form.
+   * @param options - Optional read options; `validate` is applied as in {@link PubSubService.subscribe}.
    * @returns An {@link Unsubscribe} that detaches THIS listener; the pattern is
    *   only PUNSUBSCRIBE'd once its last listener is removed.
    */
-  async psubscribe<T>(pattern: string, handler: IPubSubPatternHandler<T>): Promise<Unsubscribe> {
+  async psubscribe<T>(
+    pattern: string,
+    handler: IPubSubPatternHandler<T>,
+    options?: ReadOptions<T>
+  ): Promise<Unsubscribe> {
     const fullPattern = this.keyBuilder.applyNamespace(pattern)
     const subscriber = this.ensureSubscriber()
     const ref = await this.retainSubscription(this.patternRefs, fullPattern, () =>
@@ -177,7 +192,8 @@ export class PubSubService implements OnApplicationShutdown {
         return
       }
       Promise.resolve()
-        .then(() => handler(this.serializer.deserialize<T>(raw), channel, matchedPattern))
+        .then(() => this.decode<T>(raw, options))
+        .then((message) => handler(message, channel, matchedPattern))
         .catch((error: unknown) => {
           this.emitHandlerError(channel, error)
         })
@@ -308,6 +324,19 @@ export class PubSubService implements OnApplicationShutdown {
       detach()
       await release()
     }
+  }
+
+  /**
+   * Decodes one message and, when the subscriber passed `validate`, checks it.
+   *
+   * @typeParam T - The expected message payload type.
+   * @param raw - The published string.
+   * @param options - The read options of the subscription.
+   * @returns The decoded message; the validator's output when it transforms.
+   */
+  private async decode<T>(raw: string, options: ReadOptions<T> | undefined): Promise<T> {
+    const message = this.serializer.deserialize<T>(raw)
+    return options?.validate === undefined ? message : validateRead(message, options.validate)
   }
 
   /**

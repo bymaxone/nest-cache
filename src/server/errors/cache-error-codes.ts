@@ -67,5 +67,6 @@ export const CACHE_ERROR_MESSAGES: ReadonlyMap<CacheErrorCode, string> = new Map
   [
     CACHE_ERROR_CODES.INVALID_TTL,
     'A TTL in seconds must be a safe integer, and at least 1 for a write that sets one.'
-  ]
+  ],
+  [CACHE_ERROR_CODES.VALIDATION_FAILED, 'The stored value does not match the expected shape.']
 ])
