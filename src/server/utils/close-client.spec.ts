@@ -112,4 +112,60 @@ describe('closeClient', () => {
     expect(stub.disconnect).not.toHaveBeenCalled()
     expect(onForced).not.toHaveBeenCalled()
   })
+
+  // A client with no live socket has nothing to quit: the server is down and ioredis is between attempts
+  // ('reconnecting', 'close'), or a lazy client never connected ('wait'), where a QUIT would first open a
+  // connection just to say goodbye. It is disconnected to stop the retries, without a quit and without
+  // reporting a forced teardown: nothing was forced.
+  it.each(['reconnecting', 'close', 'wait'])(
+    'disconnects a client in status %s without quitting or reporting a forced teardown',
+    async (status) => {
+      const stub = client(() => Promise.resolve('OK'), status)
+      const onForced = jest.fn()
+
+      await closeClient(stub, 500, onForced)
+
+      expect(stub.quit).not.toHaveBeenCalled()
+      expect(onForced).not.toHaveBeenCalled()
+      expect(stub.disconnect).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  // The control: a live connection that refuses the quit is the case `forced_disconnect` is for.
+  it('still reports a forced teardown for a ready client whose quit is refused', async () => {
+    const stub = client(() => Promise.reject(new Error('quit refused')), 'ready')
+    const onForced = jest.fn()
+
+    await closeClient(stub, 500, onForced)
+
+    expect(onForced).toHaveBeenCalledTimes(1)
+    expect(stub.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  // A connect still in flight can take a QUIT (the offline queue may hold it): the client is quit, bounded
+  // by the deadline, and forced when the quit is refused.
+  it.each(['connecting', 'connect'])(
+    'quits a client in status %s and forces it when the quit is refused',
+    async (status) => {
+      const stub = client(() => Promise.reject(new Error('quit refused')), status)
+      const onForced = jest.fn()
+
+      await closeClient(stub, 500, onForced)
+
+      expect(stub.quit).toHaveBeenCalledTimes(1)
+      expect(onForced).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  // A status this code does not know, such as a value a later ioredis adds, must not silently become
+  // "down": it is quit, with the quit raced against the deadline, and forced when that fails.
+  it('quits a client in a status it does not know', async () => {
+    const stub = client(() => Promise.reject(new Error('quit refused')), 'a-future-status')
+    const onForced = jest.fn()
+
+    await closeClient(stub, 500, onForced)
+
+    expect(stub.quit).toHaveBeenCalledTimes(1)
+    expect(onForced).toHaveBeenCalledTimes(1)
+  })
 })

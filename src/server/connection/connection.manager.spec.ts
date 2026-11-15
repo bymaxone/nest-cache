@@ -531,6 +531,8 @@ describe('ConnectionManager', () => {
 
     // The happy path: shutdown quits the client, once.
     it('quits the client', async () => {
+      // A live connection: a client that is down is released without a quit (see close-client).
+      nextRedisStatus = 'ready'
       const manager = makeManager({})
       manager.getClient()
       const client = redisInstances[0]
@@ -586,6 +588,8 @@ describe('ConnectionManager', () => {
     // a forced disconnect() AND signal the forced teardown to the events sink, so
     // a stuck shutdown is observable. Fake timers drive the race past the timeout.
     it('forces disconnect and signals forced_disconnect when quit exceeds the timeout', async () => {
+      // A live connection: only a client that is up can fail to quit in time.
+      nextRedisStatus = 'ready'
       jest.useFakeTimers()
       try {
         // Capture the swallowed SHUTDOWN_TIMEOUT exception so its raw `details`
@@ -624,6 +628,8 @@ describe('ConnectionManager', () => {
     // when it times out) — both sub-paths funnel through the one catch, so a
     // rejected quit must equally force a disconnect and signal forced_disconnect.
     it('forces disconnect and signals forced_disconnect when quit rejects', async () => {
+      // A live connection: only a client that is up can fail to quit.
+      nextRedisStatus = 'ready'
       const onEvent = jest.fn()
       const manager = makeManager({ shutdownTimeoutMs: 100 }, { onEvent })
       manager.getClient()
