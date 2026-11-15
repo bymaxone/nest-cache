@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.19] - 2026-11-14
+
 ### Fixed
 
 - A shutdown during a Redis outage no longer waits out `shutdownTimeoutMs` and no longer reports a forced disconnect. A client that is
@@ -928,7 +930,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.18...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.19...HEAD
+[1.2.19]: https://github.com/bymaxone/nest-cache/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/bymaxone/nest-cache/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/bymaxone/nest-cache/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/bymaxone/nest-cache/compare/v1.2.15...v1.2.16
