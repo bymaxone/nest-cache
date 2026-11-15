@@ -168,4 +168,21 @@ describe('PubSubService dispatch', () => {
 
     expect(calls).toEqual(['new'])
   })
+
+  // Scenario: an application subscribes and unsubscribes many distinct channels and patterns over its
+  // lifetime.
+  // Rule: a channel or pattern left with no handler is dropped from the registry, so a long-running
+  // process does not keep an entry for every name it ever used.
+  it('drops the registry entry of a channel or pattern left with no handler', async () => {
+    for (let i = 0; i < 20; i += 1) {
+      const offChannel = await pubsub.subscribe(`gone${i}`, () => undefined)
+      const offPattern = await pubsub.psubscribe(`gone${i}:*`, () => undefined)
+      await offChannel()
+      await offPattern()
+    }
+    const kept = await pubsub.subscribe('kept', () => undefined)
+
+    expect([pubsub['channelHandlers'].size, pubsub['patternHandlers'].size]).toEqual([1, 0])
+    await kept()
+  })
 })
