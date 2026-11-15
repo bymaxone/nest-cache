@@ -58,6 +58,8 @@ jobs:
         run: pnpm test:types
       - name: Mutation directives parse and carry their reason
         run: pnpm check:mutants
+      - name: The admin subpath issues no mutating command
+        run: pnpm check:admin-readonly
       - name: Choose the revision the baseline is compared with
         env:
           BASE_REF: ${{ github.base_ref }}
