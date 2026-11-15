@@ -26,7 +26,7 @@ detected` for the library's own connection, and every message was offered to eve
 
 ### Fixed
 
-- A shutdown during a Redis outage no longer reports a forced disconnect for a client that never had a live connection. A client that is
+- A shutdown during a Redis outage no longer reports a forced disconnect for a client that has no live connection when the shutdown runs. A client that is
   `reconnecting`, `close` or `wait` (a lazy client that never connected) has no live connection to say goodbye on, so `closeClient`
   now releases it directly (`disconnect()`, which stops its retries) instead of sending a `QUIT`. The `forced_disconnect` event is reserved
   for a connection that was live and did not quit in time or refused. A connect still in flight (`connecting`, `connect`) and any status
