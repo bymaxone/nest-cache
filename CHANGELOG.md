@@ -7,6 +7,19 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- The Pub/Sub subscriber no longer carries one listener per subscription. It had a `message` (or `pmessage`) listener for each
+  `subscribe` / `psubscribe`, so the eleventh made Node print `MaxListenersExceededWarning: Possible EventEmitter memory leak
+detected` for the library's own connection, and every message was offered to every listener in turn. It now carries one listener of each kind and
+  looks each message up by its channel or pattern. Measured with ioredis 6 on 12 channel and 12 pattern subscriptions: two
+  `MaxListenersExceededWarning` events and 24 listeners before, none and two after. Each handler keeps its own decoding and its own
+  failure report, so a handler that throws still reaches no other handler and no later message, and the `handler_error` event is
+  unchanged. The README and the specification now state the ordering a handler gets (started in arrival order, calls may overlap and
+  finish out of order) and that nothing bounds the calls in flight.
+
+  **Apply to a consumer:** nothing to change.
+
 ## [1.2.19] - 2026-11-14
 
 ### Fixed
