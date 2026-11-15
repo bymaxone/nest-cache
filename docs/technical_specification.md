@@ -1175,6 +1175,8 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    * quit() raced against shutdownTimeoutMs (a SHUTDOWN_TIMEOUT CacheException rejects the race).
    * On timeout or failure: emits onEvent('error', { role: 'main', reason: 'forced_disconnect', shutdownTimeoutMs })
    * and calls disconnect(). The Pub/Sub subscriber is closed the same way, with `role: 'subscriber'`.
+   * A client with no live connection ('reconnecting', 'close', 'wait') is disconnected without a quit and
+   * without the event; a connect still in flight ('connecting', 'connect') is quit or forced within shutdownTimeoutMs.
    */
   onApplicationShutdown(): Promise<void>
 }
@@ -1204,11 +1206,11 @@ export interface ICacheEvents {
 
 `data` never carries connection credentials and always carries `role: 'main' | 'subscriber'` for connection events. The `CacheEventName` union has no dedicated member for failures that are not socket errors, so `'error'` also carries:
 
-| `data.reason`         | Source                                                          | Other fields                             |
-| --------------------- | --------------------------------------------------------------- | ---------------------------------------- |
-| _(absent)_            | ioredis socket error                                            | `error` (message)                        |
-| `'handler_error'`     | A Pub/Sub handler threw or a payload failed to deserialize (§8) | `role: 'subscriber'`, `channel`, `error` |
-| `'forced_disconnect'` | Graceful `quit()` exceeded `shutdownTimeoutMs` (shutdown)       | `role`, `shutdownTimeoutMs`              |
+| `data.reason`         | Source                                                                                                                                  | Other fields                             |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| _(absent)_            | ioredis socket error                                                                                                                    | `error` (message)                        |
+| `'handler_error'`     | A Pub/Sub handler threw or a payload failed to deserialize (§8)                                                                         | `role: 'subscriber'`, `channel`, `error` |
+| `'forced_disconnect'` | A live connection's graceful `quit()` failed or exceeded `shutdownTimeoutMs` (shutdown); not emitted for a client that was already down | `role`, `shutdownTimeoutMs`              |
 
 ### 11.3 `parseRedisUrl`
 

@@ -64,13 +64,14 @@ const ROOT = pkg.root
 // to absorb ordinary growth; here that is intended, so growth past the margin is raised and justified in
 // review. Measured sizes are taken after the comments are stripped.
 //
-// Server budget: 10 878 B, the 10 848 B measured plus 30 B of headroom. The measurement includes the
+// Server budget: 10 910 B, the 10 880 B measured plus 30 B of headroom. The measurement includes the
 // refusal of a client after a failed boot, the short `disconnectTimeout` every client is created with,
 // the fixed text that replaces a third party's message in `details`, and the shutdown that bounds the
 // main client and the Pub/Sub subscriber alike: the shared `closeClient` helper, the subscriber's
-// forced-disconnect event and the stored `shutdownTimeoutMs`.
+// forced-disconnect event and the stored `shutdownTimeoutMs`, and the release of a client that is
+// already down, which `closeClient` does without a quit (32 B).
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 10_878 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 10_910 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5.3 * 1024 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }

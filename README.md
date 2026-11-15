@@ -598,8 +598,8 @@ export class ObservabilityModule {}
 - **Everything is per role.** The module runs a main client and a dedicated subscriber, and both
   emit the same events. Alert on `role="main"`; the subscriber is control-plane traffic whose
   loss costs Pub/Sub delivery, not cache reads.
-- **An `error` carrying a `reason` is not a socket failure.** `forced_disconnect` (graceful
-  shutdown) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
+- **An `error` carrying a `reason` is not a socket failure.** `forced_disconnect` (a live connection
+  that did not quit at shutdown) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
   Only an `error` carrying the driver's message does.
 - **Labels come from a closed set.** `role` is `main` or `subscriber`; anything else is recorded as
   `unknown`. No part of an error message is ever a label, since a driver message can carry a host or

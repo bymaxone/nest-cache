@@ -7,6 +7,21 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- A shutdown during a Redis outage no longer waits out `shutdownTimeoutMs` and no longer reports a forced disconnect. A client that is
+  `reconnecting`, `close` or `wait` (a lazy client that never connected) has no live connection to say goodbye on, so `closeClient`
+  now releases it directly (`disconnect()`, which stops its retries) instead of queueing a `QUIT` that could only time out. The
+  `forced_disconnect` event is reserved for a connection that was live and did not quit in time or refused. A connect still in flight
+  (`connecting`, `connect`) and any status this code does not know keep the previous path: `quit()` raced against `shutdownTimeoutMs`,
+  then a forced disconnect, so it ends within `shutdownTimeoutMs`. Measured on a stopped Redis with both clients `reconnecting`: the
+  close returns in under 500 ms (the end-to-end test asserts that bound) and no `forced_disconnect` is emitted; the same test on 1.2.18
+  receives it for both roles.
+
+  **Apply to a consumer:** `forced_disconnect` now fires only for a live connection that did not quit in time or refused. A shutdown
+  during an outage no longer emits it; such a shutdown is visible through the `error`, `close` and `reconnecting` events that preceded
+  it. A host that alerts on `forced_disconnect` to detect a shutdown during an outage must alert on those events instead.
+
 ## [1.2.18] - 2026-11-14
 
 ### Fixed
