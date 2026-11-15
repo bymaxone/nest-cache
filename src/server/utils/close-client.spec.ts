@@ -142,8 +142,8 @@ describe('closeClient', () => {
     expect(stub.disconnect).toHaveBeenCalledTimes(1)
   })
 
-  // A connect still in flight can take a QUIT (the offline queue may hold it), so it keeps the path it had:
-  // quit, bounded by the deadline.
+  // A connect still in flight can take a QUIT (the offline queue may hold it): the client is quit, bounded
+  // by the deadline, and forced when the quit is refused.
   it.each(['connecting', 'connect'])(
     'quits a client in status %s and forces it when the quit is refused',
     async (status) => {
@@ -158,7 +158,7 @@ describe('closeClient', () => {
   )
 
   // A status this code does not know, such as a value a later ioredis adds, must not silently become
-  // "down": it takes the path it always had, a quit raced against the deadline.
+  // "down": it is quit, with the quit raced against the deadline, and forced when that fails.
   it('quits a client in a status it does not know', async () => {
     const stub = client(() => Promise.reject(new Error('quit refused')), 'a-future-status')
     const onForced = jest.fn()
