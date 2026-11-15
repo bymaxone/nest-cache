@@ -142,9 +142,10 @@ const failures = []
 const fail = (check, detail) => failures.push(`${check}: ${detail}`)
 
 // ---------------------------------------------------------------------------
-// 1. Every link in the README points somewhere real. A bad HTTP status fails the
-//    gate; a link the machine could not reach at all is reported as a note, since
-//    an offline runner is not a defect in the documentation.
+// 1. Every link in the README points somewhere real. A client-error HTTP status
+//    (404, 410 and the like) fails the gate; a link the machine could not reach at
+//    all, and a host that answers 5xx or 429, are reported as a note, since an
+//    offline or struggling host is not a defect in the documentation.
 // ---------------------------------------------------------------------------
 
 /** Slug a Markdown heading the way GitHub does. Deliberately does NOT trim: the
