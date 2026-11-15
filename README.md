@@ -392,9 +392,8 @@ are not replayed.
 
 **Handlers.** Every handler subscribed to a channel receives each message of it, and one that throws,
 or whose message it cannot decode, is reported through `events.onEvent` without touching the others
-or the next message. A handler is started on messages in the order they arrived, and the library
-does not wait for one call to finish before it starts the next: a handler that awaits can overlap
-with itself and finish out of order. Nothing bounds how many calls run at once or wait, so a handler
+or the next message. The library does not wait for one call to finish before it starts the next:
+a handler that awaits can overlap with itself and finish out of order. Nothing bounds how many calls run at once or wait, so a handler
 slower than the publish rate lets the work in flight grow without limit; keep a handler quick, or
 hand the work to a queue.
 
