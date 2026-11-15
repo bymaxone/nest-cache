@@ -142,9 +142,10 @@ const failures = []
 const fail = (check, detail) => failures.push(`${check}: ${detail}`)
 
 // ---------------------------------------------------------------------------
-// 1. Every link in the README points somewhere real. A bad HTTP status fails the
-//    gate; a link the machine could not reach at all is reported as a note, since
-//    an offline runner is not a defect in the documentation.
+// 1. Every link in the README points somewhere real. A client-error HTTP status
+//    (404, 410 and the like) fails the gate; a link the machine could not reach at
+//    all, and a host that answers 5xx or 429, are reported as a note, since an
+//    offline or struggling host is not a defect in the documentation.
 // ---------------------------------------------------------------------------
 
 /** Slug a Markdown heading the way GitHub does. Deliberately does NOT trim: the
@@ -403,6 +404,16 @@ async function checkLinks() {
         // failing here would block the very release that makes the link true.
         if (res.status === 404 && probe !== url) {
           console.log(`  note: ${url} is not live yet — expected until the first publish`)
+          return null
+        }
+        // A host that answers 5xx, or 429 again after the GET above, is in trouble of its own, and a link
+        // check cannot tell that from a dead link. Reported like a transport error, never fatal: this gate
+        // also guards `prepublishOnly`, and someone else's outage must not block a release. 404, 410 and the
+        // other client errors still fail.
+        if (res.status >= 500 || res.status === 429) {
+          console.log(
+            `  note: ${url} answered HTTP ${res.status}, the host's trouble and not proof that the link is dead`
+          )
           return null
         }
         return `${url} → HTTP ${res.status}`
