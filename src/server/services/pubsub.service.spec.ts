@@ -196,12 +196,11 @@ describe('PubSubService', () => {
     await observed.onApplicationShutdown()
   })
 
-  // The unsubscribe returned by subscribe() must detach the listener (by the
-  // 'message' event name) so a later publish is not delivered.
+  // The unsubscribe returned by subscribe() must stop delivery to its handler, so a later
+  // publish is not delivered.
   it('detaches the listener via the returned unsubscribe', async () => {
     const subscriber = connection.createSubscriberClient() as Redis
     jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(subscriber)
-    const offSpy = jest.spyOn(subscriber, 'off')
     const received: string[] = []
     const off = await pubsub.subscribe<string>('events', (message) => {
       received.push(message)
@@ -212,9 +211,6 @@ describe('PubSubService', () => {
     await tick()
 
     expect(received).toEqual([])
-    // Pin the 'message' event name on .off (channel unsubscribe alone would also
-    // stop delivery, so without this the .off('message') mutant survives).
-    expect(offSpy).toHaveBeenCalledWith('message', expect.any(Function))
   })
 
   // Multiple handlers on the SAME channel must share one SUBSCRIBE; unsubscribing
@@ -254,21 +250,24 @@ describe('PubSubService', () => {
 
   // Calling the returned unsubscribe twice must be a no-op the second time, so a
   // double release can never over-decrement a channel another handler still uses.
-  // The detach (`subscriber.off`) must run exactly once across both calls: this
-  // pins the `if (released) return` short-circuit and the `released = true` flag —
-  // dropping either would re-detach on the second call.
+  // The second call must not release the channel again: another handler's channel stays
+  // subscribed and keeps receiving, and the channel with no handler left is unsubscribed once.
   it('is idempotent when the returned unsubscribe is called twice', async () => {
     const subscriber = connection.createSubscriberClient() as Redis
     jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(subscriber)
     const unsubSpy = jest.spyOn(subscriber, 'unsubscribe')
-    const offSpy = jest.spyOn(subscriber, 'off')
+    const kept: string[] = []
+    const keptOff = await pubsub.subscribe<string>('shared', (message) => void kept.push(message))
     const off = await pubsub.subscribe('shared', () => undefined)
 
     await off()
     await off()
+    await pubsub.publish('shared', 'still')
+    await tick()
+    expect([unsubSpy.mock.calls.length, kept]).toEqual([0, ['still']])
 
+    await keptOff()
     expect(unsubSpy).toHaveBeenCalledTimes(1)
-    expect(offSpy).toHaveBeenCalledTimes(1)
   })
 
   // psubscribe must deliver messages from any matching channel with the concrete
@@ -276,7 +275,6 @@ describe('PubSubService', () => {
   it('delivers pattern-matched messages and unsubscribes the pattern', async () => {
     const subscriber = connection.createSubscriberClient() as Redis
     jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(subscriber)
-    const offSpy = jest.spyOn(subscriber, 'off')
     const received: Array<{ message: string; channel: string; pattern: string }> = []
     const off = await pubsub.psubscribe<string>('users:*', (message, channel, pattern) => {
       received.push({ message, channel, pattern })
@@ -290,9 +288,14 @@ describe('PubSubService', () => {
     await pubsub.publish('users:1', 'after')
     await tick()
     expect(received).toHaveLength(1)
-    // Pin the 'pmessage' event name on .off (pattern unsubscribe alone would also
-    // stop delivery, so without this the .off('pmessage') mutant survives).
-    expect(offSpy).toHaveBeenCalledWith('pmessage', expect.any(Function))
+
+    // A handler added on the same pattern afterwards is the only one called: the removed one is gone
+    // from the pattern, not only unsubscribed on the server.
+    const later: string[] = []
+    await pubsub.psubscribe<string>('users:*', (message) => void later.push(message))
+    await pubsub.publish('users:1', 'again')
+    await tick()
+    expect([received.length, later]).toEqual([1, ['again']])
   })
 
   // A throwing pattern handler must be swallowed, and a non-matching pattern

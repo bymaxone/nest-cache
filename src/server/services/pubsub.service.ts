@@ -43,6 +43,13 @@ import { validateRead } from '../utils/validate-read'
 export type Unsubscribe = () => Promise<void>
 
 /**
+ * Starts one handler on one message. The handler's own failure, and a failure to decode the
+ * message for it, are reported and end there, so they reach neither another handler nor the next
+ * message.
+ */
+type Dispatch = (channel: string, raw: string) => void
+
+/**
  * Live-listener counter for one namespaced channel or pattern, with the SUBSCRIBE /
  * PSUBSCRIBE that put it on the server. Every listener that joins awaits `ready`, so a
  * caller is told it is subscribed only once the server accepted the command.
@@ -71,6 +78,12 @@ export class PubSubService implements OnApplicationShutdown {
 
   /** Live-listener ref-count per namespaced pattern; PUNSUBSCRIBE fires on the last. */
   private readonly patternRefs = new Map<string, SubscriptionRef>()
+
+  /** The handlers of each namespaced channel; one `message` listener on the subscriber serves them all. */
+  private readonly channelHandlers = new Map<string, Set<Dispatch>>()
+
+  /** The handlers of each namespaced pattern; one `pmessage` listener on the subscriber serves them all. */
+  private readonly patternHandlers = new Map<string, Set<Dispatch>>()
 
   /** Resolved serializer: explicit option wins, then injected token, then JSON. */
   private readonly serializer: ISerializer
@@ -144,13 +157,10 @@ export class PubSubService implements OnApplicationShutdown {
       subscriber.subscribe(fullChannel)
     )
 
-    // Synchronous void listener: the Promise chain makes the fire-and-forget
-    // intent structurally explicit — Node event emitters do not await returned
-    // Promises, so an async listener would silently drop any post-try/catch error.
-    const listener = (incoming: string, raw: string): void => {
-      if (incoming !== fullChannel) {
-        return
-      }
+    // Synchronous, with the Promise chain making the fire-and-forget intent explicit: the
+    // dispatcher does not await what a handler returns, so a failure after the first await
+    // would be lost without the final catch.
+    const dispatch: Dispatch = (incoming, raw) => {
       Promise.resolve()
         .then(() => this.decode<T>(raw, options))
         .then((message) => handler(message, incoming))
@@ -158,14 +168,11 @@ export class PubSubService implements OnApplicationShutdown {
           this.emitHandlerError(incoming, error)
         })
     }
-    subscriber.on('message', listener)
 
-    return this.makeUnsubscribe(
-      () => subscriber.off('message', listener),
-      () =>
-        this.releaseSubscription(this.channelRefs, fullChannel, ref, () =>
-          subscriber.unsubscribe(fullChannel)
-        )
+    return this.makeUnsubscribe(this.addHandler(this.channelHandlers, fullChannel, dispatch), () =>
+      this.releaseSubscription(this.channelRefs, fullChannel, ref, () =>
+        subscriber.unsubscribe(fullChannel)
+      )
     )
   }
 
@@ -192,26 +199,20 @@ export class PubSubService implements OnApplicationShutdown {
       subscriber.psubscribe(fullPattern)
     )
 
-    // Same synchronous-listener pattern as subscribe() — see that method for rationale.
-    const listener = (matchedPattern: string, channel: string, raw: string): void => {
-      if (matchedPattern !== fullPattern) {
-        return
-      }
+    // Same shape as subscribe(), see there.
+    const dispatch: Dispatch = (channel, raw) => {
       Promise.resolve()
         .then(() => this.decode<T>(raw, options))
-        .then((message) => handler(message, channel, matchedPattern))
+        .then((message) => handler(message, channel, fullPattern))
         .catch((error: unknown) => {
           this.emitHandlerError(channel, error)
         })
     }
-    subscriber.on('pmessage', listener)
 
-    return this.makeUnsubscribe(
-      () => subscriber.off('pmessage', listener),
-      () =>
-        this.releaseSubscription(this.patternRefs, fullPattern, ref, () =>
-          subscriber.punsubscribe(fullPattern)
-        )
+    return this.makeUnsubscribe(this.addHandler(this.patternHandlers, fullPattern, dispatch), () =>
+      this.releaseSubscription(this.patternRefs, fullPattern, ref, () =>
+        subscriber.punsubscribe(fullPattern)
+      )
     )
   }
 
@@ -246,9 +247,56 @@ export class PubSubService implements OnApplicationShutdown {
       if (this.#shutDown) {
         throw new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'shutdown' })
       }
-      this.#subscriber = guardClient(this.connection.createSubscriberClient())
+      const subscriber = guardClient(this.connection.createSubscriberClient())
+      // One listener of each kind however many handlers there are: an emitter warns of a leak past
+      // ten listeners of one event, and every message would otherwise be offered to each in turn.
+      subscriber.on('message', (channel: string, raw: string) =>
+        this.fanOut(this.channelHandlers.get(channel), channel, raw)
+      )
+      subscriber.on('pmessage', (pattern: string, channel: string, raw: string) =>
+        this.fanOut(this.patternHandlers.get(pattern), channel, raw)
+      )
+      this.#subscriber = subscriber
     }
     return this.#subscriber
+  }
+
+  /**
+   * Registers a handler for a channel or pattern.
+   *
+   * @param registry - The channel or pattern handler map.
+   * @param target - The full namespaced channel/pattern.
+   * @param dispatch - Starts the handler on one message.
+   * @returns What removes the handler again, and the entry of a target left with none.
+   */
+  private addHandler(
+    registry: Map<string, Set<Dispatch>>,
+    target: string,
+    dispatch: Dispatch
+  ): () => void {
+    const handlers = registry.get(target) ?? new Set<Dispatch>()
+    handlers.add(dispatch)
+    registry.set(target, handlers)
+    return () => {
+      handlers.delete(dispatch)
+      if (handlers.size === 0) {
+        registry.delete(target)
+      }
+    }
+  }
+
+  /**
+   * Starts every handler of a target on one message, in the order they were added. Starting a handler
+   * only schedules it, so no handler can be added or removed while the loop runs.
+   *
+   * @param handlers - The handlers of the message's channel or pattern, if any.
+   * @param channel - The full namespaced channel the message arrived on.
+   * @param raw - The published string.
+   */
+  private fanOut(handlers: Set<Dispatch> | undefined, channel: string, raw: string): void {
+    for (const dispatch of handlers ?? []) {
+      dispatch(channel, raw)
+    }
   }
 
   /**
