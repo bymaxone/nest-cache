@@ -185,4 +185,25 @@ describe('PubSubService dispatch', () => {
     expect([pubsub['channelHandlers'].size, pubsub['patternHandlers'].size]).toEqual([1, 0])
     await kept()
   })
+
+  // Scenario: the UNSUBSCRIBE of the last handler is refused, so the server keeps sending the channel.
+  // Rule: a message for a channel nobody handles any more is dropped without a report and without
+  // reaching a handler added to another channel.
+  it('drops a message for a channel left with no handler after a refused unsubscribe', async () => {
+    const subscriber = connection.createSubscriberClient() as Redis
+    jest.spyOn(connection, 'createSubscriberClient').mockReturnValue(subscriber)
+    jest.spyOn(subscriber, 'unsubscribe').mockRejectedValue(new Error('unsubscribe refused'))
+    const onEvent = jest.fn()
+    const observed = new PubSubService(options, connection, keyBuilder, undefined, { onEvent })
+    const other: string[] = []
+    await observed.subscribe('other', (message) => void other.push(String(message)))
+    const off = await observed.subscribe('orphan', () => undefined)
+    await expect(off()).rejects.toThrow('unsubscribe refused')
+
+    await observed.publish('orphan', 'lost')
+    await tick()
+
+    expect([other, onEvent.mock.calls]).toEqual([[], []])
+    await observed.onApplicationShutdown()
+  })
 })
