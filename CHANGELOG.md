@@ -7,6 +7,21 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- Two optional module options bound the work the Pub/Sub handlers have in flight: `pubsubMaxConcurrentHandlers` (an integer from 1)
+  caps the executions running at once across the whole subscriber, each covering decoding, validating and running the handler for one
+  message, and `pubsubMaxQueuedMessages` (an integer from 0, which needs the first) caps how many wait for a slot. Waiting messages start
+  in arrival order, so with 1 the handlers run one at a time in the order the messages arrived, even with an asynchronous `validate`.
+  A message that finds no slot and no room is dropped, never retried, and reported through `events.onEvent` as an `error` with
+  `reason: 'handler_queue_full'` and the `channel`, never a payload; the first drop is reported at once and the drops of the next
+  10 seconds as one event with `dropped` (their number) and the channel of the last. The slots are shared by every channel, so one slow
+  channel can delay the others, and a handler that never settles keeps its slot. Unset, both options bound nothing, as before.
+
+  **Apply to a derived backend:** nothing to change. Both options are optional and unset keeps today's behaviour. A host whose handlers
+  can fall behind the publish rate can set `pubsubMaxConcurrentHandlers` (and `pubsubMaxQueuedMessages`) and alert on
+  `handler_queue_full` events; the declarations of `PubSubService` also list its new private members, which are not part of the API.
+
 ## [1.2.20] - 2026-11-15
 
 ### Fixed

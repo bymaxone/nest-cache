@@ -146,6 +146,21 @@ export interface BymaxCacheModuleOptions {
   /** Graceful shutdown timeout in ms. Default: 5000. */
   shutdownTimeoutMs?: number
   /**
+   * The most Pub/Sub handler executions in flight at once across the whole subscriber, an integer from 1.
+   * An execution covers decoding, validating and running the handler for one message. Default: unset,
+   * which bounds nothing. Messages that arrive while every slot is taken wait in arrival order, up to
+   * {@link BymaxCacheModuleOptions.pubsubMaxQueuedMessages}. One slow channel can hold every slot and
+   * delay the others, and a handler that never settles keeps its slot for good.
+   */
+  pubsubMaxConcurrentHandlers?: number
+  /**
+   * How many Pub/Sub executions may wait for a slot, an integer from 0. A message that finds no slot
+   * and no room is dropped, not retried, and reported as an `error` event with
+   * `reason: 'handler_queue_full'`. Default: unset, which bounds the queue by nothing. Requires
+   * {@link BymaxCacheModuleOptions.pubsubMaxConcurrentHandlers}.
+   */
+  pubsubMaxQueuedMessages?: number
+  /**
    * Allows `flushNamespace()` to run even when `NODE_ENV` is `production` (trimmed, any letter case).
    * Default: false. SAFETY: leave false in real production environments.
    */

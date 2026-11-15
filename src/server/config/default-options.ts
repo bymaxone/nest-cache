@@ -270,6 +270,39 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   )
   requireTimerDelay('connectTimeout', options.connection?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
   requireTimerDelay('commandTimeout', options.connection?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  validateHandlerBounds(options)
+}
+
+/**
+ * Rejects a handler bound that is not an integer in range, and a queue bound with no concurrency bound
+ * to queue behind.
+ *
+ * @param options - The raw consumer options.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
+ */
+function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
+  const { pubsubMaxConcurrentHandlers: slots, pubsubMaxQueuedMessages: queued } = options
+  if (slots === undefined && queued !== undefined) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
+      reason: 'pubsubMaxQueuedMessages needs pubsubMaxConcurrentHandlers'
+    })
+  }
+  for (const [option, value, min] of [
+    ['pubsubMaxConcurrentHandlers', slots, 1],
+    ['pubsubMaxQueuedMessages', queued, 0]
+  ] as const) {
+    if (
+      value !== undefined &&
+      (!Number.isInteger(value) || value < min || value > MAX_TIMER_DELAY_MS)
+    ) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
+        reason: `${option} not an integer in range`,
+        value,
+        min,
+        max: MAX_TIMER_DELAY_MS
+      })
+    }
+  }
 }
 
 /**
@@ -327,7 +360,9 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     shutdownTimeoutMs: options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
     allowFlushInProduction: options.allowFlushInProduction ?? false,
     isGlobal: options.isGlobal ?? true,
-    scripts: options.scripts
+    scripts: options.scripts,
+    pubsubMaxConcurrentHandlers: options.pubsubMaxConcurrentHandlers,
+    pubsubMaxQueuedMessages: options.pubsubMaxQueuedMessages
   }
   // The three connection shapes carry the Redis credentials — a `url` holds the
   // password inline, and the discrete forms hold it as a field. This object is

@@ -33,4 +33,6 @@ export type ResolvedOptions = Required<
   serializer: BymaxCacheModuleOptions['serializer']
   events: BymaxCacheModuleOptions['events']
   scripts: BymaxCacheModuleOptions['scripts']
+  pubsubMaxConcurrentHandlers: BymaxCacheModuleOptions['pubsubMaxConcurrentHandlers']
+  pubsubMaxQueuedMessages: BymaxCacheModuleOptions['pubsubMaxQueuedMessages']
 }
