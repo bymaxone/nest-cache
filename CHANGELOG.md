@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.20] - 2026-11-15
+
 ### Fixed
 
 - The Pub/Sub subscriber no longer carries one listener per subscription. It had a `message` (or `pmessage`) listener for each
@@ -24,14 +26,15 @@ detected` for the library's own connection, and every message was offered to eve
 
 ### Fixed
 
-- A shutdown during a Redis outage no longer waits out `shutdownTimeoutMs` and no longer reports a forced disconnect. A client that is
+- A shutdown during a Redis outage no longer reports a forced disconnect for a client that never had a live connection. A client that is
   `reconnecting`, `close` or `wait` (a lazy client that never connected) has no live connection to say goodbye on, so `closeClient`
-  now releases it directly (`disconnect()`, which stops its retries) instead of queueing a `QUIT` that could only time out. The
-  `forced_disconnect` event is reserved for a connection that was live and did not quit in time or refused. A connect still in flight
-  (`connecting`, `connect`) and any status this code does not know keep the previous path: `quit()` raced against `shutdownTimeoutMs`,
-  then a forced disconnect, so it ends within `shutdownTimeoutMs`. Measured on a stopped Redis with both clients `reconnecting`: the
-  close returns in under 500 ms (the end-to-end test asserts that bound) and no `forced_disconnect` is emitted; the same test on 1.2.18
-  receives it for both roles.
+  now releases it directly (`disconnect()`, which stops its retries) instead of sending a `QUIT`. The `forced_disconnect` event is reserved
+  for a connection that was live and did not quit in time or refused. A connect still in flight (`connecting`, `connect`) and any status
+  this code does not know keep the previous path: `quit()` raced against `shutdownTimeoutMs`, then a forced disconnect, so it ends within
+  `shutdownTimeoutMs`. Measured on a stopped Redis with both clients `reconnecting`: on 1.2.18 the main client always reported
+  `forced_disconnect` (its `QUIT` is rejected at once because it has no offline queue) and the subscriber did so only when a command was queued
+  on it (ioredis answers its `QUIT` locally otherwise); the close took 1 to 2 ms without a queued command and 153 ms with one. With this
+  version none of those cases emits `forced_disconnect` and the close took 0 to 2 ms (the end-to-end test asserts under 500 ms).
 
   **Apply to a consumer:** `forced_disconnect` now fires only for a live connection that did not quit in time or refused. A shutdown
   during an outage no longer emits it; such a shutdown is visible through the `error`, `close` and `reconnecting` events that preceded
@@ -943,7 +946,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.19...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.20...HEAD
+[1.2.20]: https://github.com/bymaxone/nest-cache/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/bymaxone/nest-cache/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/bymaxone/nest-cache/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/bymaxone/nest-cache/compare/v1.2.16...v1.2.17
