@@ -12,6 +12,10 @@
     "reason": "Runs scripts/mutate-const-tables.mjs as a child process on fixture directories and imports nothing from src/, so it judges no mutant."
   },
   {
+    "file": "src/server/utils/close-client.exit.spec.ts",
+    "reason": "Bundles close-client with tsup and runs the bundle in a child process on a client that cannot connect, so no instrumented code is reachable from it and it judges no mutant."
+  },
+  {
     "file": "src/strip-bundle-comments.spec.ts",
     "reason": "Runs scripts/strip-bundle-comments.mjs as a child process on fixture directories and imports nothing from src/, so it judges no mutant."
   }
