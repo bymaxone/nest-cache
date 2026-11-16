@@ -4,6 +4,8 @@
  *
  * Layer: server.
  */
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
+import { CacheException } from '../errors/cache.exception'
 import { closeClient, type ClosableClient } from './close-client'
 
 /** A client stub with the given status whose `quit` is `quit`. */
@@ -168,4 +170,55 @@ describe('closeClient', () => {
     expect(stub.quit).toHaveBeenCalledTimes(1)
     expect(onForced).toHaveBeenCalledTimes(1)
   })
+
+  // A client with no live socket keeps what was queued on it, and ioredis flushes that queue only on a
+  // stream `close` that a client in its retry delay never gets. The flush happens after the disconnect
+  // that stops the retries, once, with the library's own refusal carrying fixed text.
+  it.each(['reconnecting', 'close', 'wait'])(
+    'rejects what is queued on a client in status %s once it is disconnected',
+    async (status) => {
+      const order: string[] = []
+      const stub = Object.assign(
+        client(() => Promise.resolve('OK'), status),
+        { flushQueue: jest.fn((error: Error) => order.push(`flush:${error.message}`)) }
+      )
+      stub.disconnect.mockImplementation(() => order.push('disconnect'))
+
+      await closeClient(stub, 1_000, jest.fn())
+
+      expect(order).toEqual([
+        'disconnect',
+        `flush:${new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST).message}`
+      ])
+      const error = stub.flushQueue.mock.calls[0]?.[0]
+      expect(error).toBeInstanceOf(CacheException)
+      expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_LOST)
+      expect((error as CacheException).details).toEqual({ reason: 'shutdown' })
+    }
+  )
+
+  // The flush is not part of ioredis's public surface. A client without it is closed as before: the
+  // call completes and the queued commands are left to their own timeouts.
+  it('closes a down client that has no flushQueue and leaves its queue to the command timeouts', async () => {
+    const stub = client(() => Promise.resolve('OK'), 'reconnecting')
+
+    await expect(closeClient(stub, 1_000, jest.fn())).resolves.toBeUndefined()
+
+    expect(stub.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  // A live client is quit, not flushed: its queue drains to the server or fails with the connection.
+  it.each(['ready', 'connecting', 'connect', 'end'])(
+    'does not flush a client in status %s',
+    async (status) => {
+      const stub = Object.assign(
+        client(() => Promise.resolve('OK'), status),
+        { flushQueue: jest.fn() }
+      )
+
+      await closeClient(stub, 1_000, jest.fn())
+
+      expect(stub.flushQueue).not.toHaveBeenCalled()
+    }
+  )
 })

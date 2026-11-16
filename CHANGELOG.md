@@ -7,6 +7,22 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- Closing the application while Redis is down no longer keeps the process alive for the command timeout. A client in its retry delay
+  (`reconnecting`, `close`) has a stream that is already closed, so disconnecting it emits no `close` and ioredis never flushed what was
+  queued on it: a `subscribe` or `unsubscribe` issued while the server was down kept its command timeout timer, and with it the process,
+  for `commandTimeout` (5 000 ms by default, 15 000 ms with `commandTimeout: 15000`). Since 1.2.19 the shutdown of such a client
+  disconnects it without a `QUIT`, and now also rejects what is queued on it at once, with `cache.connection_lost`
+  (`reason: 'shutdown'`, fixed text). The flush is ioredis's own `flushQueue`, which both client classes have at runtime but declare
+  private; it is called when present, and a contract test against the real `Redis` and `Cluster` classes fails if an ioredis release
+  removes or changes it. If a release lacked it, the shutdown would still complete and the queued commands would again be left to their
+  own timeouts. 1.2.18 did not show this, because its `QUIT` was raced against the timeout and the forced disconnect usually landed
+  while a retry's stream existed.
+
+  **Apply to a consumer:** nothing to change. A `subscribe` or `unsubscribe` that was pending when the application closed now rejects
+  with `cache.connection_lost` immediately instead of at its command timeout.
+
 ### Added
 
 - Two optional module options bound the work the Pub/Sub handlers have in flight: `pubsubMaxConcurrentHandlers` (an integer from 1)
