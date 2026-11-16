@@ -459,21 +459,25 @@ export class PubSubService implements OnApplicationShutdown {
       return
     }
     this.emitDrop({ channel })
-    this.openDropWindow()
+    this.openDropWindow(channel)
   }
 
-  /** Starts the window the drops that follow the last report are summed in. */
-  private openDropWindow(): void {
+  /**
+   * Starts the window the drops that follow the last report are summed in.
+   *
+   * @param channel - The channel of the drop just reported, the last one until another follows.
+   */
+  private openDropWindow(channel: string): void {
     const timer = setTimeout(() => {
       const drops = this.drops
       this.drops = null
       if (drops !== null && drops.count > 0) {
         this.emitDrop({ channel: drops.channel, dropped: drops.count })
-        this.openDropWindow()
+        this.openDropWindow(drops.channel)
       }
     }, DROP_REPORT_WINDOW_MS)
     timer.unref()
-    this.drops = { count: 0, channel: '', timer }
+    this.drops = { count: 0, channel, timer }
   }
 
   /**
