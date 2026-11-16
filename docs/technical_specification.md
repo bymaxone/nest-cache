@@ -431,6 +431,12 @@ export interface BymaxCacheModuleOptions {
   /** Timeout for graceful shutdown in ms. Default: 5000 */
   shutdownTimeoutMs?: number
 
+  /** Most Pub/Sub handler executions in flight at once across the subscriber (integer from 1). Default: unset, unbounded */
+  pubsubMaxConcurrentHandlers?: number
+
+  /** How many Pub/Sub executions may wait for a slot (integer from 0); needs `pubsubMaxConcurrentHandlers`. Default: unset, unbounded */
+  pubsubMaxQueuedMessages?: number
+
   /**
    * Allows `flushNamespace()` when NODE_ENV is 'production' (trimmed, any letter case). Default: false.
    * Leave false in real production environments.
@@ -499,6 +505,8 @@ export interface BymaxCacheModuleAsyncOptions {
 | `serializer`                      | `ISerializer`                             | No       | JSON                     |
 | `events.onEvent`                  | `function`                                | No       | —                        |
 | `shutdownTimeoutMs`               | `number`                                  | No       | `5000`                   |
+| `pubsubMaxConcurrentHandlers`     | `number`                                  | No       | unset                    |
+| `pubsubMaxQueuedMessages`         | `number`                                  | No       | unset                    |
 | `allowFlushInProduction`          | `boolean`                                 | No       | `false`                  |
 | `isGlobal`                        | `boolean`                                 | No       | `true`                   |
 | `scripts`                         | `readonly IScriptDefinition[]`            | No       | none                     |
@@ -575,6 +583,7 @@ export class AppModule {}
 - `keySeparator` is empty (`INVALID_NAMESPACE`)
 - `keyEscaping` is neither `'legacy'` nor `'strict'`, or is `'strict'` and `keySeparator` contains `%` (`INVALID_NAMESPACE`)
 - `shutdownTimeoutMs`, `connection.connectTimeout` or `connection.commandTimeout` below its minimum (100 ms, 100 ms, 1 ms), not a finite integer, or above 2147483647 (`INVALID_OPTIONS`)
+- `pubsubMaxConcurrentHandlers` that is not an integer from 1, `pubsubMaxQueuedMessages` that is not an integer from 0, either above 2147483647, or `pubsubMaxQueuedMessages` set without `pubsubMaxConcurrentHandlers` (`INVALID_OPTIONS`)
 
 ---
 
@@ -996,7 +1005,9 @@ export class NotificationDispatcher implements OnModuleInit, OnModuleDestroy {
 
 Redis Pub/Sub is **fire-and-forget**: no persistence, replay, or ack. For delivery guarantees, use Streams or a queue (`@bymax-one/nest-queue`). After the subscriber reconnects, `ioredis` re-subscribes channels automatically — but messages published during the offline window are **lost**. Handler failures are not retried; they are reported through `events.onEvent` (§8.1).
 
-**Handlers and ordering.** The subscriber connection carries one `message` listener and one `pmessage` listener, whatever the number of subscriptions; each message is looked up by its channel (or pattern) and started on every handler registered for it, in the order they subscribed. A handler's own failure, or a failure to decode the message for it, is reported (§8.1) and ends there: it reaches no other handler and no later message. The library does not await a call before starting the next, so calls of an async handler may overlap and complete out of order. No bound applies to the calls running or waiting, so a handler slower than the publish rate lets the work in flight grow without limit.
+**Handlers and ordering.** The subscriber connection carries one `message` listener and one `pmessage` listener, whatever the number of subscriptions; each message is looked up by its channel (or pattern) and started on every handler registered for it, in the order they subscribed. A handler's own failure, or a failure to decode the message for it, is reported (§8.1) and ends there: it reaches no other handler and no later message. The library does not await a call before starting the next, so calls of an async handler may overlap and complete out of order. By default no bound applies to the calls running or waiting, so a handler slower than the publish rate lets the work in flight grow without limit.
+
+`pubsubMaxConcurrentHandlers` puts one gate on the whole subscriber: at most that many executions (decode, validate and handler for one message) run at once, and the rest wait in arrival order, so with 1 the handlers run one at a time in arrival order even with an asynchronous `validate`. The gate is shared by every channel and pattern, so one slow channel can hold every slot and delay the others; a handler that never settles keeps its slot, since there is no per-handler timeout. `pubsubMaxQueuedMessages` limits the waiting executions. A message that finds no slot and no room is dropped, not retried, and reported as an `'error'` event with `reason: 'handler_queue_full'`, `role: 'subscriber'` and the `channel`, never a payload: the first drop at once, then one summary per 10 s window carrying `dropped` (the drops since the previous report) and the channel of the last. A waiting execution whose subscription was removed is skipped, and the executions still waiting when shutdown begins are dropped.
 
 ---
 
@@ -1208,11 +1219,12 @@ export interface ICacheEvents {
 
 `data` never carries connection credentials and always carries `role: 'main' | 'subscriber'` for connection events. The `CacheEventName` union has no dedicated member for failures that are not socket errors, so `'error'` also carries:
 
-| `data.reason`         | Source                                                                                                                                  | Other fields                             |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| _(absent)_            | ioredis socket error                                                                                                                    | `error` (message)                        |
-| `'handler_error'`     | A Pub/Sub handler threw or a payload failed to deserialize (§8)                                                                         | `role: 'subscriber'`, `channel`, `error` |
-| `'forced_disconnect'` | A live connection's graceful `quit()` failed or exceeded `shutdownTimeoutMs` (shutdown); not emitted for a client that was already down | `role`, `shutdownTimeoutMs`              |
+| `data.reason`          | Source                                                                                                                                                     | Other fields                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| _(absent)_             | ioredis socket error                                                                                                                                       | `error` (message)                                      |
+| `'handler_error'`      | A Pub/Sub handler threw or a payload failed to deserialize (§8)                                                                                            | `role: 'subscriber'`, `channel`, `error`               |
+| `'handler_queue_full'` | A Pub/Sub message was dropped because every handler slot and the queue were taken (§8.3); the first drop at once, then one summary per 10 s with `dropped` | `role: 'subscriber'`, `channel`, `dropped` (summaries) |
+| `'forced_disconnect'`  | A live connection's graceful `quit()` failed or exceeded `shutdownTimeoutMs` (shutdown); not emitted for a client that was already down                    | `role`, `shutdownTimeoutMs`                            |
 
 ### 11.3 `parseRedisUrl`
 

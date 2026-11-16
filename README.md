@@ -248,22 +248,24 @@ Keys resolve to `app:user-profile:<userId>` — namespaced automatically.
 
 ## ⚙️ Configuration
 
-| Option                   | Type                                      | Default          | Description                                                                                                                                                                                |
-| ------------------------ | ----------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mode`                   | `'standalone' \| 'sentinel' \| 'cluster'` | `'standalone'`   | Redis topology                                                                                                                                                                             |
-| `connection.url`         | `string`                                  | —                | `redis://` / `rediss://` URL (overrides discrete host/port fields)                                                                                                                         |
-| `connection.tls`         | `tls.ConnectionOptions`                   | —                | TLS options for `rediss://`                                                                                                                                                                |
-| `namespace`              | `string`                                  | `'app'`          | Key prefix for tenant/feature isolation                                                                                                                                                    |
-| `serializer`             | `ISerializer`                             | `JsonSerializer` | Value encoding/decoding (plug MsgPack, CBOR, etc.)                                                                                                                                         |
-| `events.onEvent`         | `(event, data) => void`                   | —                | Lifecycle and Pub/Sub failure hook (plug a logger or metrics); receives connection events, and `'error'` with `reason: 'handler_error'` when a subscriber handler or deserialization fails |
-| `scripts`                | `IScriptDefinition[]`                     | —                | Lua scripts to preload on init                                                                                                                                                             |
-| `shutdownTimeoutMs`      | `number`                                  | `5000`           | Graceful `quit()` timeout before forced `disconnect()` (minimum `100`)                                                                                                                     |
-| `keySeparator`           | `string`                                  | `':'`            | Separator between namespace, prefix and id segments                                                                                                                                        |
-| `keyEscaping`            | `'legacy' \| 'strict'`                    | `'legacy'`       | How prefix and id are joined; `'strict'` escapes each part so no two tuples share a key (see Key Namespacing)                                                                              |
-| `allowFlushInProduction` | `boolean`                                 | `false`          | Allows `flushNamespace()` when `NODE_ENV=production`                                                                                                                                       |
-| `isGlobal`               | `boolean`                                 | `true`           | Register the module globally                                                                                                                                                               |
-| `sentinel`               | `{ sentinels, name, ... }`                | —                | Sentinel connection block; required when `mode: 'sentinel'`                                                                                                                                |
-| `cluster`                | `{ nodes, options? }`                     | —                | Cluster connection block; required when `mode: 'cluster'`                                                                                                                                  |
+| Option                        | Type                                      | Default          | Description                                                                                                                                                                                |
+| ----------------------------- | ----------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`                        | `'standalone' \| 'sentinel' \| 'cluster'` | `'standalone'`   | Redis topology                                                                                                                                                                             |
+| `connection.url`              | `string`                                  | —                | `redis://` / `rediss://` URL (overrides discrete host/port fields)                                                                                                                         |
+| `connection.tls`              | `tls.ConnectionOptions`                   | —                | TLS options for `rediss://`                                                                                                                                                                |
+| `namespace`                   | `string`                                  | `'app'`          | Key prefix for tenant/feature isolation                                                                                                                                                    |
+| `serializer`                  | `ISerializer`                             | `JsonSerializer` | Value encoding/decoding (plug MsgPack, CBOR, etc.)                                                                                                                                         |
+| `events.onEvent`              | `(event, data) => void`                   | —                | Lifecycle and Pub/Sub failure hook (plug a logger or metrics); receives connection events, and `'error'` with `reason: 'handler_error'` when a subscriber handler or deserialization fails |
+| `scripts`                     | `IScriptDefinition[]`                     | —                | Lua scripts to preload on init                                                                                                                                                             |
+| `pubsubMaxConcurrentHandlers` | `number`                                  | —                | Most Pub/Sub handler executions in flight at once, across the whole subscriber (integer from `1`); unset bounds nothing. See [Pub/Sub](#-pubsub)                                           |
+| `pubsubMaxQueuedMessages`     | `number`                                  | —                | How many executions may wait for a slot (integer from `0`); needs `pubsubMaxConcurrentHandlers`. A message that finds no slot and no room is dropped                                       |
+| `shutdownTimeoutMs`           | `number`                                  | `5000`           | Graceful `quit()` timeout before forced `disconnect()` (minimum `100`)                                                                                                                     |
+| `keySeparator`                | `string`                                  | `':'`            | Separator between namespace, prefix and id segments                                                                                                                                        |
+| `keyEscaping`                 | `'legacy' \| 'strict'`                    | `'legacy'`       | How prefix and id are joined; `'strict'` escapes each part so no two tuples share a key (see Key Namespacing)                                                                              |
+| `allowFlushInProduction`      | `boolean`                                 | `false`          | Allows `flushNamespace()` when `NODE_ENV=production`                                                                                                                                       |
+| `isGlobal`                    | `boolean`                                 | `true`           | Register the module globally                                                                                                                                                               |
+| `sentinel`                    | `{ sentinels, name, ... }`                | —                | Sentinel connection block; required when `mode: 'sentinel'`                                                                                                                                |
+| `cluster`                     | `{ nodes, options? }`                     | —                | Cluster connection block; required when `mode: 'cluster'`                                                                                                                                  |
 
 `connection` also accepts `host`, `port`, `password`, `db`, `username`, `lazyConnect`, `connectTimeout` (minimum `100`), `commandTimeout`, `maxRetriesPerRequest`, `enableReadyCheck`, `enableOfflineQueue`, `retryStrategy`, `reconnectOnError`, `keepAlive`, `noDelay` and `family`; `url` takes precedence over the discrete fields.
 
@@ -393,9 +395,20 @@ are not replayed.
 **Handlers.** Every handler subscribed to a channel receives each message of it, and one that throws,
 or whose message it cannot decode, is reported through `events.onEvent` without touching the others
 or the next message. The library does not wait for one call to finish before it starts the next:
-a handler that awaits can overlap with itself and finish out of order. Nothing bounds how many calls run at once or wait, so a handler
-slower than the publish rate lets the work in flight grow without limit; keep a handler quick, or
-hand the work to a queue.
+a handler that awaits can overlap with itself and finish out of order. By default nothing bounds how many calls run at once or wait,
+so a handler slower than the publish rate lets the work in flight grow without limit.
+
+To bound it, set `pubsubMaxConcurrentHandlers`: at most that many executions (decoding, validating and running the
+handler for one message) are in flight at once, and the others wait in arrival order, so with `1` the handlers
+run one at a time in the order the messages arrived, even with an asynchronous `validate`. The slots belong to
+the whole subscriber, not to a channel: one channel whose handlers are slow can hold every slot and delay the
+others, and a handler that never settles keeps its slot for good, because there is no per-handler timeout.
+`pubsubMaxQueuedMessages` limits how many executions wait (unset: no limit; `0`: none). A message that finds no
+slot and no room is dropped, never retried, and reported through `events.onEvent` as an `error` with
+`reason: 'handler_queue_full'`, the `channel` and no part of the payload. The first drop is reported at once;
+the drops that follow within the next 10 seconds are counted and reported as one event carrying
+`dropped` (their number) and the `channel` of the last one, and the next window follows while drops continue.
+A waiting execution whose subscription was removed is skipped, and the executions still waiting when shutdown begins are dropped.
 
 Pub/Sub also works in cluster mode: channel and pattern subscribers both receive the message, which
 the end-to-end suite verifies against a three-master cluster.

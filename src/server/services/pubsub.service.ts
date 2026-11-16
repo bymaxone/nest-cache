@@ -35,6 +35,7 @@ import { closeClient } from '../utils/close-client'
 import { describeError } from '../utils/describe-error'
 import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
+import { HandlerGate } from '../utils/handler-gate'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
 import { validateRead } from '../utils/validate-read'
@@ -48,6 +49,15 @@ export type Unsubscribe = () => Promise<void>
  * message.
  */
 type Dispatch = (channel: string, raw: string) => void
+
+/** One subscribed handler: what starts it on a message, and what ends its subscription. */
+interface Entry {
+  readonly dispatch: Dispatch
+  readonly stop: () => void
+}
+
+/** How long drops of messages are summed up before the next report. */
+const DROP_REPORT_WINDOW_MS = 10_000
 
 /**
  * Live-listener counter for one namespaced channel or pattern, with the SUBSCRIBE /
@@ -91,6 +101,13 @@ export class PubSubService implements OnApplicationShutdown {
   /** How long the subscriber's graceful quit may take at shutdown. */
   private readonly shutdownTimeoutMs: number
 
+  /** Bounds the handlers in flight; `null` when the options bound nothing. */
+  private readonly gate: HandlerGate | null
+
+  /** The drops since the last report, and the timer that ends the window they are summed in. */
+  private drops: { count: number; channel: string; timer: ReturnType<typeof setTimeout> } | null =
+    null
+
   /**
    * @param options - Resolved module options. Supplies the serializer and the shutdown timeout.
    * @param connection - Owns the main client and mints subscriber connections.
@@ -111,6 +128,10 @@ export class PubSubService implements OnApplicationShutdown {
   ) {
     this.serializer = guardSerializer(resolveSerializer(options, injectedSerializer))
     this.shutdownTimeoutMs = options.shutdownTimeoutMs
+    this.gate =
+      options.pubsubMaxConcurrentHandlers === undefined
+        ? null
+        : new HandlerGate(options.pubsubMaxConcurrentHandlers, options.pubsubMaxQueuedMessages)
   }
 
   /**
@@ -157,19 +178,9 @@ export class PubSubService implements OnApplicationShutdown {
       subscriber.subscribe(fullChannel)
     )
 
-    // Synchronous, with the Promise chain making the fire-and-forget intent explicit: the
-    // dispatcher does not await what a handler returns, so a failure after the first await
-    // would be lost without the final catch.
-    const dispatch: Dispatch = (incoming, raw) => {
-      Promise.resolve()
-        .then(() => this.decode<T>(raw, options))
-        .then((message) => handler(message, incoming))
-        .catch((error: unknown) => {
-          this.emitHandlerError(incoming, error)
-        })
-    }
+    const entry = this.makeEntry<T>(options, (message, incoming) => handler(message, incoming))
 
-    return this.makeUnsubscribe(this.addHandler(this.channelHandlers, fullChannel, dispatch), () =>
+    return this.makeUnsubscribe(this.addHandler(this.channelHandlers, fullChannel, entry), () =>
       this.releaseSubscription(this.channelRefs, fullChannel, ref, () =>
         subscriber.unsubscribe(fullChannel)
       )
@@ -199,17 +210,11 @@ export class PubSubService implements OnApplicationShutdown {
       subscriber.psubscribe(fullPattern)
     )
 
-    // Same shape as subscribe(), see there.
-    const dispatch: Dispatch = (channel, raw) => {
-      Promise.resolve()
-        .then(() => this.decode<T>(raw, options))
-        .then((message) => handler(message, channel, fullPattern))
-        .catch((error: unknown) => {
-          this.emitHandlerError(channel, error)
-        })
-    }
+    const entry = this.makeEntry<T>(options, (message, channel) =>
+      handler(message, channel, fullPattern)
+    )
 
-    return this.makeUnsubscribe(this.addHandler(this.patternHandlers, fullPattern, dispatch), () =>
+    return this.makeUnsubscribe(this.addHandler(this.patternHandlers, fullPattern, entry), () =>
       this.releaseSubscription(this.patternRefs, fullPattern, ref, () =>
         subscriber.punsubscribe(fullPattern)
       )
@@ -223,6 +228,11 @@ export class PubSubService implements OnApplicationShutdown {
    */
   async onApplicationShutdown(): Promise<void> {
     this.#shutDown = true
+    this.gate?.clear()
+    if (this.drops !== null) {
+      clearTimeout(this.drops.timer)
+      this.drops = null
+    }
     const subscriber = this.#subscriber
     if (!subscriber) {
       return
@@ -266,21 +276,64 @@ export class PubSubService implements OnApplicationShutdown {
    *
    * @param registry - The channel or pattern handler map.
    * @param target - The full namespaced channel/pattern.
-   * @param dispatch - Starts the handler on one message.
+   * @param entry - The handler to register.
    * @returns What removes the handler again, and the entry of a target left with none.
    */
   private addHandler(
     registry: Map<string, Set<Dispatch>>,
     target: string,
-    dispatch: Dispatch
+    entry: Entry
   ): () => void {
     const handlers = registry.get(target) ?? new Set<Dispatch>()
-    handlers.add(dispatch)
+    handlers.add(entry.dispatch)
     registry.set(target, handlers)
     return () => {
-      handlers.delete(dispatch)
+      entry.stop()
+      handlers.delete(entry.dispatch)
       if (handlers.size === 0) {
         registry.delete(target)
+      }
+    }
+  }
+
+  /**
+   * Builds the entry of one handler. Its dispatch only schedules the work, with the Promise chain
+   * making the fire-and-forget intent explicit: nothing awaits what a handler returns, so a failure
+   * after the first await would be lost without the final catch. With a gate the work takes a slot
+   * for decoding, validating and running the handler, or waits for one, or is dropped and reported.
+   *
+   * @typeParam T - The expected message payload type.
+   * @param options - The read options of the subscription.
+   * @param invoke - Calls the handler with the decoded message and the channel it arrived on.
+   */
+  private makeEntry<T>(
+    options: ReadOptions<T> | undefined,
+    invoke: (message: T, channel: string) => unknown
+  ): Entry {
+    let active = true
+    const execute = (channel: string, raw: string): Promise<unknown> =>
+      Promise.resolve()
+        .then(() => this.decode<T>(raw, options))
+        .then((message) => invoke(message, channel))
+        .catch((error: unknown) => {
+          this.emitHandlerError(channel, error)
+        })
+    const dispatch: Dispatch = (channel, raw) => {
+      if (this.gate === null) {
+        void execute(channel, raw)
+      } else if (
+        !this.gate.submit(
+          () => execute(channel, raw),
+          () => active
+        )
+      ) {
+        this.reportDrop(channel)
+      }
+    }
+    return {
+      dispatch,
+      stop: (): void => {
+        active = false
       }
     }
   }
@@ -388,6 +441,60 @@ export class PubSubService implements OnApplicationShutdown {
   private async decode<T>(raw: string, options: ReadOptions<T> | undefined): Promise<T> {
     const message = this.serializer.deserialize<T>(raw)
     return options?.validate === undefined ? message : validateRead(message, options.validate)
+  }
+
+  /**
+   * Reports a message dropped because every slot and the whole queue were taken. The first drop is
+   * reported at once; the ones that follow within {@link DROP_REPORT_WINDOW_MS} are counted and
+   * reported as one event carrying the count and the channel of the last, so an overload does not
+   * flood the host's sink. Another window follows while drops continue. Swallows any throw from
+   * `onEvent`.
+   *
+   * @param channel - The full namespaced channel the dropped message arrived on.
+   */
+  private reportDrop(channel: string): void {
+    if (this.drops !== null) {
+      this.drops.count += 1
+      this.drops.channel = channel
+      return
+    }
+    this.emitDrop({ channel })
+    this.openDropWindow(channel)
+  }
+
+  /**
+   * Starts the window the drops that follow the last report are summed in.
+   *
+   * @param channel - The channel of the drop just reported, the last one until another follows.
+   */
+  private openDropWindow(channel: string): void {
+    const timer = setTimeout(() => {
+      const drops = this.drops
+      this.drops = null
+      if (drops !== null && drops.count > 0) {
+        this.emitDrop({ channel: drops.channel, dropped: drops.count })
+        this.openDropWindow(drops.channel)
+      }
+    }, DROP_REPORT_WINDOW_MS)
+    timer.unref()
+    this.drops = { count: 0, channel, timer }
+  }
+
+  /**
+   * Emits the `handler_queue_full` event: no part of any payload, only the channel and a count.
+   *
+   * @param detail - The channel, and how many drops it sums up when there is more than one.
+   */
+  private emitDrop(detail: { channel: string; dropped?: number }): void {
+    try {
+      this.events?.onEvent?.('error', {
+        role: 'subscriber',
+        reason: 'handler_queue_full',
+        ...detail
+      })
+    } catch {
+      // Observability must never crash the subscriber connection.
+    }
   }
 
   /**
