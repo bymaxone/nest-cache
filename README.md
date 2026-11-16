@@ -408,7 +408,7 @@ slot and no room is dropped, never retried, and reported through `events.onEvent
 `reason: 'handler_queue_full'`, the `channel` and no part of the payload. The first drop is reported at once;
 the drops that follow within the next 10 seconds are counted and reported as one event carrying
 `dropped` (their number) and the `channel` of the last one, and the next window follows while drops continue.
-A waiting execution whose subscription was removed is skipped, and none starts after shutdown.
+A waiting execution whose subscription was removed is skipped, and the executions still waiting when shutdown begins are dropped.
 
 Pub/Sub also works in cluster mode: channel and pattern subscribers both receive the message, which
 the end-to-end suite verifies against a three-master cluster.
