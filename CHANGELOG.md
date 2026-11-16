@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.21] - 2026-11-16
+
 ### Fixed
 
 - Closing the application while Redis is down no longer keeps the process alive for the command timeout. A client in its retry delay
@@ -63,7 +65,7 @@ detected` for the library's own connection, and every message was offered to eve
   this code does not know keep the previous path: `quit()` raced against `shutdownTimeoutMs`, then a forced disconnect, so it ends within
   `shutdownTimeoutMs`. Measured on a stopped Redis with both clients `reconnecting`: on 1.2.18 the main client always reported
   `forced_disconnect` (its `QUIT` is rejected at once because it has no offline queue) and the subscriber did so only when a command was queued
-  on it (ioredis answers its `QUIT` locally otherwise); the close took 1 to 2 ms without a queued command and 153 ms with one. With this
+  on it (ioredis answers its `QUIT` locally otherwise); the close took a few milliseconds without a queued command and tens of milliseconds or more with one, depending on when the retry fires. With this
   version none of those cases emits `forced_disconnect` and the close took 0 to 2 ms (the end-to-end test asserts under 500 ms).
 
   **Apply to a consumer:** `forced_disconnect` now fires only for a live connection that did not quit in time or refused. A shutdown
@@ -976,7 +978,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.20...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.21...HEAD
+[1.2.21]: https://github.com/bymaxone/nest-cache/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/bymaxone/nest-cache/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/bymaxone/nest-cache/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/bymaxone/nest-cache/compare/v1.2.17...v1.2.18
