@@ -16,7 +16,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
   disconnects it without a `QUIT`, and now also rejects what is queued on it at once, with `cache.connection_lost`
   (`reason: 'shutdown'`, fixed text). The flush is ioredis's own `flushQueue`, which both client classes have at runtime but declare
   private; it is called when present, and a contract test against the real `Redis` and `Cluster` classes fails if an ioredis release
-  removes or changes it. If a release lacked it, the shutdown would still complete and the queued commands would again be left to their
+  removes or changes it. If a release lacked it, or its version threw, the shutdown would still complete and the queued commands would again be left to their
   own timeouts.
 
   **Apply to a consumer:** nothing to change. A `subscribe` or `unsubscribe` that was pending when the application closed now rejects

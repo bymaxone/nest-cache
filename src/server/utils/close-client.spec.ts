@@ -221,4 +221,22 @@ describe('closeClient', () => {
       expect(stub.flushQueue).not.toHaveBeenCalled()
     }
   )
+
+  // flushQueue is a private API of ioredis. One that throws, or that a later release changes, must not
+  // fail the application's shutdown: the client is already disconnected and the queued commands are
+  // left to their own timeouts, as when the method is missing.
+  it('completes when flushQueue throws, with the client disconnected once', async () => {
+    const stub = Object.assign(
+      client(() => Promise.resolve('OK'), 'reconnecting'),
+      {
+        flushQueue: jest.fn(() => {
+          throw new Error('flushQueue changed')
+        })
+      }
+    )
+
+    await expect(closeClient(stub, 1_000, jest.fn())).resolves.toBeUndefined()
+
+    expect([stub.disconnect.mock.calls.length, stub.flushQueue.mock.calls.length]).toEqual([1, 1])
+  })
 })

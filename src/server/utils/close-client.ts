@@ -28,17 +28,22 @@ const DOWN_STATUSES: ReadonlySet<string> = new Set(['reconnecting', 'close', 'wa
  * is already closed, so disconnecting it emits no `close` and ioredis never flushes its queue: each
  * queued command would keep its own timeout timer, and the process alive, until it fires. ioredis has
  * no public call for the flush, only `flushQueue` on both client classes, declared private; it is
- * called when it is there and skipped when it is not, so a release without it leaves the queue to the
- * command timeouts, as before. The error carries fixed text only.
+ * called when it is there and skipped when it is not or when it throws, so a release without it, or
+ * with one that fails, leaves the queue to the command timeouts, as before. The error carries fixed text only.
  *
  * @param client - The client that was just disconnected.
  */
 function rejectQueued(client: ClosableClient): void {
   const flush: unknown = Reflect.get(client, 'flushQueue')
   if (typeof flush === 'function') {
-    Reflect.apply(flush, client, [
-      new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'shutdown' })
-    ])
+    try {
+      Reflect.apply(flush, client, [
+        new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'shutdown' })
+      ])
+    } catch {
+      // A private API of ioredis that fails or changed must not fail the application's shutdown:
+      // the queue is left to the command timeouts, as when the method is missing.
+    }
   }
 }
 
