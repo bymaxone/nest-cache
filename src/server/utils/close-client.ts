@@ -24,13 +24,38 @@ export interface ClosableClient {
 const DOWN_STATUSES: ReadonlySet<string> = new Set(['reconnecting', 'close', 'wait'])
 
 /**
+ * Rejects what a down client still has queued, at once. A client in its retry delay has a stream that
+ * is already closed, so disconnecting it emits no `close` and ioredis never flushes its queue: each
+ * queued command would keep its own timeout timer, and the process alive, until it fires. ioredis has
+ * no public call for the flush, only `flushQueue` on both client classes, declared private; it is
+ * called when it is there and skipped when it is not or when it throws, so a release without it, or
+ * with one that fails, leaves the queue to the command timeouts, as before. The error carries fixed text only.
+ *
+ * @param client - The client that was just disconnected.
+ */
+function rejectQueued(client: ClosableClient): void {
+  const flush: unknown = Reflect.get(client, 'flushQueue')
+  if (typeof flush === 'function') {
+    try {
+      Reflect.apply(flush, client, [
+        new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'shutdown' })
+      ])
+    } catch {
+      // A private API of ioredis that fails or changed must not fail the application's shutdown:
+      // the queue is left to the command timeouts, as when the method is missing.
+    }
+  }
+}
+
+/**
  * Closes a client: a graceful `QUIT` bounded by `timeoutMs`, or, for a client that is already down, a
  * disconnect that stops its retries.
  *
  * A live connection gets `QUIT` and at most `timeoutMs` to answer. When the quit rejects or the deadline
  * passes, `onForced` runs and the client is disconnected. A connect still in flight is quit or forced
  * within the same deadline. A client with no live socket (see {@link DOWN_STATUSES}) has nothing to quit:
- * it is disconnected without `onForced`, because nothing was forced. A client that has ended is left
+ * it is disconnected without `onForced`, because nothing was forced, and what is queued on it is
+ * rejected. A client that has ended is left
  * alone: it has nothing to quit and nothing to disconnect.
  *
  * @param client - The ioredis client to close.
@@ -48,6 +73,7 @@ export async function closeClient(
   }
   if (DOWN_STATUSES.has(client.status)) {
     releaseClient(client)
+    rejectQueued(client)
     return
   }
   let timer: ReturnType<typeof setTimeout> | undefined
