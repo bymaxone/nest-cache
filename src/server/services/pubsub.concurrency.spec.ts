@@ -118,26 +118,31 @@ describe('PubSubService handler bounds', () => {
     expect(work.running()).toBe(20)
   })
 
-  // Scenario: one slot, and an asynchronous validator that takes longer for the earlier messages.
-  // Rule: the handlers still run one at a time in arrival order, because the slot covers the
-  // validation too; without the bound the validator would reorder them.
+  // Scenario: an asynchronous validator whose answers are released by the test, the last message first.
+  // Rule: with one slot the handlers still run one at a time in arrival order, because the slot covers
+  // the validation too; with no bound the validator reorders them.
   it('keeps arrival order with one slot even when validation finishes out of order', async () => {
-    const order: number[] = []
-    const validate = async (value: unknown): Promise<{ value: number }> => {
-      await new Promise((resolve) => setTimeout(resolve, (4 - Number(value)) * 5))
-      return { value: Number(value) }
+    const releases = new Map<number, () => void>()
+    const validate = (value: unknown): Promise<{ value: number }> =>
+      new Promise((resolve) => {
+        releases.set(Number(value), () => resolve({ value: Number(value) }))
+      })
+    /** Lets the event loop run until `done` holds, so no wall-clock time decides the outcome. */
+    const until = async (done: () => boolean): Promise<void> => {
+      for (let i = 0; i < 200 && !done(); i += 1) {
+        await tick()
+      }
     }
+    const handled: Record<string, number[]> = { bounded: [], free: [] }
     const bounded = await service({ pubsubMaxConcurrentHandlers: 1 })
     const free = await service({})
-    for (const [pubsub, channel] of [
-      [bounded, 'ordered-bounded'],
-      [free, 'ordered-free']
+    for (const [name, pubsub] of [
+      ['bounded', bounded],
+      ['free', free]
     ] as const) {
       await pubsub.subscribe<number>(
-        channel,
-        (message) => {
-          order.push(message)
-        },
+        `ordered-${name}`,
+        (message) => void handled[name]?.push(message),
         { validate: { '~standard': { version: 1, validate } } }
       )
     }
@@ -145,17 +150,23 @@ describe('PubSubService handler bounds', () => {
     for (let n = 0; n < 4; n += 1) {
       await bounded.publish('ordered-bounded', n)
     }
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    const boundedOrder = order.splice(0)
+    for (let n = 0; n < 4; n += 1) {
+      await until(() => releases.has(n))
+      expect([n, [...releases.keys()].length]).toEqual([n, n + 1])
+      releases.get(n)?.()
+      await until(() => handled['bounded']?.length === n + 1)
+    }
+    releases.clear()
     for (let n = 0; n < 4; n += 1) {
       await free.publish('ordered-free', n)
     }
-    await new Promise((resolve) => setTimeout(resolve, 80))
+    await until(() => releases.size === 4)
+    for (const n of [3, 2, 1, 0]) {
+      releases.get(n)?.()
+      await until(() => handled['free']?.length === 4 - n)
+    }
 
-    expect([boundedOrder, order]).toEqual([
-      [0, 1, 2, 3],
-      [3, 2, 1, 0]
-    ])
+    expect(handled).toEqual({ bounded: [0, 1, 2, 3], free: [3, 2, 1, 0] })
   })
 
   // Scenario: one channel's handlers hold every slot while another channel's message arrives.
