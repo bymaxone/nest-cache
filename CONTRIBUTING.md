@@ -42,7 +42,7 @@ pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all &&
 
 All of the following must pass:
 
-- **Typecheck** — `tsc --noEmit` for the root and server projects (strict, zero errors)
+- **Typecheck** — `tsc --noEmit` for the root, server and e2e projects (strict, zero errors)
 - **Lint** — ESLint (zero `any`, import order, security rules)
 - **Admin read-only** — `scripts/check-admin-readonly.mjs`: the `./admin` subpath issues no mutating Redis command
 - **Coverage** — 100% statements / branches / functions / lines
