@@ -7,6 +7,8 @@
  * fields cannot be reassigned once registered. See
  * `docs/technical_specification.md` §4.6.
  */
+import type { RedisOptions } from 'ioredis'
+
 import {
   DEFAULT_KEY_ESCAPING,
   DEFAULT_KEY_SEPARATOR,
@@ -271,7 +273,11 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   )
   requireTimerDelay('connectTimeout', options.connection?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
   requireTimerDelay('commandTimeout', options.connection?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
-  validateConnectionNumbers('connection', options.connection)
+  validateConnectionNumbers(
+    'connection',
+    options.connection,
+    options.connection?.url ? parseRedisUrl(options.connection.url) : undefined
+  )
   validateHandlerBounds(options)
 }
 
@@ -325,18 +331,21 @@ interface NumericConnectionOptions {
  *
  * @param where - The block the options sit in, echoed in the error details.
  * @param options - The block, or `undefined` when it is not set.
+ * @param fromUrl - What the block's `url` carries; it replaces the discrete `port` and `db`, which are
+ *   then never used and not checked.
  * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
  */
 function validateConnectionNumbers(
   where: string,
-  options: NumericConnectionOptions | undefined
+  options: NumericConnectionOptions | undefined,
+  fromUrl: Partial<RedisOptions> = {}
 ): void {
   if (options === undefined) {
     return
   }
   const ranges = [
-    ['port', options.port, 1, 65_535, undefined],
-    ['db', options.db, 0, MAX_TIMER_DELAY_MS, undefined],
+    ['port', fromUrl.port === undefined ? options.port : undefined, 1, 65_535, undefined],
+    ['db', fromUrl.db === undefined ? options.db : undefined, 0, MAX_TIMER_DELAY_MS, undefined],
     [
       'keepAlive',
       options.keepAlive,

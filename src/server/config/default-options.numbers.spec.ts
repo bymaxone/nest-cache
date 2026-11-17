@@ -101,3 +101,32 @@ describe.each(['standalone', 'cluster'] as const)('numeric connection options (%
     expect(details?.['why']).toMatch(/30 s probe is lost/)
   })
 })
+
+describe('numeric connection options when a url is set', () => {
+  // Scenario: the url carries the port, so the discrete `port` is replaced by it and never used.
+  // Rule: a discrete `port` that would be refused alone is accepted beside a url.
+  it('accepts an invalid discrete port that the url overrides', () => {
+    const options = { connection: { url: 'redis://h:6379/0', port: 0 } }
+
+    expect(refusal(options)).toBeUndefined()
+  })
+
+  // Scenario: the url names a database, so the discrete `db` is replaced by it.
+  // Rule: an invalid discrete `db` is accepted when the url overrides it, and refused when the url
+  // carries no database, because then it is the one the driver uses.
+  it('refuses an invalid discrete db only when the url does not override it', () => {
+    const overridden = { connection: { url: 'redis://h:6379/2', db: NaN } }
+    const kept = { connection: { url: 'redis://h:6379', db: NaN } }
+
+    expect(refusal(overridden)).toBeUndefined()
+    expect(refusal(kept)).toMatchObject({ option: 'connection.db' })
+  })
+
+  // Scenario: an invalid keepAlive beside a url, which the url never carries.
+  // Rule: it is still refused.
+  it('still refuses an invalid keepAlive', () => {
+    expect(refusal({ connection: { url: 'redis://h:6379', keepAlive: 0 } })).toMatchObject({
+      option: 'connection.keepAlive'
+    })
+  })
+})
