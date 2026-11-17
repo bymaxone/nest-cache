@@ -142,8 +142,8 @@ describe('a cluster option that is spelled out but unset', () => {
     }) as unknown
 
   // Scenario: a cluster timer or bound is spelled out as undefined or null.
-  // Rule: the default applies, so a command is still bounded; before, the spread replaced the default
-  // with undefined and the driver then had no bound at all.
+  // Rule: the default applies, so a command stays bounded: an explicit undefined must never replace a
+  // default with "no bound".
   describe.each([
     ['connectTimeout', DEFAULT_CONNECT_TIMEOUT_MS],
     ['commandTimeout', DEFAULT_COMMAND_TIMEOUT_MS],

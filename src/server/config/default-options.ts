@@ -362,10 +362,10 @@ interface NumericConnectionOptions {
  */
 function validateConnectionNumbers(
   where: string,
-  options: NumericConnectionOptions | undefined,
+  options: NumericConnectionOptions | null | undefined,
   fromUrl: Partial<RedisOptions> = {}
 ): void {
-  if (options === undefined) {
+  if (options === undefined || options === null) {
     return
   }
   const ranges = [
@@ -376,14 +376,14 @@ function validateConnectionNumbers(
       options.keepAlive,
       1,
       MAX_TIMER_DELAY_MS,
-      '0 is the OS default delay: the 30 s probe is lost'
+      { when: 0, text: '0 is the OS default delay: the 30 s probe is lost' }
     ],
     [
       'maxRetriesPerRequest',
       options.maxRetriesPerRequest,
       0,
       MAX_TIMER_DELAY_MS,
-      'null lifts the retry bound: only commandTimeout would bound a command'
+      { when: null, text: 'null lifts the retry bound: only commandTimeout would bound a command' }
     ]
   ] as const
   for (const [option, value, min, max, why] of ranges) {
@@ -395,7 +395,7 @@ function validateConnectionNumbers(
       refuseOption(`${where}.${option}`, 'not an integer in range', value, {
         min,
         max,
-        ...(why === undefined ? {} : { why })
+        ...(why !== undefined && value === why.when ? { why: why.text } : {})
       })
     }
   }

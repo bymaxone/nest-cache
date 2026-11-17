@@ -42,7 +42,7 @@ const ROOT = pkg.root
 // reason stated here. Measured sizes are taken after the comments are stripped. A comment that
 // explains a suppression lives in the source next to the code, where it ships with the bundle.
 //
-// The server budget (13 006 B) covers the key escape (the token writer and decoder, the escape sets
+// The server budget (13 052 B) covers the key escape (the token writer and decoder, the escape sets
 // and the `KeyBuilder` helpers), the read-validation routing, the timer-delay checks, the
 // command-failure mapping, the scan hint clamp, the shared client guard and the error catalog, the
 // refusal of a client after a failed boot, the short `disconnectTimeout` every client is created
@@ -56,7 +56,8 @@ const ROOT = pkg.root
 // check of the numeric connection options in both blocks, with the reason each refusal carries, and
 // the helper through which every refusal of an option value reports its type, never the value. It covers the unset rule: the helper that tells an unset option from a set one, the
 // known cluster keys that fall back to their defaults, and the refusal of a `null` credential. It also covers the typed key lists of the cluster options and of the options each node
-// gets, with the copy that reads them by property access. The copy also forwards every own key the lists do not name.
+// gets, with the copy that reads them by property access. The copy also forwards every own key the lists do not name. The null option group is read as absent, and the `why` that only the two refusals with a
+// distinct cause carry.
 //
 // The admin budget (5 734 B) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
@@ -69,7 +70,7 @@ const ROOT = pkg.root
 // and their constants, and the reveal's per-type readers with the rule that a finished read of nothing
 // is a deleted key and the cut that never splits a surrogate pair.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 13_006 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 13_052 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_734 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }
