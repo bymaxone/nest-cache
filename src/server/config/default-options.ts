@@ -319,7 +319,7 @@ interface NumericConnectionOptions {
  * Rejects a numeric connection option the driver would take literally and a bound would be lost:
  * `NaN`, an infinity, a fraction or a string. The driver counts retries only when
  * `maxRetriesPerRequest` is a number from 0, and hands `keepAlive` to the socket, where `NaN` and 0
- * mean the operating system's own delay (hours) instead of the 30 s probe. `maxRetriesPerRequest`
+ * mean the operating system's own delay instead of the 30 s probe. `maxRetriesPerRequest`
  * of `null` is refused too: it is the driver's "retry without limit", which would undo the fail-fast
  * outage design and leave only `commandTimeout` to bound a command.
  *

@@ -2,10 +2,9 @@
  * Unit tests for the numeric connection options in {@link validateOptions}: `port`, `db`,
  * `maxRetriesPerRequest` and `keepAlive`, in the standalone block and in `cluster.options.redisOptions`.
  *
- * Layer: server. Each option is passed `NaN`, `Infinity`, `-1`, `0`, `1.5` and `'3'`: what is
- * refused, with which details, and that a value in range, or unset, is accepted. `null` for
- * `maxRetriesPerRequest` and `0` for `keepAlive` are refused with the reason. `NaN` is the case a
- * `value < min` check lets through.
+ * Layer: server. What each option refuses, with which details, and that a value in range, or unset,
+ * is accepted. `null` for `maxRetriesPerRequest` and `0` for `keepAlive` are refused with the reason.
+ * `NaN` is the case a `value < min` check lets through.
  */
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'

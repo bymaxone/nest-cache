@@ -53,8 +53,7 @@ const ROOT = pkg.root
 // dispatcher (the two listeners on the subscriber, the handler registries and the fan-out) and the
 // handler bounds (the gate with its queue, the window that sums up dropped messages, the entry flag
 // that skips a removed subscription, and the two options with their validation). It covers the
-// check of the numeric connection options (`port`, `db`, `keepAlive`, `maxRetriesPerRequest`) in
-// both blocks, with the reason each refusal carries.
+// check of the numeric connection options in both blocks, with the reason each refusal carries.
 //
 // The admin budget (5 734 B) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
