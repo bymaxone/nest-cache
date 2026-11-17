@@ -60,15 +60,12 @@ export async function scanUpTo(
   fetch: (cursor: string) => Promise<unknown>,
   paired: boolean
 ): Promise<{ entries: [string, string][]; isComplete: boolean }> {
-  const found = new Map<string, string>()
+  let found = new Map<string, string>()
   let cursor = '0'
   for (let call = 0; call < REVEAL_SCAN_CALLS_LIMIT; call += 1) {
     const page = readScanPage(await fetch(cursor), paired)
-    for (const [name, value] of page.entries) {
-      if (!found.has(name)) {
-        found.set(name, value)
-      }
-    }
+    // A name already seen keeps its first value, and the new ones follow in the order they came.
+    found = new Map([...found, ...page.entries.filter(([name]) => !found.has(name))])
     cursor = page.cursor
     if (cursor === '0' || found.size > limit) {
       break

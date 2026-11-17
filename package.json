@@ -88,7 +88,7 @@
     "check:admin-readonly": "node scripts/check-admin-readonly.mjs",
     "check:published": "node scripts/check-published-surface.mjs",
     "clean": "rm -rf dist coverage",
-    "lint": "eslint src scripts && node scripts/check-spec-headers.mjs && node --test scripts/check-spec-headers.test.mjs",
+    "lint": "eslint src scripts && node scripts/check-spec-headers.mjs && node --test scripts/check-spec-headers.test.mjs scripts/check-admin-readonly.test.mjs",
     "check:spec-headers": "node scripts/check-spec-headers.mjs",
     "lint:fix": "eslint src scripts --fix",
     "mutation": "stryker run",

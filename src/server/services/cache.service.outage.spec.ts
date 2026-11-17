@@ -32,13 +32,20 @@ const listenSilent = async (): Promise<{ server: Server; sockets: Socket[]; port
   const server = createServer((socket) => {
     sockets.push(socket)
     socket.on('error', () => undefined)
+    // What the socket has sent so far, and how many commands in it were already answered: a command
+    // split across two reads is answered once the rest arrives, not missed.
+    let received = ''
+    let answered = 0
     socket.on('data', (chunk) => {
-      for (const match of chunk.toString().matchAll(/\*\d+\r\n\$\d+\r\n(\w+)\r\n/g)) {
+      received += chunk.toString()
+      const commands = [...received.matchAll(/\*\d+\r\n\$\d+\r\n(\w+)\r\n/g)]
+      for (const match of commands.slice(answered)) {
         const reply = HANDSHAKE_REPLIES[(match[1] ?? '').toLowerCase()]
         if (reply !== undefined) {
           socket.write(reply)
         }
       }
+      answered = commands.length
     })
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -69,7 +76,7 @@ describe('CacheService against the real ioredis', () => {
         host: '127.0.0.1',
         port,
         enableReadyCheck: false,
-        commandTimeout: 150,
+        commandTimeout: 400,
         // The boot wait must not be what a loaded machine trips over; the commands under test are
         // bounded by `commandTimeout` above.
         connectTimeout: 30_000,

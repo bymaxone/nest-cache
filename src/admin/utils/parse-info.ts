@@ -65,7 +65,7 @@ const NUMERIC_VALUE = /^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/
  * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function parseInfoFields(text: string): ReadonlyMap<string, string> {
-  const fields = new Map<string, string>()
+  const pairs: [string, string][] = []
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim()
     // Section headers are dropped here. Blank lines need no branch of their own:
@@ -82,9 +82,10 @@ export function parseInfoFields(text: string): ReadonlyMap<string, string> {
     if (cut <= 0) {
       continue
     }
-    fields.set(line.slice(0, cut), line.slice(cut + 1))
+    pairs.push([line.slice(0, cut), line.slice(cut + 1)])
   }
-  return fields
+  // The constructor keeps the last value of a repeated name.
+  return new Map(pairs)
 }
 
 /**
