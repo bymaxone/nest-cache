@@ -427,7 +427,7 @@ describe('CacheAdminService.describeKey', () => {
 describe('CacheAdminService.revealValue', () => {
   // The whole point of the union: withheld is NOT missing and NOT empty.
   it('withholds the value on an unreadable scope, carrying the origin prose', async () => {
-    const reader = new FakeReader([], { type: 'hash', hgetall: { token: 'secret' } })
+    const reader = new FakeReader([], { type: 'hash', call: () => ['0', ['token', 'secret']] })
     const result = await build(reader).revealValue('auth', 'auth:sess:1')
     expect(result).toEqual({
       status: 'withheld',
@@ -440,8 +440,8 @@ describe('CacheAdminService.revealValue', () => {
   // Deny wins: a key is revealed only when EVERY scope whose pattern matches it is readable, so
   // naming the broader readable scope cannot reach into a withheld one nested inside it.
   it('withholds a key that a withheld scope also matches, whichever scope is named', async () => {
-    const reader = new FakeReader([], { type: 'string', get: 'secret' })
-    const spy = jest.spyOn(reader, 'get')
+    const reader = new FakeReader([], { type: 'string', call: () => 'secret' })
+    const spy = jest.spyOn(reader, 'call')
     const service = build(reader, {
       scopes: [
         { id: 'wide', label: 'Wide', pattern: 'app:*', isReadable: true, origin: 'the app' },
@@ -467,8 +467,8 @@ describe('CacheAdminService.revealValue', () => {
   // The refusal must happen BEFORE any value is read, or the secret has already
   // been pulled into the process to be discarded.
   it('does not read the value at all when the scope withholds it', async () => {
-    const reader = new FakeReader([], { type: 'hash', hgetall: { token: 'secret' } })
-    const spy = jest.spyOn(reader, 'hgetall')
+    const reader = new FakeReader([], { type: 'hash', call: () => ['0', ['token', 'secret']] })
+    const spy = jest.spyOn(reader, 'call')
     await build(reader).revealValue('auth', 'auth:sess:1')
     expect(spy).not.toHaveBeenCalled()
   })
@@ -476,7 +476,7 @@ describe('CacheAdminService.revealValue', () => {
   // A string value round-trips whole when it is under the cap; truncation must not
   // be the default behaviour.
   it('reveals a string value', async () => {
-    const reader = new FakeReader([], { type: 'string', get: 'hello' })
+    const reader = new FakeReader([], { type: 'string', call: () => 'hello' })
     expect(await build(reader).revealValue('cache', 'app:a')).toEqual({
       status: 'revealed',
       key: 'app:a',
@@ -488,16 +488,17 @@ describe('CacheAdminService.revealValue', () => {
   // A long value is truncated and SAYS so — a surface must not present a
   // truncated blob as the whole value.
   it('truncates a long string and reports it incomplete', async () => {
-    const reader = new FakeReader([], { type: 'string', get: 'abcdefghij' })
+    const reader = new FakeReader([], { type: 'string', call: () => 'abcdefghij' })
     const result = await build(reader, { revealStringLimit: 4 }).revealValue('cache', 'app:a')
     expect(result).toMatchObject({
       value: { kind: 'string', value: 'abcd', isComplete: false }
     })
   })
 
-  // A string key holding null is gone between the TYPE and the GET.
+  // A ranged read of a string that is gone answers empty, and the type asked again says it is gone.
   it('reports a string that vanished between reads as missing', async () => {
-    const reader = new FakeReader([], { type: 'string', get: null })
+    const reader = new FakeReader([], { call: () => '' })
+    jest.spyOn(reader, 'type').mockResolvedValueOnce('string').mockResolvedValueOnce('none')
     expect(await build(reader).revealValue('cache', 'app:a')).toEqual({
       status: 'missing',
       key: 'app:a'
@@ -512,7 +513,7 @@ describe('CacheAdminService.revealValue', () => {
   // second name for one concept is exactly what this shape was corrected to stop.
   // Redis's own vocabulary is field/value (`HSET key field value`).
   it('reveals a hash as field/value entries and nothing else', async () => {
-    const reader = new FakeReader([], { type: 'hash', hgetall: { a: '1', b: '2' } })
+    const reader = new FakeReader([], { type: 'hash', call: () => ['0', ['a', '1', 'b', '2']] })
     const result = await build(reader).revealValue('cache', 'app:h')
     expect(result).toMatchObject({ value: { kind: 'hash', isComplete: true } })
     const value = result.status === 'revealed' ? result.value : null
@@ -525,7 +526,10 @@ describe('CacheAdminService.revealValue', () => {
   // Truncation applies to hashes and SAYS so — a surface must not present a partial
   // hash as the whole record.
   it('truncates a wide hash and reports it incomplete', async () => {
-    const reader = new FakeReader([], { type: 'hash', hgetall: { a: '1', b: '2', c: '3' } })
+    const reader = new FakeReader([], {
+      type: 'hash',
+      call: () => ['0', ['a', '1', 'b', '2', 'c', '3']]
+    })
     expect(await build(reader, { revealLimit: 2 }).revealValue('cache', 'app:h')).toMatchObject({
       value: {
         fields: [
@@ -538,10 +542,10 @@ describe('CacheAdminService.revealValue', () => {
   })
 
   it.each([
-    ['set', 'smembers'],
-    ['list', 'lrange']
-  ])('reveals a %s as members', async (type, method) => {
-    const reader = new FakeReader([], { type, [method]: ['m1', 'm2'] })
+    ['set', { call: () => ['0', ['m1', 'm2']] }],
+    ['list', { lrange: ['m1', 'm2'] }]
+  ])('reveals a %s as members', async (type, replies) => {
+    const reader = new FakeReader([], { type, ...replies })
     expect(await build(reader).revealValue('cache', 'app:c')).toMatchObject({
       type,
       value: { kind: 'members', members: ['m1', 'm2'], isComplete: true }
@@ -551,7 +555,7 @@ describe('CacheAdminService.revealValue', () => {
   // Truncation applies to sets on the same terms, so no collection type can quietly
   // return a partial page that reads as complete.
   it('truncates a large set and reports it incomplete', async () => {
-    const reader = new FakeReader([], { type: 'set', smembers: ['m1', 'm2', 'm3'] })
+    const reader = new FakeReader([], { type: 'set', call: () => ['0', ['m1', 'm2', 'm3']] })
     expect(await build(reader, { revealLimit: 2 }).revealValue('cache', 'app:s')).toMatchObject({
       value: { members: ['m1', 'm2'], isComplete: false }
     })
