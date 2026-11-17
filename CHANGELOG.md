@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.24] - 2026-11-17
+
 ### Changed
 
 - The `command` parameter of `IRedisReader.call`, a deprecated implementation helper of `./admin`, is now typed as the union `AdminReadCommand` (`'GETRANGE' | 'HSCAN' | 'SSCAN' | 'ZRANGE'`) instead of `string`. A write command, or a name computed at run time, no longer compiles. The compiled JavaScript of the package is unchanged; only the declarations differ.
@@ -1016,7 +1018,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.23...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.24...HEAD
+[1.2.24]: https://github.com/bymaxone/nest-cache/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/bymaxone/nest-cache/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/bymaxone/nest-cache/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/bymaxone/nest-cache/compare/v1.2.20...v1.2.21
