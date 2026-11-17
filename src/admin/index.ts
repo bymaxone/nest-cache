@@ -36,6 +36,7 @@ export type { BymaxCacheAdminModuleOptions } from './interfaces/admin-module-opt
 
 // Reader contracts (a consumer standing in its own client, or asserting read-only)
 export type {
+  AdminReadCommand,
   IRedisPipeline,
   IRedisReader,
   IRedisReaderSource,

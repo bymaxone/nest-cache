@@ -7,6 +7,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- `AdminReadCommand` is exported from `@bymax-one/nest-cache/admin`. It is the union `IRedisReader.call` takes (declared in 1.2.24 but not exported there), so a host that implements the reader can import it from the entry point.
+- A "Running in production" section in the README: what the library bounds by default, what it leaves to the host (value and key sizes, batch arity, Pub/Sub message size, Pub/Sub handler concurrency, with a starting pair for `pubsubMaxConcurrentHandlers` and `pubsubMaxQueuedMessages`), what each failure of Redis looks like to a caller, how shutdown behaves, and that the library keeps no key of its own.
+
+**Apply to a consumer:** nothing. The addition is a type export.
+
 ## [1.2.24] - 2026-11-17
 
 ### Changed
