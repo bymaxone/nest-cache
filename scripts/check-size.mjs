@@ -37,46 +37,32 @@ const ROOT = pkg.root
 //      legitimate, raise it (and say why here); when the artifact shrinks,
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
-// Calibration: measured against the built artifact, not estimated. The server
-// budget was raised from 14.00 to 14.50 kB when the equivalent-mutant directive
-// on the withheld connection accessor moved into the source: it costs ~0.15 kB
-// brotli and left 0.04 kB of headroom, too little to absorb ordinary growth.
-// The reason for a suppression belongs next to the code it explains, and a
-// comment that lives in the source ships with it.
+// Calibration: each budget is the size measured on the built artifact plus a margin of about 30 B,
+// not an estimate. A margin that small is intended: growth past it is raised in review, with the
+// reason stated here. Measured sizes are taken after the comments are stripped. A comment that
+// explains a suppression lives in the source next to the code, where it ships with the bundle.
 //
-// 1.2.0: server raised 14.50 -> 15.00 kB. The namespace glob guard and the two
-// newly exported internals put it at 14.47 kB, leaving 0.03 kB — the same
-// too-tight situation as above.
+// The server budget (11 801 B) covers the key escape (the token writer and decoder, the escape sets
+// and the `KeyBuilder` helpers), the read-validation routing, the timer-delay checks, the
+// command-failure mapping, the scan hint clamp, the shared client guard and the error catalog, the
+// refusal of a client after a failed boot, the short `disconnectTimeout` every client is created
+// with, and the fixed text that replaces a third party's message in `details`. It covers the
+// shutdown that bounds the main client and the Pub/Sub subscriber alike: the shared `closeClient`
+// helper, the subscriber's forced-disconnect event, the stored `shutdownTimeoutMs`, and the release
+// of a client already down, with the flush of what is queued on it. It covers the Pub/Sub
+// dispatcher (the two listeners on the subscriber, the handler registries and the fan-out) and the
+// handler bounds (the gate with its queue, the window that sums up dropped messages, the entry flag
+// that skips a removed subscription, and the two options with their validation).
 //
-// 1.2.0: admin added at 7.25 kB against a measured 6.60 kB. It is far smaller
-// than the server bundle because it does NOT bundle one: `@bymax-one/nest-cache`
-// is external in the admin tsup entry, so the subpath imports the package rather
-// than inlining a second copy of `CacheService` and the DI tokens. That is a
-// correctness requirement, not a size trick — duplicated class objects would
-// make `@Inject(CacheService)` in an admin provider name a different class than
-// the one `BymaxCacheModule` registered. If this number ever jumps toward the
-// server's, the externalisation has broken and DI is about to fail at a
-// consumer's runtime.
-//
-// The server budget covers the key escape (the token writer and decoder, the escape sets and the
-// `KeyBuilder` helpers), the read-validation routing, the timer-delay checks, the command-failure mapping, the scan hint clamp, the shared client guard and the error catalog. Its margin is small on
-// purpose: 10 766 B against a measured 10 736 B. The older notes above call a margin this small too tight
-// to absorb ordinary growth; here that is intended, so growth past the margin is raised and justified in
-// review. Measured sizes are taken after the comments are stripped.
-//
-// Server budget: 11 801 B, the 11 771 B measured plus 30 B of headroom. The measurement includes the
-// refusal of a client after a failed boot, the short `disconnectTimeout` every client is created with,
-// the fixed text that replaces a third party's message in `details`, and the shutdown that bounds the
-// main client and the Pub/Sub subscriber alike: the shared `closeClient` helper, the subscriber's
-// forced-disconnect event and the stored `shutdownTimeoutMs`, and the release of a client that is
-// already down, which `closeClient` does without a quit (32 B), and the Pub/Sub dispatcher: the two
-// listeners on the subscriber, the handler registries and the fan-out, less the per-subscription listeners
-// they replace (127 B), and the Pub/Sub handler bounds (713 B): the gate with its queue, the window that
-// sums up dropped messages, the entry flag that skips a removed subscription, and the two options with
-// their validation, and the flush of what is queued on a down client when it is closed (51 B).
-// Admin budget: 5 569 B, the 5 539 B measured plus 30 B of headroom. The measurement includes the
-// bounded value reveal: the ranged string read, the scan loop with its call cap, the parser of the scan
-// replies and their constants.
+// The admin budget (5 569 B) is far smaller than the server's because the admin entry does NOT
+// bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
+// the package rather than inlining a second copy of `CacheService` and the DI tokens. That is a
+// correctness requirement, not a size trick: duplicated class objects would make
+// `@Inject(CacheService)` in an admin provider name a different class than the one
+// `BymaxCacheModule` registered. If this number ever jumps toward the server's, the externalisation
+// has broken and DI is about to fail at a consumer's runtime. The budget covers the bounded value
+// reveal: the ranged string read, the scan loop with its call cap, the parser of the scan replies
+// and their constants.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 11_801 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_569 },
