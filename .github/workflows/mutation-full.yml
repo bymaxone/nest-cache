@@ -33,11 +33,22 @@ jobs:
   full:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
-      # Measured cold: 5 min. Generous on purpose — nothing blocks on this job, so an
-      # over-wide ceiling costs only the minutes it uses, while an under-tight one costs the
-      # whole run and leaves the week without a measured baseline.
-      timeout-minutes: 60
+      # The ceiling is per shard job. The unsharded cold run was cancelled at this 60-minute
+      # ceiling with 2249 of 2257 mutants tested, 0 survived and 21 timed out (1.2.21 and 1.2.22 took 45
+      # to 49 minutes). Its tail is the costly part: the first half of the mutants took about 14 minutes
+      # and the second half about 45, because a mutant costs the tests that cover it. The planner splits
+      # by mutant count, so the heaviest of two shards can hold most of that tail, about 45 minutes plus
+      # its dry run of under a minute. 90 leaves about twice that. A run the ceiling cancels leaves no
+      # score and no baseline for the week, and an over-wide ceiling costs only the minutes it uses.
+      timeout-minutes: 90
       # A unit test the cold run did not run fails the job: it would never be held to killing a
       # mutant, and the score cannot notice. The tooling specs that reach no source are listed in
       # scripts/mutation-inventory.exempt.json.
       inventory: enforce
+      # Two shards of four workers each. The run is split across two runners instead of given a longer
+      # ceiling. Four workers held one runner for the whole 59 minutes of the unsharded run, and a shard
+      # carries half the mutants, so its memory stays under that measured case. The count and the
+      # concurrency are passed here, not written into stryker.config.json, which the per-push
+      # incremental job and local runs share.
+      shards: 2
+      concurrency: 4
