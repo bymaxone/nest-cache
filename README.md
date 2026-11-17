@@ -805,7 +805,7 @@ What the library bounds by default, what it leaves to you, and what you see when
 
 **Shutdown**
 
-`onModuleDestroy` closes the connections. A live client is asked to `quit()` and is forced closed after `shutdownTimeoutMs`; a client that is down is released without waiting, and the commands still queued on it reject with `cache.connection_lost` (`details.reason: 'shutdown'`). A call made after shutdown began rejects with the same code.
+`onApplicationShutdown` closes the connections. A live client is asked to `quit()` and is forced closed after `shutdownTimeoutMs`; a client that is down is released without waiting, and the commands still queued on it reject with `cache.connection_lost` (`details.reason: 'shutdown'`). A call made after shutdown began rejects with the same code.
 
 **What the library keeps in Redis**
 
