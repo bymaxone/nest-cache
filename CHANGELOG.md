@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.22] - 2026-11-17
+
 ### Fixed
 
 - `CacheAdminService.revealValue` (the `./admin` subpath) no longer reads a whole value to show a part of it. It read a string with `GET`,
@@ -992,7 +994,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.21...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.22...HEAD
+[1.2.22]: https://github.com/bymaxone/nest-cache/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/bymaxone/nest-cache/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/bymaxone/nest-cache/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/bymaxone/nest-cache/compare/v1.2.18...v1.2.19
