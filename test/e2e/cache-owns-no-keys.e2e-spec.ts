@@ -51,17 +51,9 @@ describe('the library writes no key of its own (real Redis)', () => {
     await redis?.container.stop()
   })
 
-  // Scenario: every service is used once, including the ones that could plausibly keep state in
-  // Redis (scripts, Pub/Sub, the administration reads).
-  // Rule: the keys the server holds are exactly the keys the caller built, and the keyspace
-  // outside the namespace is empty.
-  it('leaves only caller-built keys in the keyspace after a mixed workload', async () => {
+  /** Writes through every `CacheService` command that stores something, and runs a script. */
+  async function writeEverything(): Promise<void> {
     const cache = app.get(CacheService)
-    const keys = app.get(KeyBuilder)
-    const pubsub = app.get(PubSubService)
-    const admin = app.get(CacheAdminService)
-    const status = app.get(CacheStatusService)
-
     await cache.set('str', 'a', { n: 1 })
     await cache.set('str', 'ttl', 'x', 600)
     await cache.setRaw('raw', 'a', 'plain')
@@ -78,7 +70,11 @@ describe('the library writes no key of its own (real Redis)', () => {
     await cache.expire('str', 'a', 900)
     await cache.del('raw', 'a')
     await cache.eval('counter', ['script:counter'], ['3'])
+  }
 
+  /** Publishes one message to a subscribed channel and waits until it is delivered. */
+  async function publishOnce(): Promise<unknown[]> {
+    const pubsub = app.get(PubSubService)
     const received: unknown[] = []
     const unsubscribe = await pubsub.subscribe('events', (message) => {
       received.push(message)
@@ -86,8 +82,13 @@ describe('the library writes no key of its own (real Redis)', () => {
     await pubsub.publish('events', { ok: true })
     await new Promise((resolve) => setTimeout(resolve, 200))
     await unsubscribe()
-    expect(received).toEqual([{ ok: true }])
+    return received
+  }
 
+  /** Reads every key of the scope and the server's status through the administration services. */
+  async function readEverything(): Promise<void> {
+    const admin = app.get(CacheAdminService)
+    const status = app.get(CacheStatusService)
     const page = await admin.listKeys('cache')
     for (const entry of page.entries) {
       await admin.describeKey('cache', entry.key)
@@ -95,8 +96,12 @@ describe('the library writes no key of its own (real Redis)', () => {
     }
     await status.health()
     await status.stats()
+  }
 
-    const callerBuilt = [
+  /** The keys the workload leaves, built the way a caller builds them. */
+  function callerBuiltKeys(): string[] {
+    const keys = app.get(KeyBuilder)
+    return [
       keys.build('str', 'a'),
       keys.build('str', 'ttl'),
       keys.build('nx', 'a'),
@@ -108,7 +113,18 @@ describe('the library writes no key of its own (real Redis)', () => {
       keys.build('set', 's'),
       keys.applyNamespace('script:counter')
     ].sort()
+  }
 
+  // Scenario: every service is used once, including the ones that could plausibly keep state in
+  // Redis (scripts, Pub/Sub, the administration reads).
+  // Rule: the keys the server holds are exactly the keys the caller built, and the keyspace
+  // outside the namespace is empty.
+  it('leaves only caller-built keys in the keyspace after a mixed workload', async () => {
+    await writeEverything()
+    expect(await publishOnce()).toEqual([{ ok: true }])
+    await readEverything()
+
+    const callerBuilt = callerBuiltKeys()
     expect((await inspector.keys('*')).sort()).toEqual(callerBuilt)
     expect(await inspector.dbsize()).toBe(callerBuilt.length)
   })
