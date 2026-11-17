@@ -7,6 +7,20 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- `CacheAdminService.revealValue` no longer shows a string cut in the middle of a character, and no longer shows a deleted collection as an
+  empty one. A string cut at `revealStringLimit` could end in a lone surrogate when a four-byte character (an emoji) straddled the limit,
+  which is not valid text and becomes U+FFFD after a UTF-8 round trip; the limit still counts UTF-16 units, and the shown text now ends on
+  a whole character, one unit short of the limit when a pair would have been split (QA's matrix of 176 multibyte cases showed 33 such
+  ends). A hash, set, list or sorted set that was deleted between the `TYPE` reply and the read came back as an empty value with
+  `isComplete: true`, which reads as "an empty collection"; Redis never stores an empty collection, so a finished read of nothing now means
+  the key is gone and the reveal answers `missing`, as it already did for a string. A scan that stopped at its call cap with nothing found
+  stays incomplete. A key replaced by a different type between the two reads still throws `WRONGTYPE`, as before.
+
+  **Apply to a consumer:** nothing to change in the types. A host that treated an empty `hash`, `members` or `scored` reveal as "gone" can
+  rely on `missing` instead; the text of a long string may now be one unit shorter than `revealStringLimit`.
+
 ## [1.2.22] - 2026-11-17
 
 ### Fixed

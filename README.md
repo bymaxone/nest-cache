@@ -699,7 +699,7 @@ await this.admin.revealValue('auth', 'auth:sess:1')  // { status: 'withheld', or
 | `scanRoundsLimit`   | `number`                | `100`   | `SCAN` round trips one `listKeys` request makes before it returns a cursor (a whole number, 1 to 10 000) |
 | `commandBatchLimit` | `number`                | `100`   | Commands in one pipeline batch                                                                           |
 | `revealLimit`       | `number`                | `200`   | Members or fields `revealValue` returns before `isComplete` is `false`                                   |
-| `revealStringLimit` | `number`                | `4096`  | Characters of a string value `revealValue` returns                                                       |
+| `revealStringLimit` | `number`                | `4096`  | UTF-16 units of a string value `revealValue` returns; a surrogate pair is never split                    |
 | `isGlobal`          | `boolean`               | `false` | Register the admin module globally. The cache module's default is `true`                                 |
 
 Every threshold must be a positive integer; one that is not fails the boot with `cache.invalid_scope`. `CacheAdminService` also has `listScopes()` and `describeKey(scope, key)`, which returns a key's type, TTL and whether its value is readable, without the value.
@@ -754,7 +754,8 @@ A reveal reads only a bounded part of a value, however large the value is: a str
 character of `revealStringLimit`, a hash or a set with `HSCAN` or `SSCAN` followed until one more than `revealLimit` entries
 were seen (a bounded number of calls, after which the value is reported incomplete), a list and a sorted set with a range of
 `revealLimit`. The entries of a large set or hash come in the server's scan order, which can differ from the order
-`SMEMBERS` or `HGETALL` gives; none of these orders is documented by Redis.
+`SMEMBERS` or `HGETALL` gives; none of these orders is documented by Redis. A hash, set, list or sorted set
+that is gone by the time it is read, deleted or expired after its type was asked, is reported `missing`, as for a string.
 
 > [!IMPORTANT]
 > **List order is meaningful; set order is not**, and both arrive in the same `members` array. Sort for display only when `type === 'set'`.

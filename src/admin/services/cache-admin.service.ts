@@ -63,6 +63,24 @@ export interface ListKeysOptions {
 }
 
 /**
+ * Whether a collection read that found nothing means the key is gone. Redis deletes a hash, set, list
+ * or sorted set when it loses its last member, so it never holds an empty one: a read that finished
+ * with no entries, of a key `TYPE` just reported, found the key deleted in between. A read that stopped
+ * before it finished found nothing yet, which is not the same.
+ *
+ * @param count - How many entries the read returned.
+ * @param isComplete - Whether the read went to the end of the collection.
+ */
+function isGone(count: number, isComplete: boolean): boolean {
+  return count === 0 && isComplete
+}
+
+/** Whether a UTF-16 unit is the first half of a surrogate pair. */
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff
+}
+
+/**
  * Reads a pipeline reply slot, treating a per-command error as an unknown
  * reading rather than a failure.
  *
@@ -372,7 +390,12 @@ export class CacheAdminService {
     if (value === '' && (await client.type(key)) === TYPE_NONE) {
       return null
     }
-    const capped = value.slice(0, limit)
+    let capped = value.slice(0, limit)
+    // A cut that lands between the two halves of a surrogate pair leaves a lone high surrogate, which is
+    // not text; it is dropped, only when something was cut.
+    if (capped.length < value.length && isHighSurrogate(capped.charCodeAt(capped.length - 1))) {
+      capped = capped.slice(0, -1)
+    }
     return {
       kind: 'string',
       value: capped,
@@ -395,49 +418,82 @@ export class CacheAdminService {
     key: string,
     type: RedisKeyType
   ): Promise<RevealedValue | null> {
-    const limit = this.options.revealLimit
     switch (type) {
       case 'string':
         return this.readString(client, key)
-      case 'hash': {
-        const { entries, isComplete } = await scanUpTo(
-          limit,
-          (cursor) => client.call('HSCAN', key, cursor, 'COUNT', limit),
-          true
-        )
-        return {
-          kind: 'hash',
-          // `field`, not `name`: Redis's own vocabulary for a hash is field/value
-          // (`HSET key field value`, `HDEL key field`). A generic `name` loses the
-          // domain term in the one place a reader would check it against the
-          // server's documentation.
-          fields: entries.map(([field, value]) => ({ field, value })),
-          isComplete
-        }
-      }
-      case 'set': {
-        const { entries, isComplete } = await scanUpTo(
-          limit,
-          (cursor) => client.call('SSCAN', key, cursor, 'COUNT', limit),
-          false
-        )
-        return { kind: 'members', members: entries.map(([member]) => member), isComplete }
-      }
-      case 'list': {
-        const all = await client.lrange(key, 0, limit)
-        const kept = all.slice(0, limit)
-        return { kind: 'members', members: kept, isComplete: kept.length === all.length }
-      }
-      case 'zset': {
-        // Through `call` because ioredis's `zrange` overload set cannot be
-        // narrowed to a four-argument signature — see the reader interface.
-        const reply = await client.call('ZRANGE', key, 0, limit, 'WITHSCORES')
-        const { members, isComplete } = readScoredMembers(reply, limit)
-        return { kind: 'scored', members, isComplete }
-      }
+      case 'hash':
+        return this.readHash(client, key)
+      case 'set':
+        return this.readSet(client, key)
+      case 'list':
+        return this.readList(client, key)
+      case 'zset':
+        return this.readSortedSet(client, key)
       default:
         return { kind: 'unsupported', type }
     }
+  }
+
+  /** Reads a hash with `HSCAN`; `null` when it is gone. */
+  private async readHash(client: IRedisReader, key: string): Promise<RevealedValue | null> {
+    const limit = this.options.revealLimit
+    const { entries, isComplete } = await scanUpTo(
+      limit,
+      (cursor) => client.call('HSCAN', key, cursor, 'COUNT', limit),
+      true
+    )
+    if (isGone(entries.length, isComplete)) {
+      return null
+    }
+    return {
+      kind: 'hash',
+      // `field`, not `name`: Redis's own vocabulary for a hash is field/value
+      // (`HSET key field value`, `HDEL key field`). A generic `name` loses the
+      // domain term in the one place a reader would check it against the
+      // server's documentation.
+      fields: entries.map(([field, value]) => ({ field, value })),
+      isComplete
+    }
+  }
+
+  /** Reads a set with `SSCAN`; `null` when it is gone. */
+  private async readSet(client: IRedisReader, key: string): Promise<RevealedValue | null> {
+    const limit = this.options.revealLimit
+    const { entries, isComplete } = await scanUpTo(
+      limit,
+      (cursor) => client.call('SSCAN', key, cursor, 'COUNT', limit),
+      false
+    )
+    if (isGone(entries.length, isComplete)) {
+      return null
+    }
+    return { kind: 'members', members: entries.map(([member]) => member), isComplete }
+  }
+
+  /** Reads a list with one range; `null` when it is gone. */
+  private async readList(client: IRedisReader, key: string): Promise<RevealedValue | null> {
+    const limit = this.options.revealLimit
+    const all = await client.lrange(key, 0, limit)
+    if (isGone(all.length, true)) {
+      return null
+    }
+    const kept = all.slice(0, limit)
+    return { kind: 'members', members: kept, isComplete: kept.length === all.length }
+  }
+
+  /** Reads a sorted set with one range; `null` when it is gone. */
+  private async readSortedSet(client: IRedisReader, key: string): Promise<RevealedValue | null> {
+    const limit = this.options.revealLimit
+    // Through `call` because ioredis's `zrange` overload set cannot be
+    // narrowed to a four-argument signature — see the reader interface.
+    const reply = await client.call('ZRANGE', key, 0, limit, 'WITHSCORES')
+    const { members, isComplete } = readScoredMembers(reply, limit)
+    // Only an empty list is a finished read of nothing; a reply that is not a list is an unexpected
+    // shape, which reads as no members rather than as a deleted key.
+    if (Array.isArray(reply) && isGone(members.length, isComplete)) {
+      return null
+    }
+    return { kind: 'scored', members, isComplete }
   }
 }
 

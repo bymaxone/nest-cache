@@ -96,4 +96,52 @@ describe('cache admin reveal of large values (real Redis)', () => {
     expect(ran('sscan')).toBeGreaterThan(0)
     expect(after.bytes - before.bytes).toBeLessThan(200_000)
   }, 60_000)
+
+  // Scenario: a string whose four-byte character straddles the default limit of 4096 units.
+  // Rule: the shown text ends on a whole character, so it holds 4095 units, and the value is incomplete.
+  it('does not cut a surrogate pair in half at the string limit', async () => {
+    const client = cache.getClient()
+    await client.set(`${NAMESPACE}:pair:string`, `${'a'.repeat(4095)}\u{1F600}tail`)
+
+    const result = await admin.revealValue('cache', `${NAMESPACE}:pair:string`)
+
+    expect(result).toMatchObject({ value: { kind: 'string', isComplete: false } })
+    const text =
+      result.status === 'revealed' && result.value.kind === 'string' ? result.value.value : ''
+    expect(text).toBe('a'.repeat(4095))
+  })
+
+  // Scenario: a hash, a set, a list and a sorted set deleted right after the TYPE reply, the way a
+  // key that expires or is removed between the two reads would be.
+  // Rule: each reveal answers `missing`, not an empty collection.
+  it.each([
+    [
+      'hash',
+      (client: ReturnType<CacheService['getClient']>, key: string) => client.hset(key, 'f', 'v')
+    ],
+    ['set', (client: ReturnType<CacheService['getClient']>, key: string) => client.sadd(key, 'm')],
+    [
+      'list',
+      (client: ReturnType<CacheService['getClient']>, key: string) => client.rpush(key, 'i')
+    ],
+    [
+      'zset',
+      (client: ReturnType<CacheService['getClient']>, key: string) => client.zadd(key, 1, 'z')
+    ]
+  ])('reports a %s deleted between TYPE and the read as missing', async (type, seed) => {
+    const client = cache.getClient()
+    const key = `${NAMESPACE}:vanish:${type}`
+    await seed(client, key)
+    const original = client.type.bind(client)
+    const spy = jest.spyOn(client, 'type').mockImplementation(async (name: string) => {
+      const reply = await original(name)
+      await client.del(name)
+      return reply
+    })
+    try {
+      expect(await admin.revealValue('cache', key)).toEqual({ status: 'missing', key })
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
