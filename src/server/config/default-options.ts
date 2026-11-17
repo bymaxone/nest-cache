@@ -26,7 +26,7 @@ import { CacheException } from '../errors/cache.exception'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
-import { describeReceived } from './describe-received'
+import { refuseOption } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 
 /**
@@ -222,11 +222,7 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
   ] as const
   for (const [option, value, target] of ignored) {
     if (value !== undefined) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: `connection.${option} is ignored in cluster mode; set ${target}`,
-        option: `connection.${option}`,
-        received: describeReceived(value)
-      })
+      refuseOption(`connection.${option}`, `is ignored in cluster mode; set ${target}`, value)
     }
   }
   const redisOptions = options.cluster?.options?.redisOptions
@@ -305,10 +301,7 @@ function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
       value !== undefined &&
       (!Number.isInteger(value) || value < min || value > MAX_TIMER_DELAY_MS)
     ) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: `${option} not an integer in range`,
-        option,
-        received: describeReceived(value),
+      refuseOption(option, 'not an integer in range', value, {
         min,
         max: MAX_TIMER_DELAY_MS
       })
@@ -369,10 +362,7 @@ function validateConnectionNumbers(
     const inRange =
       typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
     if (!unset && !inRange) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: `${where}.${option} not an integer in range`,
-        option: `${where}.${option}`,
-        received: describeReceived(value),
+      refuseOption(`${where}.${option}`, 'not an integer in range', value, {
         min,
         max,
         ...(why === undefined ? {} : { why })
@@ -395,20 +385,10 @@ function requireTimerDelay(option: string, value: number | undefined, min: numbe
     return
   }
   if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: `${option} not a valid timer delay`,
-      option,
-      received: describeReceived(value),
-      max: MAX_TIMER_DELAY_MS
-    })
+    refuseOption(option, 'not a valid timer delay', value, { max: MAX_TIMER_DELAY_MS })
   }
   if (value < min) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: `${option} too low`,
-      option,
-      received: describeReceived(value),
-      min
-    })
+    refuseOption(option, 'too low', value, { min })
   }
 }
 

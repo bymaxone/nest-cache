@@ -5,6 +5,8 @@
  * Layer: server. A configured value can be a credential or a token pasted into the wrong option, and
  * a refusal reaches logs and error reporters, so it must never carry the value itself.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { inspect } from 'node:util'
 
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
@@ -49,6 +51,18 @@ const SPELLINGS: ReadonlyArray<readonly [string, (value: unknown) => BymaxCacheM
         pubsubMaxQueuedMessages: v
       }) as never
   ],
+  ...(['password', 'username', 'tls', 'lazyConnect'] as const).map(
+    (option) =>
+      [
+        `connection.${option} in cluster mode`,
+        (v: unknown) =>
+          ({
+            mode: 'cluster',
+            cluster: { nodes: [{ host: 'n', port: 6379 }] },
+            connection: { host: 'h', [option]: v }
+          }) as BymaxCacheModuleOptions
+      ] as const
+  ),
   ...(['keepAlive', 'maxRetriesPerRequest', 'connectTimeout', 'commandTimeout', 'db'] as const).map(
     (option) =>
       [
@@ -122,5 +136,17 @@ describe.each(SPELLINGS)('refusal details of %s', (name, build) => {
   // Rule: they are named as what they are, not collapsed into "a number".
   it.each([NaN, Infinity, -Infinity])('names the non-finite number %p', (value) => {
     expect(refusal(build(value))?.details).toMatchObject({ received: String(value) })
+  })
+})
+
+describe('INVALID_OPTIONS sites in default-options.ts', () => {
+  // Scenario: a refusal is added or changed in default-options.ts.
+  // Rule: every refusal of an option value goes through refuseOption, which is the one place that
+  // describes the value; the only INVALID_OPTIONS thrown directly names no value at all.
+  it('throws INVALID_OPTIONS directly only where no option value is involved', () => {
+    const source = readFileSync(join(__dirname, 'default-options.ts'), 'utf8')
+
+    expect(source.match(/CACHE_ERROR_CODES\.INVALID_OPTIONS/g)).toHaveLength(1)
+    expect(source).toContain("reason: 'pubsubMaxQueuedMessages needs pubsubMaxConcurrentHandlers'")
   })
 })
