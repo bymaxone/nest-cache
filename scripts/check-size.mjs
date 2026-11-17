@@ -54,7 +54,7 @@ const ROOT = pkg.root
 // handler bounds (the gate with its queue, the window that sums up dropped messages, the entry flag
 // that skips a removed subscription, and the two options with their validation).
 //
-// The admin budget (5 569 B) is far smaller than the server's because the admin entry does NOT
+// The admin budget (5 734 B) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
 // the package rather than inlining a second copy of `CacheService` and the DI tokens. That is a
 // correctness requirement, not a size trick: duplicated class objects would make
@@ -62,10 +62,11 @@ const ROOT = pkg.root
 // `BymaxCacheModule` registered. If this number ever jumps toward the server's, the externalisation
 // has broken and DI is about to fail at a consumer's runtime. The budget covers the bounded value
 // reveal: the ranged string read, the scan loop with its call cap, the parser of the scan replies
-// and their constants.
+// and their constants, and the reveal's per-type readers with the rule that a finished read of nothing
+// is a deleted key and the cut that never splits a surrogate pair.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 11_801 },
-  { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_569 },
+  { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_734 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }
 ]
