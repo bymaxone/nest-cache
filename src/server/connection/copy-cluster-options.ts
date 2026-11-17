@@ -119,15 +119,25 @@ function copySet<T extends object>(
   }
   // Reflect.get reads through getters and prototypes, like a property access; the key is a typed
   // list entry or an own key of the host's group, never a string the library builds.
+  // defineProperty, not an assignment: an own `__proto__` key (a config parsed from JSON has one) would
+  // otherwise run the inherited setter and give the copy that object as its prototype.
+  const put = (key: string, value: unknown): void => {
+    Object.defineProperty(copy, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
+  }
   for (const key of Object.keys(keys)) {
     const value: unknown = Reflect.get(source, key)
     if (value !== undefined && value !== null) {
-      Reflect.set(copy, key, value)
+      put(key, value)
     }
   }
   for (const key of Object.keys(source)) {
     if (!Object.hasOwn(keys, key)) {
-      Reflect.set(copy, key, Reflect.get(source, key))
+      put(key, Reflect.get(source, key))
     }
   }
   return copy
