@@ -148,3 +148,10 @@ import type { IRedisReader } from '../../src/admin/interfaces/redis-reader.inter
 
 declare const adminClient: AdminRedis
 export const adminReaderIsSatisfiedByTheRealClient: IRedisReader = adminClient
+
+// The command union that `IRedisReader.call` takes is part of the public contract, so a host that
+// implements the reader can name it. It must come from the entry point, not a deep path.
+import type { AdminReadCommand } from '@bymax-one/nest-cache/admin'
+
+type _AdminReadCommands = Expect<Equal<AdminReadCommand, 'GETRANGE' | 'HSCAN' | 'SSCAN' | 'ZRANGE'>>
+type _CallTakesTheUnion = Expect<Equal<Parameters<IRedisReader['call']>[0], AdminReadCommand>>

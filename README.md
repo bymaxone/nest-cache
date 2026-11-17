@@ -775,6 +775,44 @@ Every scan-based operation throws `UNSUPPORTED_IN_CLUSTER`, inherited from `Cach
 
 ---
 
+## 🏭 Running in production
+
+What the library bounds by default, what it leaves to you, and what you see when Redis misbehaves.
+
+**Bounded by default**
+
+| What                                    | Default                                                          | Option                                      |
+| --------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------- |
+| Opening the connection                  | `10 000` ms                                                      | `connection.connectTimeout` (minimum `100`) |
+| One command                             | `5 000` ms                                                       | `connection.commandTimeout`                 |
+| Retries of one command                  | `3`                                                              | `connection.maxRetriesPerRequest`           |
+| Reconnect delay                         | `50` ms per attempt, capped at `2 000` ms                        | `connection.retryStrategy`                  |
+| Half-open connection probe              | `30 000` ms                                                      | `connection.keepAlive`                      |
+| Graceful `quit()` before a forced close | `5 000` ms                                                       | `shutdownTimeoutMs` (minimum `100`)         |
+| A reveal of one value in `/admin`       | `revealStringLimit` characters, a bounded number of `SCAN` calls | see Administration surface                  |
+
+**Not bounded by the library, so bound it yourself**
+
+- The size of a value you `set`, a key or id you build, the number of entries in one `mget`, `mset`, `delMany` or `pipeline`, and the size of a Pub/Sub message. The only limit is Redis's own (512 MB for a value). A caller that accepts these from untrusted input validates them first.
+- Pub/Sub handler concurrency and the number of messages waiting for a slot. Without `pubsubMaxConcurrentHandlers` and `pubsubMaxQueuedMessages`, a handler slower than the publish rate lets the work in flight grow without limit, and with it memory. A starting point is `pubsubMaxConcurrentHandlers: 256` and `pubsubMaxQueuedMessages: 10000`. Memory held is about the number of executions in flight plus waiting, times the size of one decoded message and of what the handler keeps for it; size both numbers from your own message size and your memory budget. A message that finds no room is dropped and reported through `events.onEvent` (see Pub/Sub).
+- A handler that never settles keeps its slot for good: there is no per-handler timeout.
+
+**When Redis is down, slow or flapping**
+
+- A command a library service sends that waits longer than `commandTimeout` rejects with `cache.command_timeout` (503) (the raw client from `getClient()` or `pipeline()` rejects with the driver's own error); with the default `enableOfflineQueue: false`, a command issued while the connection is down rejects at once with `cache.connection_lost` (`details.reason: 'offline'`, 503). Both are transient and carry the driver's error on `cause`, never in `details`.
+- A client that does not become ready within `connectTimeout` at boot fails the boot with `cache.connection_failed` (503); a call after that failure rejects with the same code (`details.reason: 'boot_failed'`) and opens no client.
+- A flapping connection reconnects with the capped backoff above. Commands in flight when it drops are the driver's: they reject, or are retried up to `maxRetriesPerRequest` times.
+
+**Shutdown**
+
+`onApplicationShutdown` closes the connections. A live client is asked to `quit()` and is forced closed after `shutdownTimeoutMs`; a client that is down is released without waiting, and the commands still queued on it reject with `cache.connection_lost` (`details.reason: 'shutdown'`). A call made after shutdown began rejects with the same code.
+
+**What the library keeps in Redis**
+
+Nothing of its own: every key is one you built through the key builder, and Pub/Sub channels are a separate namespace from keys. A key you choose cannot collide with a structure the library keeps, because it keeps none. Two keys of yours can still collide with each other under the default `keyEscaping: 'legacy'`; set `'strict'` (see Key Namespacing).
+
+---
+
 ## 🏗️ Architecture
 
 The package runs **inside** your NestJS application as a dynamic module, not as a separate service: `CacheService` and `PubSubService` sit on a `ConnectionManager` (the Pub/Sub subscriber connection is created lazily), `ScriptManagerService` runs scripts with `EVALSHA` and a `NOSCRIPT` fallback, and `KeyBuilder` composes every key and channel as `{namespace}{sep}{prefix}{sep}{id}`.
