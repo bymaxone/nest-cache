@@ -7,6 +7,12 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Changed
+
+- The `command` parameter of `IRedisReader.call`, a deprecated implementation helper of `./admin`, is now typed as the union `AdminReadCommand` (`'GETRANGE' | 'HSCAN' | 'SSCAN' | 'ZRANGE'`) instead of `string`. A write command, or a name computed at run time, no longer compiles. The compiled JavaScript of the package is unchanged; only the declarations differ.
+
+  **Apply to a consumer:** nothing for a host that only uses `CacheAdminService` and `CacheStatusService`. A host that implements `IRedisReader` itself (a test double) keeps compiling, since a method accepting `string` accepts the narrower type; a host that calls `reader.call(name, ...)` with a `string` it computed narrows `name` to `AdminReadCommand` first or stops calling it, which `./admin` never intended.
+
 ## [1.2.23] - 2026-11-17
 
 ### Fixed

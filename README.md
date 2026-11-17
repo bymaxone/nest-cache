@@ -996,7 +996,7 @@ Reliable atomic primitives are in scope; opinionated policies are not. By design
 Contributions are welcome. TypeScript strict, TDD with a 100% coverage gate and a 100% mutation break threshold, Conventional Commits, peer dependencies only. Run the full gate before opening a PR:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
+pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm check:admin-types && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) for the full process.

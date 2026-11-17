@@ -37,7 +37,7 @@ in [docs/development_plan.md](./docs/development_plan.md).
 ## Verification — run before every PR
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
+pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm check:admin-types && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
 All of the following must pass:
@@ -45,6 +45,7 @@ All of the following must pass:
 - **Typecheck** — `tsc --noEmit` for the root, server and e2e projects (strict, zero errors)
 - **Lint** — ESLint (zero `any`, import order, security rules)
 - **Admin read-only** — `scripts/check-admin-readonly.mjs`: the `./admin` subpath issues no mutating Redis command
+- **Admin types** — `scripts/check-admin-types.mjs`: the `./admin` subpath reaches Redis only through `IRedisReader`, whose `call` takes the `AdminReadCommand` union
 - **Coverage** — 100% statements / branches / functions / lines
 - **Build** — tsup produces ESM + CJS + `.d.ts` for every subpath
 - **Size** — every subpath stays within the budget in `scripts/check-size.mjs`

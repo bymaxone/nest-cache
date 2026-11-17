@@ -71,7 +71,7 @@ never relatively: the tsup entry marks the package `external`, and a relative im
 inline a second copy of `CacheService` and the DI tokens, so `@Inject(CacheService)` would
 name a different class object than `BymaxCacheModule` registered and DI would fail in the
 published package. The subpath issues **no mutating Redis command** — enforced by
-`pnpm check:admin-readonly`, not by convention. Scope patterns are restricted to a literal
+`pnpm check:admin-readonly` (syntax) and `pnpm check:admin-types` (types: the subpath holds an `IRedisReader`, never a client), not by convention, and proved by an end-to-end suite that runs the admin API as a Redis user that cannot write. Scope patterns are restricted to a literal
 prefix with at most one trailing `*` so key-membership is exact by construction; do not
 relax this (a matcher more permissive than the server's is a silent cross-scope leak).
 
@@ -80,7 +80,7 @@ relax this (a matcher more permissive than the server's is a silent cross-scope 
 ## Verification — Run Before Completing Any Task
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
+pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm check:admin-types && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
 
 `pnpm check:api` compares the built `.d.ts`/`.d.cts` with the previous published version and always prints what differs. A difference passes only when the CHANGELOG section of the version being released holds an "Apply to a derived backend" (or "Apply to a consumer") note; there is no override. The release workflow runs it before the publish.
