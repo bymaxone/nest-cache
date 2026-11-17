@@ -491,13 +491,13 @@ describe('validateOptions', () => {
   // it. Refusing them at boot, with the place to set each, stops a deployer from believing a password
   // or TLS is configured when it is not.
   it.each([
-    ['password', 'secret', 'cluster.options.redisOptions.password'],
-    ['username', 'user', 'cluster.options.redisOptions.username'],
-    ['tls', {}, 'cluster.options.redisOptions.tls'],
-    ['lazyConnect', true, 'cluster.options.lazyConnect']
-  ] as [string, unknown, string][])(
+    ['password', 'secret', 'cluster.options.redisOptions.password', 'a string'],
+    ['username', 'user', 'cluster.options.redisOptions.username', 'a string'],
+    ['tls', {}, 'cluster.options.redisOptions.tls', 'an object'],
+    ['lazyConnect', true, 'cluster.options.lazyConnect', 'a boolean']
+  ] as [string, unknown, string, string][])(
     'refuses connection.%s in cluster mode and names where to set it',
-    (option, value, target) => {
+    (option, value, target, received) => {
       let thrown: unknown
       try {
         validateOptions({
@@ -513,7 +513,8 @@ describe('validateOptions', () => {
       expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
       expect((thrown as CacheException).details).toEqual({
         reason: `connection.${option} is ignored in cluster mode; set ${target}`,
-        option: `connection.${option}`
+        option: `connection.${option}`,
+        received
       })
       expect(JSON.stringify(thrown)).not.toContain('secret')
     }

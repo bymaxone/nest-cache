@@ -224,7 +224,8 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
     if (value !== undefined) {
       throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
         reason: `connection.${option} is ignored in cluster mode; set ${target}`,
-        option: `connection.${option}`
+        option: `connection.${option}`,
+        received: describeReceived(value)
       })
     }
   }
