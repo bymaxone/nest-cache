@@ -75,6 +75,16 @@ describe('check-spec-headers', () => {
     assert.match(output, /src\/server\/odd\.spec\.ts: header names the layer "backend"/)
   })
 
+  // Scenario: the family's tooling specs declare `@layer tests`, the plural of this repository's `test`.
+  // Rule: both spellings name the same layer, so a spec that uses either passes.
+  it('accepts the layer "tests" as the layer "test"', () => {
+    const { status, output } = run({
+      'src/tooling.spec.ts': GOOD.replace('Layer: server.', '@layer tests')
+    })
+
+    assert.equal(status, 0, output)
+  })
+
   it('fails a header that has a layer and no purpose', () => {
     const { status, output } = run({
       'src/server/thin.spec.ts': '/**\n * Layer: server.\n */\ndescribe("x", () => {})\n'
