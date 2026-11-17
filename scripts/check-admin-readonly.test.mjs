@@ -247,6 +247,80 @@ describe('admin read-only gate, other routes to a write', () => {
     })
   }
 
+  // Scenario: a client method reached by reference, so the call is out of the gate's sight.
+  // Rule: `apply` and `bind` fail wherever they are used, and so do the reflection routes to a method.
+  for (const [label, snippet] of [
+    ['apply on a denied member', "await reader.config.apply(reader, ['SET', 'maxmemory', '1'])"],
+    ['bind on a denied member', "await reader.client.bind(reader)('KILL')"],
+    ['apply on a mutating member', 'await reader.expire.apply(reader, [key, 1])'],
+    [
+      'a prototype descriptor',
+      "await Object.getOwnPropertyDescriptor(Object.getPrototypeOf(reader), 'del')?.value.apply(reader, [key])"
+    ],
+    ['getOwnPropertyNames', 'const names = Object.getOwnPropertyNames(reader)'],
+    ['__proto__', 'const proto = reader.__proto__'],
+    ['a prototype member', 'const f = Reader.prototype.del'],
+    ['a Proxy', 'const wrapped = new Proxy(reader, {})'],
+    ['a constructor call', "const run = (() => undefined).constructor('return 1')"],
+    ['a constructor chain', "const run = reader.constructor.constructor('return 1')"]
+  ]) {
+    it(`fails ${label}`, () => {
+      const result = run(sending(snippet))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
+  // Scenario: commands with write subcommands or that change the connection, used any way at all.
+  // Rule: a member access of any of them fails; `memory` passes only as a direct `memory('USAGE', ...)`.
+  for (const name of [
+    'acl',
+    'auth',
+    'client',
+    'cluster',
+    'config',
+    'debug',
+    'function',
+    'hello',
+    'hotkeys',
+    'latency',
+    'module',
+    'monitor',
+    'psubscribe',
+    'quit',
+    'reset',
+    'select',
+    'slowlog',
+    'ssubscribe',
+    'subscribe',
+    'touch',
+    'watch'
+  ]) {
+    it(`fails ${name} as a member, called or only referenced`, () => {
+      const called = run(sending(`await reader.${name}('X')`))
+      assert.notEqual(called.status, 0, called.output)
+      const referenced = run(sending(`const f = reader.${name}\n  return f`))
+      assert.notEqual(referenced.status, 0, referenced.output)
+    })
+  }
+
+  it('fails memory unless it is called directly with USAGE', () => {
+    for (const snippet of [
+      "await reader.memory('PURGE')",
+      "const f = reader.memory\n  await f('USAGE', key)",
+      'await reader.memory(sub, key)'
+    ]) {
+      const result = run(sending(snippet))
+      assert.notEqual(result.status, 0, `${snippet}: ${result.output}`)
+    }
+  })
+
+  it('passes memory called directly with USAGE and a constructor name read', () => {
+    const result = run(
+      sending("await pipeline.memory('USAGE', key)\n  return serializer.constructor.name")
+    )
+    assert.equal(result.status, 0, result.output)
+  })
+
   // Scenario: members reached by a name the gate cannot read.
   // Rule: a computed name, a Reflect lookup with a variable or a mutating literal, and a computed
   // destructuring all fail, while a Reflect.get of a harmless literal passes.
@@ -320,12 +394,21 @@ describe('admin read-only gate, ioredis', () => {
     ['a subpath import', "import Redis from 'ioredis/built/Redis'\n"],
     ['a subpath require', "const Redis = require('ioredis/built/Redis')\n"],
     ['an aliased require', "const load = require\nconst Redis = load('ioredis')\n"],
-    ['a computed dynamic import', "export const load = () => import('io' + 'redis')\n"]
+    ['a computed dynamic import', "export const load = () => import('io' + 'redis')\n"],
+    ['node:vm', "import { runInNewContext } from 'node:vm'\n"],
+    ['vm required', "const vm = require('vm')\n"],
+    ['worker_threads', "import { Worker } from 'node:worker_threads'\n"],
+    ['child_process', "import { execSync } from 'node:child_process'\n"],
+    ['child_process dynamic', "export const load = () => import('node:child_process')\n"],
+    [
+      'node:module as a namespace',
+      "import * as nodeModule from 'node:module'\nexport const load = nodeModule['createRequire'](import.meta.url)\n"
+    ]
   ]) {
     it(`fails ioredis as a value through ${label}`, () => {
       const result = run({ 'client.ts': text })
       assert.notEqual(result.status, 0, result.output)
-      assert.match(result.output, /ioredis|module/)
+      assert.match(result.output, /ioredis|module|must not use/)
     })
   }
 

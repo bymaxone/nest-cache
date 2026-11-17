@@ -25,9 +25,10 @@
  *      write, read from its own command table, plus a short list for the dangerous commands it does
  *      not flag. There is no exemption for names that ordinary collections also have (`set`, `sort`,
  *      `copy`, `append`): without types a `Map.set` cannot be told from a client, so the subpath
- *      builds a `Map` from its entries instead of calling `set`. `config`, `client`, `acl`, `debug`,
- *      `function` and `select` are also ordinary property names, so they fail only where they are
- *      called.
+ *      builds a `Map` from its entries instead of calling `set`. Methods that have write subcommands
+ *      or change the connection (`config`, `client`, `module`, `cluster`, `subscribe`, `auth`, ...)
+ *      fail as members however they are used, called or only referenced; `memory` passes only as a
+ *      direct `memory('USAGE', ...)`.
  *   4. Nothing in the subpath may DECLARE a member named after a mutating command: a method or
  *      property signature, a class member, an accessor, a member of an object literal, quoted or not,
  *      at any indent.
@@ -36,18 +37,24 @@
  *   5. The client's other ways to send a command by name fail: `sendCommand`, `send_command`,
  *      `new Command(...)`, commands passed to `pipeline(...)` or `multi(...)`, and `defineCommand`;
  *      so do `eval`, `Function` and `createRequire`, which run or load what the gate cannot read.
- *   6. A member that cannot be read from the text fails: an element access or a destructuring with a
+ *   6. A member that cannot be read from the text fails, and so does reaching one by reference:
+ *      `apply` and `bind` members, `__proto__`, `prototype`, `Object.getPrototypeOf` and the other
+ *      descriptor and prototype reflection, `Proxy`, and a constructor called through a member
+ *      (`x.constructor('code')`; reading `x.constructor.name` is fine). Also: an element access or a destructuring with a
  *      computed name, a `Reflect.get`, `Reflect.has` or `Reflect.set` with a key that is not a string
  *      literal, and any `Reflect.apply` or `Reflect.construct`. A literal `Reflect` key is judged like
  *      a member access.
- *   7. The subpath must not bring `ioredis`, or anything under it, in as a value: no `import` that is
+ *   7. The subpath must not bring `ioredis`, anything under it, or `child_process`, `cluster`,
+ *      `module`, `vm` or `worker_threads` (with or without `node:`) in as a value: no `import` that is
  *      not `import type`, no `export ... from`, no `import x = require()`, no `require` or `import()`
  *      of it, and no `require` or `import()` of a name that is not a string literal, nor any use of
  *      `require` other than a direct call. A value import would let a module construct its own client
  *      and bypass the rules above.
  *
  * The gate reads syntax, not types: it cannot know what a variable holds, which is why the rules
- * refuse what they cannot read instead of guessing.
+ * refuse what they cannot read instead of guessing. It is a tripwire for the routes it lists, not a
+ * proof: what keeps a write out is that every Redis access goes through the typed reader contracts,
+ * and a rule that no call resolves to a method declared by ioredis would need a type checker.
  *
  * Run as `pnpm check:admin-readonly`, optionally with a directory to read instead of `src/admin`
  * (the tests do); wired into `prepublishOnly` and the CI verify job.
@@ -207,17 +214,73 @@ for (const name of ioredisCommands.list) {
 }
 
 /**
- * Command names that are also ordinary property names (`this.client`, `options.config`, `debug`), so
- * they fail only where they are CALLED. Each has write subcommands (`CONFIG SET`, `CLIENT KILL`,
- * `ACL SETUSER`, `FUNCTION LOAD`, `DEBUG`, `SELECT`) that a method of that name could send.
+ * Names of client methods that change state or the server's mode without being writes in the command
+ * table: a command with write subcommands (`CONFIG SET`, `CLIENT KILL`, `MODULE LOAD`, `CLUSTER RESET`,
+ * `MEMORY PURGE`, `ACL SETUSER`, `FUNCTION LOAD`, `SLOWLOG RESET`, `LATENCY RESET`), or one that changes
+ * what the connection is (`SUBSCRIBE`, `MONITOR`, `AUTH`, `QUIT`, `RESET`, `WATCH`, `SELECT`). A member
+ * access of any of them fails, called or not, because a reference can be called later where the gate
+ * cannot see it. The one use the subpath has, `memory('USAGE', key)`, is allowed when it is called
+ * directly with that literal.
  */
-const CALL_ONLY_COMMANDS = new Set(['acl', 'client', 'config', 'debug', 'function', 'select'])
+const DENIED_MEMBERS = new Set([
+  'acl',
+  'auth',
+  'client',
+  'cluster',
+  'config',
+  'debug',
+  'function',
+  'hello',
+  'hotkeys',
+  'latency',
+  'memory',
+  'module',
+  'monitor',
+  'psubscribe',
+  'quit',
+  'reset',
+  'select',
+  'slowlog',
+  'ssubscribe',
+  'subscribe',
+  'touch',
+  'watch'
+])
+
+/** The subcommand literal a denied member may be called with, where the subpath needs one. */
+const ALLOWED_SUBCOMMANDS = new Map([['memory', 'USAGE']])
+
+/** Node modules that run code, load modules or start other processes, which hides what is reached. */
+const DENIED_MODULES = new Set(['child_process', 'cluster', 'module', 'vm', 'worker_threads'])
+
+/** Whether a module specifier is ioredis, anything under it, or a denied Node module. */
+const isDeniedModule = (specifier) => {
+  const bare = specifier.startsWith('node:') ? specifier.slice(5) : specifier
+  return (
+    specifier === 'ioredis' ||
+    specifier.startsWith('ioredis/') ||
+    DENIED_MODULES.has(bare) ||
+    [...DENIED_MODULES].some((name) => bare.startsWith(`${name}/`))
+  )
+}
+
+/** Reflection that reaches a method without naming it. */
+const REFLECTION = new Set([
+  '__proto__',
+  'defineProperty',
+  'getOwnPropertyDescriptor',
+  'getOwnPropertyDescriptors',
+  'getOwnPropertyNames',
+  'getPrototypeOf',
+  'prototype',
+  'setPrototypeOf'
+])
 
 /** Command names the `call(...)` escape hatch may send. */
 const ALLOWED_CALL_COMMANDS = new Set(['ZRANGE', 'GETRANGE', 'HSCAN', 'SSCAN'])
 
 /** Identifiers that build code or modules from text, or a `require` from somewhere else. */
-const DYNAMIC_LOADERS = new Set(['createRequire', 'eval', 'Function'])
+const DYNAMIC_LOADERS = new Set(['createRequire', 'eval', 'Function', 'Proxy'])
 
 /** Methods that send a command by name, so the command must be a literal on the allowlist. */
 const CALL_METHODS = new Set(['call', 'callBuffer'])
@@ -338,18 +401,6 @@ function check(file) {
       if (
         ts.isCallExpression(node) &&
         name !== null &&
-        CALL_ONLY_COMMANDS.has(name.toLowerCase())
-      ) {
-        fail(
-          file,
-          source,
-          node,
-          `calls a member named after the command "${name}", which has write subcommands`
-        )
-      }
-      if (
-        ts.isCallExpression(node) &&
-        name !== null &&
         ['pipeline', 'multi'].includes(name) &&
         node.arguments.length > 0
       ) {
@@ -361,8 +412,8 @@ function check(file) {
           const target = literalText(node.arguments[0])
           if (target === null) {
             fail(file, source, node, 'loads a module whose name is not a string literal')
-          } else if (target === 'ioredis' || target.startsWith('ioredis/')) {
-            fail(file, source, node, 'brings ioredis in as a value (require or dynamic import)')
+          } else if (isDeniedModule(target)) {
+            fail(file, source, node, `loads "${target}", which the subpath must not use`)
           }
         }
         // `Reflect` reads and calls members by name: a literal key is judged like a member access,
@@ -418,6 +469,9 @@ function check(file) {
     }
 
     // Code and module loaders that hide what they reach from the rules above.
+    if (ts.isIdentifier(node) && REFLECTION.has(node.text) && memberName(node.parent) === null) {
+      fail(file, source, node, `uses "${node.text}", which reaches a method without naming it`)
+    }
     if (ts.isIdentifier(node) && DYNAMIC_LOADERS.has(node.text)) {
       fail(file, source, node, `uses "${node.text}", which runs or loads what the gate cannot read`)
     }
@@ -450,6 +504,39 @@ function check(file) {
       }
       if (RAW_SENDERS.has(name)) {
         fail(file, source, node, `uses the raw sender "${name}"`)
+      }
+      if (name === 'apply' || name === 'bind') {
+        fail(file, source, node, `uses ${name}, which calls a member by reference`)
+      }
+      if (REFLECTION.has(name)) {
+        fail(file, source, node, `uses "${name}", which reaches a method without naming it`)
+      }
+      if (DENIED_MEMBERS.has(name.toLowerCase())) {
+        const parent = node.parent
+        const direct = ts.isCallExpression(parent) && unwrap(parent.expression) === node
+        const allowed = ALLOWED_SUBCOMMANDS.get(name.toLowerCase())
+        if (!(direct && allowed !== undefined && literalText(parent.arguments[0]) === allowed)) {
+          fail(
+            file,
+            source,
+            node,
+            `uses "${name}", which has write subcommands or changes the connection`
+          )
+        }
+      }
+      if (name === 'constructor') {
+        const parent = node.parent
+        if (
+          (ts.isCallExpression(parent) || ts.isNewExpression(parent)) &&
+          unwrap(parent.expression) === node
+        ) {
+          fail(
+            file,
+            source,
+            node,
+            'calls a constructor reached through a member, which builds code or objects unseen'
+          )
+        }
       }
       if (MUTATING_COMMANDS.has(name.toLowerCase())) {
         fail(file, source, node, `uses a member named after the mutating command "${name}"`)
@@ -501,8 +588,8 @@ function check(file) {
         ? node.importClause?.isTypeOnly
         : node.isTypeOnly
       const target = literalText(node.moduleSpecifier)
-      if (target !== null && (target === 'ioredis' || target.startsWith('ioredis/')) && !typeOnly) {
-        fail(file, source, node, 'imports ioredis as a value')
+      if (target !== null && isDeniedModule(target) && !typeOnly) {
+        fail(file, source, node, `imports "${target}" as a value, which the subpath must not use`)
       }
     }
     if (
@@ -511,8 +598,8 @@ function check(file) {
       ts.isExternalModuleReference(node.moduleReference)
     ) {
       const target = literalText(node.moduleReference.expression)
-      if (target === null || target === 'ioredis' || target.startsWith('ioredis/')) {
-        fail(file, source, node, 'imports ioredis as a value (import = require)')
+      if (target === null || isDeniedModule(target)) {
+        fail(file, source, node, 'imports a module the subpath must not use (import = require)')
       }
     }
 
