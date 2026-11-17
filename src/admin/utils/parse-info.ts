@@ -84,7 +84,7 @@ export function parseInfoFields(text: string): ReadonlyMap<string, string> {
     }
     pairs.push([line.slice(0, cut), line.slice(cut + 1)])
   }
-  // The constructor keeps the last value of a repeated name, as `Map.set` did one name at a time.
+  // The constructor keeps the last value of a repeated name.
   return new Map(pairs)
 }
 
