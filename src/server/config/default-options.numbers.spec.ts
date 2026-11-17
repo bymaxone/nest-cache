@@ -152,7 +152,7 @@ describe('numeric connection options when a url is set', () => {
 describe('a null option group', () => {
   // Scenario: a whole group is null: `cluster.options.redisOptions`, or `connection` in cluster mode,
   // where a cluster ignores it.
-  // Rule: it counts as absent; it does not throw a TypeError, as 1.2.25 did not.
+  // Rule: it counts as absent; validation does not throw a TypeError.
   it.each([
     [
       'cluster.options.redisOptions',
@@ -170,7 +170,7 @@ describe('a null option group', () => {
   })
 
   // Scenario: a standalone connection that is null.
-  // Rule: it is the missing connection it always was, CONNECTION_FAILED, never a TypeError.
+  // Rule: it is reported as a missing connection, CONNECTION_FAILED, never a TypeError.
   it('reports a null standalone connection as a missing connection', () => {
     let thrown: unknown
     try {
