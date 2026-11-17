@@ -6,7 +6,7 @@
 
 ```bash
 pnpm install          # install dev dependencies
-pnpm typecheck        # tsc --noEmit (tsconfig.json + tsconfig.server.json)
+pnpm typecheck        # tsc --noEmit (tsconfig.json, tsconfig.server.json + tsconfig.e2e.json)
 pnpm lint             # ESLint on src/
 pnpm test             # Jest unit tests
 pnpm test:e2e         # Jest E2E tests (real NestJS bootstrap)
