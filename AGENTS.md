@@ -327,10 +327,12 @@ here has to be maintained by whoever adds a rule, and is wrong the first time so
   review on #N". The shared rule above is scoped to authorship, and a finding is not authorship —
   this repository takes the stricter line anyway, decided by the repository owner.
 
-  The owner's later rule is stricter still: no commit message, pull request title or body, review
-  reply, issue or code comment names an AI tool at all, whether as author, reviewer or subject.
-  `scripts/commitlint-no-ai-attribution.cjs` refuses such a commit message, so write "the second
-  reviewer" or describe the file by what it is, not by the tool that reads it.
+  What is enforced: a commit message, a pull request title or a pull request body never credits an
+  AI tool as author or reviewer. In this repository the commit check
+  (`scripts/commitlint-no-ai-attribution.cjs`) is stricter than that: it also refuses the bare names
+  `claude`, `codex`, `anthropic` and `chatgpt` in a commit message, even as the subject of the change
+  (`claude` followed by a dot, as in a file name, passes). Describe a file by what it is ("the second
+  reviewer's instructions"), not by the tool that reads it.
 
 - **This repository _is_ one of the `@bymax-one/*` libraries the version rule is about.** Breaking
   changes ship in minor and patch releases by policy, and the `CHANGELOG.md` entry is the
