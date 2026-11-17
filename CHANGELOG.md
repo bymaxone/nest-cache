@@ -20,8 +20,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
   read-only allowlist of `check:admin-readonly`.
 
   **Apply to a consumer:** nothing to change in the types. The entries of a large set or hash can come in a different order than before:
-  they come in the server's scan order, not in the order of `SMEMBERS` or `HGETALL`; Redis documents neither order, and a hash or set
-  small enough to be stored compactly keeps its insertion order.
+  they come in the server's scan order, not in the order of `SMEMBERS` or `HGETALL`; Redis documents neither order.
 
 ## [1.2.21] - 2026-11-16
 
