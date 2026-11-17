@@ -228,6 +228,7 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
   const redisOptions = options.cluster?.options?.redisOptions
   requireTimerDelay('connectTimeout', redisOptions?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
   requireTimerDelay('commandTimeout', redisOptions?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  validateConnectionNumbers('cluster.options.redisOptions', redisOptions)
 }
 
 /**
@@ -270,6 +271,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   )
   requireTimerDelay('connectTimeout', options.connection?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
   requireTimerDelay('commandTimeout', options.connection?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  validateConnectionNumbers('connection', options.connection)
   validateHandlerBounds(options)
 }
 
@@ -300,6 +302,68 @@ function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
         value,
         min,
         max: MAX_TIMER_DELAY_MS
+      })
+    }
+  }
+}
+
+/** The numeric connection options a connection block and `cluster.options.redisOptions` share. */
+interface NumericConnectionOptions {
+  readonly port?: unknown
+  readonly db?: unknown
+  readonly keepAlive?: unknown
+  readonly maxRetriesPerRequest?: unknown
+}
+
+/**
+ * Rejects a numeric connection option the driver would take literally and a bound would be lost:
+ * `NaN`, an infinity, a fraction or a string. The driver counts retries only when
+ * `maxRetriesPerRequest` is a number from 0, and hands `keepAlive` to the socket, where `NaN` and 0
+ * mean the operating system's own delay (hours) instead of the 30 s probe. `maxRetriesPerRequest`
+ * of `null` is refused too: it is the driver's "retry without limit", which would undo the fail-fast
+ * outage design and leave only `commandTimeout` to bound a command.
+ *
+ * @param where - The block the options sit in, echoed in the error details.
+ * @param options - The block, or `undefined` when it is not set.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
+ */
+function validateConnectionNumbers(
+  where: string,
+  options: NumericConnectionOptions | undefined
+): void {
+  if (options === undefined) {
+    return
+  }
+  const ranges = [
+    ['port', options.port, 1, 65_535, undefined],
+    ['db', options.db, 0, MAX_TIMER_DELAY_MS, undefined],
+    [
+      'keepAlive',
+      options.keepAlive,
+      1,
+      MAX_TIMER_DELAY_MS,
+      '0 is the OS default delay: the 30 s probe is lost'
+    ],
+    [
+      'maxRetriesPerRequest',
+      options.maxRetriesPerRequest,
+      0,
+      MAX_TIMER_DELAY_MS,
+      'null lifts the retry bound: only commandTimeout would bound a command'
+    ]
+  ] as const
+  for (const [option, value, min, max, why] of ranges) {
+    const unset = value === undefined
+    const inRange =
+      typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+    if (!unset && !inRange) {
+      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
+        reason: `${where}.${option} not an integer in range`,
+        option: `${where}.${option}`,
+        value,
+        min,
+        max,
+        ...(why === undefined ? {} : { why })
       })
     }
   }

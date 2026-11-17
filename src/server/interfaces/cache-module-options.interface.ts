@@ -32,11 +32,11 @@ export interface BymaxCacheStandaloneConnection {
   url?: string
   /** Hostname. Default: `localhost` when neither `url` nor `host` is set is rejected at validation. */
   host?: string
-  /** TCP port. Default: 6379. */
+  /** TCP port, an integer from 1 to 65 535. Default: 6379. */
   port?: number
   /** Auth password. Never logged or echoed in events. */
   password?: string
-  /** Logical database index. */
+  /** Logical database index, an integer from 0. */
   db?: number
   /** Auth username (Redis 6 ACLs). */
   username?: string
@@ -48,7 +48,11 @@ export interface BymaxCacheStandaloneConnection {
   connectTimeout?: number
   /** Default: 5_000 ms. */
   commandTimeout?: number
-  /** Default: 3. Do NOT pass `null` here — that value is BullMQ-specific. */
+  /**
+   * Default: 3. An integer from 0. `null` is refused: it means "retry without limit", which would
+   * leave only `commandTimeout` to bound a command during an outage. `NaN`, an infinity, a fraction
+   * or a string is refused as well.
+   */
   maxRetriesPerRequest?: number
   /** Default: true. */
   enableReadyCheck?: boolean
@@ -58,7 +62,10 @@ export interface BymaxCacheStandaloneConnection {
   retryStrategy?: (times: number) => number | null | void
   /** Default: reconnects only on `READONLY` (replica failover). */
   reconnectOnError?: (err: Error) => boolean | 1 | 2
-  /** TCP keep-alive delay in ms. Default: 30_000. */
+  /**
+   * TCP keep-alive delay in ms. Default: 30_000. An integer from 1: `0` is refused because the socket
+   * reads it as the operating system's own delay, which loses the probe.
+   */
   keepAlive?: number
   /** Disable Nagle's algorithm. */
   noDelay?: boolean
