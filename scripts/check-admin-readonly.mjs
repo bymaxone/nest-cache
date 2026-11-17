@@ -21,18 +21,21 @@
  *      `const send = client.call`. The first argument is out of sight in each of them.
  *   3. A member named after a mutating Redis command fails wherever it is used: `reader.del(k)`,
  *      `reader['del'](k)`, `(reader as Loose).del(k)`, `reader?.hset?.()`, `reader.pipeline().del()`,
- *      `const { unlink } = reader`. `set`, `sort`, `copy` and `append` are also names of ordinary
- *      collections, which without types cannot be told from a client, so a member access of those
- *      four passes only on a receiver the same file declares as a collection (a variable or class
- *      property initialised with `new Map`, `new Set`, `new WeakMap`, `new WeakSet`,
- *      `new URLSearchParams` or an array literal). `config`, `client`, `acl`, `debug`, `function` and
- *      `select` are also ordinary property names, so they fail only where they are called.
- *   4. The reader contracts must not DECLARE a member named after a mutating command: a method or
- *      property signature, a class member, a type-literal member, quoted or not, at any indent.
+ *      `const { unlink } = reader`. The names are every command the installed ioredis flags as a
+ *      write, read from its own command table, plus a short list for the dangerous commands it does
+ *      not flag. There is no exemption for names that ordinary collections also have (`set`, `sort`,
+ *      `copy`, `append`): without types a `Map.set` cannot be told from a client, so the subpath
+ *      builds a `Map` from its entries instead of calling `set`. `config`, `client`, `acl`, `debug`,
+ *      `function` and `select` are also ordinary property names, so they fail only where they are
+ *      called.
+ *   4. Nothing in the subpath may DECLARE a member named after a mutating command: a method or
+ *      property signature, a class member, an accessor, a member of an object literal, quoted or not,
+ *      at any indent.
  *      Every Redis access in the subpath goes through those interfaces, so an interface that cannot
  *      express a write is a surface that cannot perform one.
  *   5. The client's other ways to send a command by name fail: `sendCommand`, `send_command`,
- *      `new Command(...)`, commands passed to `pipeline(...)` or `multi(...)`, and `defineCommand`.
+ *      `new Command(...)`, commands passed to `pipeline(...)` or `multi(...)`, and `defineCommand`;
+ *      so do `eval`, `Function` and `createRequire`, which run or load what the gate cannot read.
  *   6. A member that cannot be read from the text fails: an element access or a destructuring with a
  *      computed name, a `Reflect.get`, `Reflect.has` or `Reflect.set` with a key that is not a string
  *      literal, and any `Reflect.apply` or `Reflect.construct`. A literal `Reflect` key is judged like
@@ -51,6 +54,7 @@
  */
 
 import { readdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -188,25 +192,32 @@ for (const name of MORE_MUTATING_COMMANDS) {
 }
 
 /**
+ * Every command the installed ioredis knows with the `write` flag, read from its own command table
+ * (`@ioredis/commands`, a dependency of ioredis), so a write command a later Redis adds is refused
+ * without anyone editing a list. The lists above stay for the dangerous commands that table does not
+ * flag as writes (scripting, publishing, server control).
+ */
+const ioredisCommands = createRequire(createRequire(import.meta.url).resolve('ioredis'))(
+  '@ioredis/commands'
+)
+for (const name of ioredisCommands.list) {
+  if (ioredisCommands.hasFlag(name, 'write')) {
+    MUTATING_COMMANDS.add(name.toLowerCase())
+  }
+}
+
+/**
  * Command names that are also ordinary property names (`this.client`, `options.config`, `debug`), so
  * they fail only where they are CALLED. Each has write subcommands (`CONFIG SET`, `CLIENT KILL`,
  * `ACL SETUSER`, `FUNCTION LOAD`, `DEBUG`, `SELECT`) that a method of that name could send.
  */
 const CALL_ONLY_COMMANDS = new Set(['acl', 'client', 'config', 'debug', 'function', 'select'])
 
-/**
- * Mutating command names that ordinary JavaScript values also have (`Map.set`, `Array.sort`,
- * `Buffer.copy`, `FormData.append`). Without types the gate cannot tell a collection from a client, so
- * it allows a member access of these names only on a receiver the same file declares as a collection:
- * a `const`/`let` or a class property initialised with `new Map`, `new Set`, `new WeakMap`,
- * `new WeakSet`, `new URLSearchParams` or an array literal. Any other receiver fails, and destructuring
- * these names out of anything fails.
- */
-const COLLECTION_NAMES = new Set(['append', 'copy', 'set', 'sort'])
-const COLLECTION_CONSTRUCTORS = new Set(['Map', 'Set', 'WeakMap', 'WeakSet', 'URLSearchParams'])
-
 /** Command names the `call(...)` escape hatch may send. */
 const ALLOWED_CALL_COMMANDS = new Set(['ZRANGE', 'GETRANGE', 'HSCAN', 'SSCAN'])
+
+/** Identifiers that build code or modules from text, or a `require` from somewhere else. */
+const DYNAMIC_LOADERS = new Set(['createRequire', 'eval', 'Function'])
 
 /** Methods that send a command by name, so the command must be a literal on the allowlist. */
 const CALL_METHODS = new Set(['call', 'callBuffer'])
@@ -276,18 +287,6 @@ function declaredName(name) {
   return ts.isComputedPropertyName(name) ? literalText(name.expression) : null
 }
 
-/** Whether an initialiser builds a collection: `new Map(...)`, `new Set(...)` and the like, or `[...]`. */
-function buildsCollection(init) {
-  const node = init && unwrap(init)
-  return Boolean(
-    node &&
-    (ts.isArrayLiteralExpression(node) ||
-      (ts.isNewExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        COLLECTION_CONSTRUCTORS.has(node.expression.text)))
-  )
-}
-
 const failures = []
 /** Record a failure without stopping, so one run reports every problem. */
 const fail = (file, source, node, detail) => {
@@ -304,39 +303,6 @@ function check(file) {
     true,
     ts.ScriptKind.TS
   )
-  /** Names the file declares as collections, as `name` for a variable and `this.name` for a property. */
-  const collections = new Set()
-  const collect = (node) => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      buildsCollection(node.initializer)
-    ) {
-      collections.add(node.name.text)
-    }
-    if (ts.isPropertyDeclaration(node) && buildsCollection(node.initializer)) {
-      const declared = declaredName(node.name)
-      if (declared !== null) {
-        collections.add(`this.${declared}`)
-      }
-    }
-    ts.forEachChild(node, collect)
-  }
-  collect(source)
-
-  /** Receivers that are collections: `found`, `this.found`. */
-  const isCollection = (receiver) => {
-    const node = unwrap(receiver)
-    if (ts.isIdentifier(node)) {
-      return collections.has(node.text)
-    }
-    return (
-      ts.isPropertyAccessExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ThisKeyword &&
-      collections.has(`this.${node.name.text}`)
-    )
-  }
-
   /** `call` accesses that are the callee of a direct call, already judged by rule 1. */
   const judged = new Set()
 
@@ -451,6 +417,11 @@ function check(file) {
       }
     }
 
+    // Code and module loaders that hide what they reach from the rules above.
+    if (ts.isIdentifier(node) && DYNAMIC_LOADERS.has(node.text)) {
+      fail(file, source, node, `uses "${node.text}", which runs or loads what the gate cannot read`)
+    }
+
     if (ts.isElementAccessExpression(node)) {
       const key = node.argumentExpression
       if (
@@ -480,15 +451,8 @@ function check(file) {
       if (RAW_SENDERS.has(name)) {
         fail(file, source, node, `uses the raw sender "${name}"`)
       }
-      const lower = name.toLowerCase()
-      if (MUTATING_COMMANDS.has(lower)) {
-        const receiver =
-          ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)
-            ? node.expression
-            : null
-        if (!COLLECTION_NAMES.has(lower) || receiver === null || !isCollection(receiver)) {
-          fail(file, source, node, `uses a member named after the mutating command "${name}"`)
-        }
+      if (MUTATING_COMMANDS.has(name.toLowerCase())) {
+        fail(file, source, node, `uses a member named after the mutating command "${name}"`)
       }
     }
 
@@ -520,7 +484,11 @@ function check(file) {
       ts.isMethodSignature(node) ||
       ts.isPropertySignature(node) ||
       ts.isMethodDeclaration(node) ||
-      ts.isPropertyDeclaration(node)
+      ts.isPropertyDeclaration(node) ||
+      ts.isPropertyAssignment(node) ||
+      ts.isShorthandPropertyAssignment(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)
     ) {
       const declared = declaredName(node.name)
       if (declared !== null && MUTATING_COMMANDS.has(declared.toLowerCase())) {

@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, describe, it } from 'node:test'
@@ -136,22 +137,16 @@ describe('admin read-only gate, other routes to a write', () => {
     })
   }
 
-  // Scenario: names that collide with ordinary JavaScript collections, on receivers the file builds
-  // itself as collections.
-  // Rule: they pass; a `Map.set` or `Array.sort` on a local collection is not a Redis write.
-  it('passes ordinary collection calls on receivers the file declares as collections', () => {
-    const result = run({
-      'service.ts':
-        'const seen = new Map<string, number>()\nconst list = [3, 1]\n' +
-        'export class S {\n  private readonly found = new Set<string>()\n  run() {\n    this.found.add("a")\n    return list.sort()\n  }\n}\n' +
-        'seen.set("a", 1)\n"a".concat("b")\n'
-    })
-    assert.equal(result.status, 0, result.output)
-  })
-
-  // Scenario: the same names on the client, on a parameter, on a call result, and destructured.
-  // Rule: they fail, since only a receiver the file declares as a collection is exempt.
+  // Scenario: names that ordinary collections also have, on anything.
+  // Rule: they fail wherever they are used, the local collection included: the gate cannot tell a
+  // collection from a client without types, so the subpath builds a Map from its entries.
   for (const [label, snippet] of [
+    ['a local Map', 'const seen = new Map<string, number>()\n  seen.set("a", 1)'],
+    [
+      'a shadowing parameter',
+      'const cache = new Map()\n  const write = (cache: Reader) => cache.set(key, "v")'
+    ],
+    ['a reassigned variable', 'let found = new Map()\n  found = client\n  found.set(key, "v")'],
     ['a parameter', 'await client.set(key, "v")'],
     ['a call result', 'await getClient().sort(key)'],
     ['an element', 'await clients[0].copy(key, "b")'],
@@ -160,6 +155,63 @@ describe('admin read-only gate, other routes to a write', () => {
   ]) {
     it(`fails a collection-named command on ${label}`, () => {
       const result = run(sending(snippet))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
+  // Scenario: a Map built from its entries, which is how the subpath keeps first and last values.
+  // Rule: it passes; no member named after a command is involved.
+  it('passes a Map built from its entries', () => {
+    const result = run(
+      sending(
+        'const found = new Map([...entries, ...more])\n  return found.has("a") ? found.get("a") : null'
+      )
+    )
+    assert.equal(result.status, 0, result.output)
+  })
+
+  // Scenario: every command the installed ioredis flags as a write, called as a method, in one file.
+  // Rule: the gate names every one of them, so a command a later Redis adds is refused without an
+  // edit to the gate. The table is read from ioredis itself, as the gate reads it.
+  it('refuses every write command of the installed ioredis', () => {
+    const commands = createRequire(createRequire(import.meta.url).resolve('ioredis'))(
+      '@ioredis/commands'
+    )
+    const writes = commands.list.filter(
+      (name) => /^[a-z]\w*$/.test(name) && commands.hasFlag(name, 'write')
+    )
+    assert.ok(writes.length > 100, `only ${writes.length} write commands found`)
+    const result = run(sending(writes.map((name) => `await reader.${name}(key)`).join('\n  ')))
+    assert.notEqual(result.status, 0)
+    const unnamed = writes.filter((name) => !result.output.toLowerCase().includes(`"${name}"`))
+    assert.deepEqual(unnamed, [])
+  })
+
+  // Scenario: commands a recent Redis added.
+  // Rule: they fail, which only the derived list guarantees.
+  for (const name of ['hexpire', 'hsetex', 'hgetdel', 'hpersist']) {
+    it(`fails ${name}`, () => {
+      const result = run(sending(`await reader.${name}(key)`))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
+  // Scenario: code and module loaders, and members declared in places the contract check missed.
+  // Rule: each one fails.
+  for (const [label, text] of [
+    [
+      'createRequire',
+      "import { createRequire } from 'node:module'\nexport const load = createRequire(import.meta.url)('ioredis')\n"
+    ],
+    ['eval', 'export const run = (code: string) => eval(code)\n'],
+    ['new Function', 'export const make = (body: string) => new Function(body)\n'],
+    ['a getter named after a command', 'export const o = { get del() { return 1 } }\n'],
+    ['an object-literal member', 'export const o = { del: () => 1 }\n'],
+    ['a shorthand member', 'const del = () => 1\nexport const o = { del }\n'],
+    ['a class accessor', 'export class R {\n  get hset() {\n    return 1\n  }\n}\n']
+  ]) {
+    it(`fails ${label}`, () => {
+      const result = run({ 'loader.ts': text })
       assert.notEqual(result.status, 0, result.output)
     })
   }
@@ -244,11 +296,11 @@ describe('admin read-only gate, declarations', () => {
 
   // Scenario: members that merely share a word with a command, or are not named after one.
   // Rule: they pass; a `Map.set` or `Set.add` call is not a declaration of a write.
-  it('passes a reader contract of read commands and ordinary collection calls', () => {
+  it('passes a reader contract of read commands and ordinary reads of a collection', () => {
     const result = run({
       'reader.ts':
         'export interface R {\n  get(key: string): Promise<string | null>\n  lrange(k: string): Promise<string[]>\n}\n' +
-        'const seen = new Map<string, string>()\nseen.set("a", "b")\nnew Set<string>().add("a")\n'
+        'const seen = new Map<string, string>([["a", "b"]])\nnew Set<string>().add("a")\nseen.get("a")\n'
     })
     assert.equal(result.status, 0, result.output)
   })
