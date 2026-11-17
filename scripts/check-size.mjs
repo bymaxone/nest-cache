@@ -74,9 +74,9 @@ const ROOT = pkg.root
 // they replace (127 B), and the Pub/Sub handler bounds (713 B): the gate with its queue, the window that
 // sums up dropped messages, the entry flag that skips a removed subscription, and the two options with
 // their validation, and the flush of what is queued on a down client when it is closed (51 B).
-// Admin budget: 5 569 B, the 5 539 B measured plus 30 B of headroom, against 5 173 B before the bounded
-// value reveal. The 366 B are what that reveal buys: the ranged string read, the scan loop with its
-// call cap, the parser of the scan replies and the constants.
+// Admin budget: 5 569 B, the 5 539 B measured plus 30 B of headroom. The measurement includes the
+// bounded value reveal: the ranged string read, the scan loop with its call cap, the parser of the scan
+// replies and their constants.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 11_801 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_569 },
