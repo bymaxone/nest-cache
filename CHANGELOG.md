@@ -13,7 +13,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
   Every `cache.invalid_options` refusal raised for an option value now reports `details.option` and `details.received`, and no longer carries `details.value`: `received` is the number itself when it is finite, the name of `NaN` or of an infinity, and otherwise the type of the value, so a credential or token placed in the wrong option is never echoed into a log.
 
-  **Apply to a consumer:** a host that reads `details.value` of a `cache.invalid_options` error (to print or to log the refused value) must read `details.received` instead, which holds the number or the type; `details.option` now names the option for the timer and handler-bound refusals too. A host that passed `keepAlive: 0`, `maxRetriesPerRequest: null`, or a string or a non-integer for any of the four, now fails at boot with `cache.invalid_options`. Remove the option (the default is kept), or give it an integer in the range above. `null` for `maxRetriesPerRequest` was already documented as not to be passed.
+  **Apply to a consumer:** a host that reads `details.value` of a `cache.invalid_options` error (to print or to log the refused value) must read `details.received` instead, which holds the number or the type; `details.option` now names the option for the timer and handler-bound refusals too. A host that passed `keepAlive: 0`, `maxRetriesPerRequest: null`, or a string or a non-integer for any of these options, now fails at boot with `cache.invalid_options`. Remove the option (the default is kept), or give it an integer in the range above. `null` for `maxRetriesPerRequest` was already documented as not to be passed.
 
 ## [1.2.25] - 2026-11-17
 
