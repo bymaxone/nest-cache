@@ -187,6 +187,65 @@ describe('admin read-only gate, other routes to a write', () => {
     assert.deepEqual(unnamed, [])
   })
 
+  // Scenario: the `<command>Buffer` twin ioredis generates for every command, which returns Buffers.
+  // Rule: every write command's twin fails, and so does the twin of a denied member and of a pipeline
+  // call; a name that merely ends in "Buffer" is not a command and passes.
+  it('refuses the Buffer twin of every write command and denied member', () => {
+    const commands = createRequire(createRequire(import.meta.url).resolve('ioredis'))(
+      '@ioredis/commands'
+    )
+    const names = commands.list.filter(
+      (name) => /^[a-z]\w*$/.test(name) && commands.hasFlag(name, 'write')
+    )
+    const twins = [...names, 'config', 'module', 'cluster', 'subscribe'].map(
+      (name) => `${name}Buffer`
+    )
+    const result = run(sending(twins.map((name) => `await reader.${name}(key)`).join('\n  ')))
+    assert.notEqual(result.status, 0)
+    const unnamed = twins.filter(
+      (name) => !result.output.toLowerCase().includes(`"${name.toLowerCase()}"`)
+    )
+    assert.deepEqual(unnamed, [])
+  })
+
+  for (const [label, snippet] of [
+    ['a pipeline twin', 'await reader.pipeline().expireBuffer(key, 1).exec()'],
+    ['setBuffer', 'await reader.setBuffer(key, value)'],
+    ['an element access twin', "await reader['delBuffer'](key)"],
+    ['a Reflect lookup of a twin', "await Reflect.get(reader, 'setBuffer')(key, value)"]
+  ]) {
+    it(`fails ${label}`, () => {
+      const result = run(sending(snippet))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
+  it('passes a member that merely ends in Buffer', () => {
+    const result = run(sending('return frame.readBuffer(4)'))
+    assert.equal(result.status, 0, result.output)
+  })
+
+  // Scenario: a literal Reflect key naming a denied member, a call method, a reflection helper or a
+  // mutating command.
+  // Rule: it is judged exactly as the same name written as a member access.
+  for (const key of [
+    'config',
+    'client',
+    'module',
+    'memory',
+    'apply',
+    'call',
+    'callBuffer',
+    'sendCommand',
+    'getPrototypeOf',
+    'del'
+  ]) {
+    it(`fails Reflect.get of "${key}"`, () => {
+      const result = run(sending(`await Reflect.get(reader, '${key}')(key)`))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
   // Scenario: commands a recent Redis added.
   // Rule: they fail, which only the derived list guarantees.
   for (const name of ['hexpire', 'hsetex', 'hgetdel', 'hpersist']) {

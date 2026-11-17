@@ -247,6 +247,18 @@ const DENIED_MEMBERS = new Set([
   'watch'
 ])
 
+/**
+ * ioredis generates a `<command>Buffer` twin of every command that returns Buffers instead of text
+ * (`setBuffer`, `delBuffer`, `configBuffer`), so each name above is denied together with its twin. The
+ * twins come from the same names, not from stripping a suffix, so a name that merely ends in "Buffer"
+ * is not mangled.
+ */
+for (const set of [MUTATING_COMMANDS, DENIED_MEMBERS]) {
+  for (const name of [...set]) {
+    set.add(`${name}buffer`)
+  }
+}
+
 /** The subcommand literal a denied member may be called with, where the subpath needs one. */
 const ALLOWED_SUBCOMMANDS = new Map([['memory', 'USAGE']])
 
@@ -287,6 +299,42 @@ const CALL_METHODS = new Set(['call', 'callBuffer'])
 
 /** Raw senders of the client that take a command by name. */
 const RAW_SENDERS = new Set(['sendCommand', 'send_command'])
+
+/**
+ * Why a member name may not be used, or `null`. One function for a member access and for a literal
+ * `Reflect` key, so the two cannot disagree.
+ *
+ * @param name - The member name.
+ * @param context - Whether the member is the callee of a direct call, whether that call is one the
+ *   gate already judged (`call`, `callBuffer`), and the literal its first argument is, if any.
+ * @returns The reasons it fails, empty when it passes.
+ */
+function memberViolations(name, { direct, judgedCall, firstArgument }) {
+  const reasons = []
+  const lower = name.toLowerCase()
+  if (CALL_METHODS.has(name) && !judgedCall) {
+    reasons.push(`uses ${name} without calling it directly, so its command is out of view`)
+  }
+  if (RAW_SENDERS.has(name)) {
+    reasons.push(`uses the raw sender "${name}"`)
+  }
+  if (name === 'apply' || name === 'bind') {
+    reasons.push(`uses ${name}, which calls a member by reference`)
+  }
+  if (REFLECTION.has(name)) {
+    reasons.push(`uses "${name}", which reaches a method without naming it`)
+  }
+  if (DENIED_MEMBERS.has(lower)) {
+    const allowed = ALLOWED_SUBCOMMANDS.get(lower)
+    if (!(direct && allowed !== undefined && firstArgument === allowed)) {
+      reasons.push(`uses "${name}", which has write subcommands or changes the connection`)
+    }
+  }
+  if (MUTATING_COMMANDS.has(lower)) {
+    reasons.push(`uses a member named after the mutating command "${name}"`)
+  }
+  return reasons
+}
 
 /** Source files of the subpath, excluding specs and their `__tests__` helpers — a test may name anything. */
 function sourceFiles(dir) {
@@ -439,13 +487,19 @@ function check(file) {
               node,
               `uses Reflect.${method} with a key that is not a string literal`
             )
-          } else if (
-            key !== null &&
-            (MUTATING_COMMANDS.has(key.toLowerCase()) ||
-              CALL_METHODS.has(key) ||
-              RAW_SENDERS.has(key))
-          ) {
-            fail(file, source, node, `reaches the member "${key}" through Reflect.${method}`)
+          } else if (key !== null) {
+            for (const reason of memberViolations(key, {
+              direct: false,
+              judgedCall: false,
+              firstArgument: null
+            })) {
+              fail(
+                file,
+                source,
+                node,
+                `reaches the member "${key}" through Reflect.${method}: ${reason}`
+              )
+            }
           }
         }
       }
@@ -494,35 +548,14 @@ function check(file) {
 
     const name = memberName(node)
     if (name !== null) {
-      if (CALL_METHODS.has(name) && !judged.has(node)) {
-        fail(
-          file,
-          source,
-          node,
-          `uses ${name} without calling it directly, so its command is out of view`
-        )
-      }
-      if (RAW_SENDERS.has(name)) {
-        fail(file, source, node, `uses the raw sender "${name}"`)
-      }
-      if (name === 'apply' || name === 'bind') {
-        fail(file, source, node, `uses ${name}, which calls a member by reference`)
-      }
-      if (REFLECTION.has(name)) {
-        fail(file, source, node, `uses "${name}", which reaches a method without naming it`)
-      }
-      if (DENIED_MEMBERS.has(name.toLowerCase())) {
-        const parent = node.parent
-        const direct = ts.isCallExpression(parent) && unwrap(parent.expression) === node
-        const allowed = ALLOWED_SUBCOMMANDS.get(name.toLowerCase())
-        if (!(direct && allowed !== undefined && literalText(parent.arguments[0]) === allowed)) {
-          fail(
-            file,
-            source,
-            node,
-            `uses "${name}", which has write subcommands or changes the connection`
-          )
-        }
+      const parent = node.parent
+      const direct = ts.isCallExpression(parent) && unwrap(parent.expression) === node
+      for (const reason of memberViolations(name, {
+        direct,
+        judgedCall: judged.has(node),
+        firstArgument: direct ? literalText(parent.arguments[0]) : null
+      })) {
+        fail(file, source, node, reason)
       }
       if (name === 'constructor') {
         const parent = node.parent
@@ -537,9 +570,6 @@ function check(file) {
             'calls a constructor reached through a member, which builds code or objects unseen'
           )
         }
-      }
-      if (MUTATING_COMMANDS.has(name.toLowerCase())) {
-        fail(file, source, node, `uses a member named after the mutating command "${name}"`)
       }
     }
 
