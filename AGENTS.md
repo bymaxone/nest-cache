@@ -327,10 +327,10 @@ here has to be maintained by whoever adds a rule, and is wrong the first time so
   review on #N". The shared rule above is scoped to authorship, and a finding is not authorship —
   this repository takes the stricter line anyway, decided by the repository owner.
 
-  Naming the tool as the **subject** of the change is not attribution and is not restricted. A
-  commit explaining that `AGENTS.md` exists because Codex reads it, or citing its 32 KiB document
-  budget, is describing what the change is for. A rule that removed those would leave the file
-  unable to say why it exists.
+  The owner's later rule is stricter still: no commit message, pull request title or body, review
+  reply, issue or code comment names an AI tool at all, whether as author, reviewer or subject.
+  `scripts/commitlint-no-ai-attribution.cjs` refuses such a commit message, so write "the second
+  reviewer" or describe the file by what it is, not by the tool that reads it.
 
 - **This repository _is_ one of the `@bymax-one/*` libraries the version rule is about.** Breaking
   changes ship in minor and patch releases by policy, and the `CHANGELOG.md` entry is the
