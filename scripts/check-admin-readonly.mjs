@@ -8,31 +8,43 @@
  * nobody re-checks after the third edit, so this turns it into a build failure.
  *
  * The rules are read from the TypeScript syntax tree of every non-spec source file, not from its
- * text, so quoting, layout, line breaks and comments do not matter:
+ * text, so quoting, layout, line breaks and comments do not matter. Parentheses and the `as`,
+ * `satisfies`, `!` and `<T>` wrappers around a callee are looked through.
  *
- *   1. `call`. The escape hatch `client.call('NAME', ...)` is the one place a command name is a
- *      string rather than a method. Every direct call of `call` (dot or `['call']` access) must
- *      pass a string literal, or a template literal without substitutions, naming a command on the
- *      allowlist. A name the gate cannot read, whether a variable, a concatenation, a spread or no
- *      argument, fails: an unreadable name cannot be shown to be on the list. This holds for any
- *      object, so `Function.prototype.call` fails too; the subpath has no use for it.
- *   2. A reference to `call` that is not a direct call fails: `call.apply`, `call.bind`,
- *      `Reflect.apply(client.call, ...)`, `const { call } = client`, `const send = client.call`. The
- *      first argument is out of sight in each of them.
+ *   1. `call` and `callBuffer`. Both send any command by name. Every direct call must pass a string
+ *      literal, or a template literal without substitutions, naming a command on the allowlist. A name
+ *      the gate cannot read, whether a variable, a concatenation, a spread or no argument, fails: an
+ *      unreadable name cannot be shown to be on the list. This holds for any object, so
+ *      `Function.prototype.call` fails too; the subpath has no use for it.
+ *   2. A reference to `call` or `callBuffer` that is not a direct call fails: `call.apply`,
+ *      `call.bind`, `Reflect.apply(client.call, ...)`, `const { call } = client`,
+ *      `const send = client.call`. The first argument is out of sight in each of them.
  *   3. A member named after a mutating Redis command fails wherever it is used: `reader.del(k)`,
  *      `reader['del'](k)`, `(reader as Loose).del(k)`, `reader?.hset?.()`, `reader.pipeline().del()`,
- *      `const { unlink } = reader`. Names that ordinary JavaScript collections share (`set`, `sort`,
- *      `copy`, `append`) are exempt from this rule alone, since without types a `Map.set` cannot be
- *      told from a client; rule 4 still refuses them.
+ *      `const { unlink } = reader`. `set`, `sort`, `copy` and `append` are also names of ordinary
+ *      collections, which without types cannot be told from a client, so a member access of those
+ *      four passes only on a receiver the same file declares as a collection (a variable or class
+ *      property initialised with `new Map`, `new Set`, `new WeakMap`, `new WeakSet`,
+ *      `new URLSearchParams` or an array literal). `config`, `client`, `acl`, `debug`, `function` and
+ *      `select` are also ordinary property names, so they fail only where they are called.
  *   4. The reader contracts must not DECLARE a member named after a mutating command: a method or
  *      property signature, a class member, a type-literal member, quoted or not, at any indent.
  *      Every Redis access in the subpath goes through those interfaces, so an interface that cannot
  *      express a write is a surface that cannot perform one.
- *   5. The client's own raw command senders, `sendCommand`, `send_command` and `new Command(...)`,
- *      fail.
- *   6. The subpath must not bring `ioredis` in as a value: no `import` that is not `import type`, no
- *      `export ... from`, no `import x = require()`, no `require('ioredis')`, no `import('ioredis')`.
- *      A value import would let a module construct its own client and bypass the rules above.
+ *   5. The client's other ways to send a command by name fail: `sendCommand`, `send_command`,
+ *      `new Command(...)`, commands passed to `pipeline(...)` or `multi(...)`, and `defineCommand`.
+ *   6. A member that cannot be read from the text fails: an element access or a destructuring with a
+ *      computed name, a `Reflect.get`, `Reflect.has` or `Reflect.set` with a key that is not a string
+ *      literal, and any `Reflect.apply` or `Reflect.construct`. A literal `Reflect` key is judged like
+ *      a member access.
+ *   7. The subpath must not bring `ioredis`, or anything under it, in as a value: no `import` that is
+ *      not `import type`, no `export ... from`, no `import x = require()`, no `require` or `import()`
+ *      of it, and no `require` or `import()` of a name that is not a string literal, nor any use of
+ *      `require` other than a direct call. A value import would let a module construct its own client
+ *      and bypass the rules above.
+ *
+ * The gate reads syntax, not types: it cannot know what a variable holds, which is why the rules
+ * refuse what they cannot read instead of guessing.
  *
  * Run as `pnpm check:admin-readonly`, optionally with a directory to read instead of `src/admin`
  * (the tests do); wired into `prepublishOnly` and the CI verify job.
@@ -142,15 +154,24 @@ const MUTATING_COMMANDS = new Set([
  * publishing, consumer groups, persistence and server control. Added to the same set.
  */
 const MORE_MUTATING_COMMANDS = [
+  'acl_setuser',
   'bgrewriteaof',
   'bgsave',
+  'bitop',
+  'definecommand',
   'eval',
   'evalsha',
   'failover',
   'fcall',
+  'georadius',
+  'georadiusbymember',
+  'geosearchstore',
+  'hmset',
   'migrate',
+  'move',
   'publish',
   'replicaof',
+  'restoreasking',
   'save',
   'shutdown',
   'slaveof',
@@ -159,6 +180,7 @@ const MORE_MUTATING_COMMANDS = [
   'xautoclaim',
   'xclaim',
   'xgroup',
+  'xreadgroup',
   'xsetid'
 ]
 for (const name of MORE_MUTATING_COMMANDS) {
@@ -166,16 +188,28 @@ for (const name of MORE_MUTATING_COMMANDS) {
 }
 
 /**
+ * Command names that are also ordinary property names (`this.client`, `options.config`, `debug`), so
+ * they fail only where they are CALLED. Each has write subcommands (`CONFIG SET`, `CLIENT KILL`,
+ * `ACL SETUSER`, `FUNCTION LOAD`, `DEBUG`, `SELECT`) that a method of that name could send.
+ */
+const CALL_ONLY_COMMANDS = new Set(['acl', 'client', 'config', 'debug', 'function', 'select'])
+
+/**
  * Mutating command names that ordinary JavaScript values also have (`Map.set`, `Array.sort`,
- * `Buffer.copy`, `FormData.append`). A MEMBER ACCESS of these names is allowed, since without types
- * the gate cannot tell a collection from a client; a DECLARATION of them is still refused, because the
- * reader contract has no reason to name them, and the typed contract is what every Redis access in the
- * subpath goes through.
+ * `Buffer.copy`, `FormData.append`). Without types the gate cannot tell a collection from a client, so
+ * it allows a member access of these names only on a receiver the same file declares as a collection:
+ * a `const`/`let` or a class property initialised with `new Map`, `new Set`, `new WeakMap`,
+ * `new WeakSet`, `new URLSearchParams` or an array literal. Any other receiver fails, and destructuring
+ * these names out of anything fails.
  */
 const COLLECTION_NAMES = new Set(['append', 'copy', 'set', 'sort'])
+const COLLECTION_CONSTRUCTORS = new Set(['Map', 'Set', 'WeakMap', 'WeakSet', 'URLSearchParams'])
 
 /** Command names the `call(...)` escape hatch may send. */
 const ALLOWED_CALL_COMMANDS = new Set(['ZRANGE', 'GETRANGE', 'HSCAN', 'SSCAN'])
+
+/** Methods that send a command by name, so the command must be a literal on the allowlist. */
+const CALL_METHODS = new Set(['call', 'callBuffer'])
 
 /** Raw senders of the client that take a command by name. */
 const RAW_SENDERS = new Set(['sendCommand', 'send_command'])
@@ -196,6 +230,21 @@ function literalText(node) {
   return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
     ? node.text
     : null
+}
+
+/** Strips parentheses and the `as`, `satisfies`, `!` and `<T>` wrappers around an expression. */
+function unwrap(node) {
+  let current = node
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  ) {
+    current = current.expression
+  }
+  return current
 }
 
 /**
@@ -227,6 +276,18 @@ function declaredName(name) {
   return ts.isComputedPropertyName(name) ? literalText(name.expression) : null
 }
 
+/** Whether an initialiser builds a collection: `new Map(...)`, `new Set(...)` and the like, or `[...]`. */
+function buildsCollection(init) {
+  const node = init && unwrap(init)
+  return Boolean(
+    node &&
+    (ts.isArrayLiteralExpression(node) ||
+      (ts.isNewExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        COLLECTION_CONSTRUCTORS.has(node.expression.text)))
+  )
+}
+
 const failures = []
 /** Record a failure without stopping, so one run reports every problem. */
 const fail = (file, source, node, detail) => {
@@ -243,16 +304,47 @@ function check(file) {
     true,
     ts.ScriptKind.TS
   )
+  /** Names the file declares as collections, as `name` for a variable and `this.name` for a property. */
+  const collections = new Set()
+  const collect = (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      buildsCollection(node.initializer)
+    ) {
+      collections.add(node.name.text)
+    }
+    if (ts.isPropertyDeclaration(node) && buildsCollection(node.initializer)) {
+      const declared = declaredName(node.name)
+      if (declared !== null) {
+        collections.add(`this.${declared}`)
+      }
+    }
+    ts.forEachChild(node, collect)
+  }
+  collect(source)
+
+  /** Receivers that are collections: `found`, `this.found`. */
+  const isCollection = (receiver) => {
+    const node = unwrap(receiver)
+    if (ts.isIdentifier(node)) {
+      return collections.has(node.text)
+    }
+    return (
+      ts.isPropertyAccessExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ThisKeyword &&
+      collections.has(`this.${node.name.text}`)
+    )
+  }
+
   /** `call` accesses that are the callee of a direct call, already judged by rule 1. */
   const judged = new Set()
 
   const visit = (node) => {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-      const callee = ts.isParenthesizedExpression(node.expression)
-        ? node.expression.expression
-        : node.expression
+      const callee = unwrap(node.expression)
       const name = memberName(callee)
-      if (ts.isCallExpression(node) && name === 'call') {
+      if (ts.isCallExpression(node) && name !== null && CALL_METHODS.has(name)) {
         judged.add(callee)
         const command = literalText(node.arguments[0])
         if (command === null) {
@@ -260,14 +352,14 @@ function check(file) {
             file,
             source,
             node,
-            'sends a command through call() whose name is not a string literal'
+            `sends a command through ${name}() whose name is not a string literal`
           )
         } else if (!ALLOWED_CALL_COMMANDS.has(command)) {
           fail(
             file,
             source,
             node,
-            `sends "${command}" through call(); not on the read-only allowlist`
+            `sends "${command}" through ${name}(); not on the read-only allowlist`
           )
         }
       }
@@ -279,42 +371,148 @@ function check(file) {
       }
       if (
         ts.isCallExpression(node) &&
-        ((ts.isIdentifier(callee) && callee.text === 'require') ||
-          callee.kind === ts.SyntaxKind.ImportKeyword) &&
-        literalText(node.arguments[0]) === 'ioredis'
+        name !== null &&
+        CALL_ONLY_COMMANDS.has(name.toLowerCase())
       ) {
-        fail(file, source, node, 'brings ioredis in as a value (require or dynamic import)')
+        fail(
+          file,
+          source,
+          node,
+          `calls a member named after the command "${name}", which has write subcommands`
+        )
+      }
+      if (
+        ts.isCallExpression(node) &&
+        name !== null &&
+        ['pipeline', 'multi'].includes(name) &&
+        node.arguments.length > 0
+      ) {
+        fail(file, source, node, `passes commands by name to ${name}()`)
+      }
+      if (ts.isCallExpression(node)) {
+        const isRequire = ts.isIdentifier(callee) && callee.text === 'require'
+        if (isRequire || callee.kind === ts.SyntaxKind.ImportKeyword) {
+          const target = literalText(node.arguments[0])
+          if (target === null) {
+            fail(file, source, node, 'loads a module whose name is not a string literal')
+          } else if (target === 'ioredis' || target.startsWith('ioredis/')) {
+            fail(file, source, node, 'brings ioredis in as a value (require or dynamic import)')
+          }
+        }
+        // `Reflect` reads and calls members by name: a literal key is judged like a member access,
+        // anything else, and `apply` and `construct`, fail.
+        if (
+          ts.isPropertyAccessExpression(callee) &&
+          ts.isIdentifier(callee.expression) &&
+          callee.expression.text === 'Reflect'
+        ) {
+          const method = callee.name.text
+          const key = literalText(node.arguments[1])
+          if (method === 'apply' || method === 'construct') {
+            fail(
+              file,
+              source,
+              node,
+              `uses Reflect.${method}, which calls what it is given by reference`
+            )
+          } else if ((method === 'get' || method === 'has' || method === 'set') && key === null) {
+            fail(
+              file,
+              source,
+              node,
+              `uses Reflect.${method} with a key that is not a string literal`
+            )
+          } else if (
+            key !== null &&
+            (MUTATING_COMMANDS.has(key.toLowerCase()) ||
+              CALL_METHODS.has(key) ||
+              RAW_SENDERS.has(key))
+          ) {
+            fail(file, source, node, `reaches the member "${key}" through Reflect.${method}`)
+          }
+        }
+      }
+    }
+
+    if (ts.isIdentifier(node) && node.text === 'require') {
+      const parent = node.parent
+      const direct = ts.isCallExpression(parent) && parent.expression === node
+      if (
+        !direct &&
+        !ts.isImportEqualsDeclaration(parent.parent ?? parent) &&
+        !ts.isExternalModuleReference(parent)
+      ) {
+        fail(
+          file,
+          source,
+          node,
+          'uses require other than as a direct call, so its module is out of view'
+        )
+      }
+    }
+
+    if (ts.isElementAccessExpression(node)) {
+      const key = node.argumentExpression
+      if (
+        literalText(key) === null &&
+        !ts.isNumericLiteral(key) &&
+        !(ts.isPrefixUnaryExpression(key) && ts.isNumericLiteral(key.operand))
+      ) {
+        fail(
+          file,
+          source,
+          node,
+          'reads a member by a computed name, so the member cannot be checked'
+        )
       }
     }
 
     const name = memberName(node)
     if (name !== null) {
-      if (name === 'call' && !judged.has(node)) {
+      if (CALL_METHODS.has(name) && !judged.has(node)) {
         fail(
           file,
           source,
           node,
-          'uses call without calling it directly, so its command is out of view'
+          `uses ${name} without calling it directly, so its command is out of view`
         )
       }
       if (RAW_SENDERS.has(name)) {
         fail(file, source, node, `uses the raw sender "${name}"`)
       }
-      if (MUTATING_COMMANDS.has(name.toLowerCase()) && !COLLECTION_NAMES.has(name.toLowerCase())) {
-        fail(file, source, node, `uses a member named after the mutating command "${name}"`)
+      const lower = name.toLowerCase()
+      if (MUTATING_COMMANDS.has(lower)) {
+        const receiver =
+          ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)
+            ? node.expression
+            : null
+        if (!COLLECTION_NAMES.has(lower) || receiver === null || !isCollection(receiver)) {
+          fail(file, source, node, `uses a member named after the mutating command "${name}"`)
+        }
       }
     }
 
     if (ts.isBindingElement(node)) {
+      if (
+        node.propertyName &&
+        ts.isComputedPropertyName(node.propertyName) &&
+        literalText(node.propertyName.expression) === null
+      ) {
+        fail(
+          file,
+          source,
+          node,
+          'destructures a member by a computed name, so the member cannot be checked'
+        )
+      }
       const bound = declaredName(node.propertyName ?? node.name)
       if (
-        bound === 'call' ||
-        RAW_SENDERS.has(bound) ||
-        MUTATING_COMMANDS.has(bound?.toLowerCase())
+        bound !== null &&
+        (CALL_METHODS.has(bound) ||
+          RAW_SENDERS.has(bound) ||
+          MUTATING_COMMANDS.has(bound.toLowerCase()))
       ) {
-        if (!COLLECTION_NAMES.has(bound.toLowerCase())) {
-          fail(file, source, node, `destructures "${bound}" out of a client`)
-        }
+        fail(file, source, node, `destructures "${bound}" out of a client`)
       }
     }
 
@@ -334,17 +532,20 @@ function check(file) {
       const typeOnly = ts.isImportDeclaration(node)
         ? node.importClause?.isTypeOnly
         : node.isTypeOnly
-      if (literalText(node.moduleSpecifier) === 'ioredis' && !typeOnly) {
+      const target = literalText(node.moduleSpecifier)
+      if (target !== null && (target === 'ioredis' || target.startsWith('ioredis/')) && !typeOnly) {
         fail(file, source, node, 'imports ioredis as a value')
       }
     }
     if (
       ts.isImportEqualsDeclaration(node) &&
       !node.isTypeOnly &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      literalText(node.moduleReference.expression) === 'ioredis'
+      ts.isExternalModuleReference(node.moduleReference)
     ) {
-      fail(file, source, node, 'imports ioredis as a value (import = require)')
+      const target = literalText(node.moduleReference.expression)
+      if (target === null || target === 'ioredis' || target.startsWith('ioredis/')) {
+        fail(file, source, node, 'imports ioredis as a value (import = require)')
+      }
     }
 
     ts.forEachChild(node, visit)

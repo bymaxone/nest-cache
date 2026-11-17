@@ -136,12 +136,84 @@ describe('admin read-only gate, other routes to a write', () => {
     })
   }
 
-  // Scenario: names that collide with ordinary JavaScript collections and strings.
-  // Rule: they pass, since `Map.set`, `Array.sort` and the like are not Redis writes.
-  it('passes ordinary collection calls whose names are also commands', () => {
+  // Scenario: names that collide with ordinary JavaScript collections, on receivers the file builds
+  // itself as collections.
+  // Rule: they pass; a `Map.set` or `Array.sort` on a local collection is not a Redis write.
+  it('passes ordinary collection calls on receivers the file declares as collections', () => {
+    const result = run({
+      'service.ts':
+        'const seen = new Map<string, number>()\nconst list = [3, 1]\n' +
+        'export class S {\n  private readonly found = new Set<string>()\n  run() {\n    this.found.add("a")\n    return list.sort()\n  }\n}\n' +
+        'seen.set("a", 1)\n"a".concat("b")\n'
+    })
+    assert.equal(result.status, 0, result.output)
+  })
+
+  // Scenario: the same names on the client, on a parameter, on a call result, and destructured.
+  // Rule: they fail, since only a receiver the file declares as a collection is exempt.
+  for (const [label, snippet] of [
+    ['a parameter', 'await client.set(key, "v")'],
+    ['a call result', 'await getClient().sort(key)'],
+    ['an element', 'await clients[0].copy(key, "b")'],
+    ['a destructuring', 'const { set } = client\n  await set(key, "v")'],
+    ['append', 'await client.append(key, "v")']
+  ]) {
+    it(`fails a collection-named command on ${label}`, () => {
+      const result = run(sending(snippet))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
+  // Scenario: other ways ioredis sends a command by name.
+  // Rule: `callBuffer` is judged like `call`, commands passed to `pipeline` or `multi` by name fail,
+  // and so do `defineCommand` and the commands a reviewer found missing from the list.
+  for (const [label, snippet] of [
+    ['callBuffer with a write', "await client.callBuffer('SET', key, 'v')"],
+    ['callBuffer by reference', 'const send = client.callBuffer\n  await send("SET", key)'],
+    ['callBuffer with a variable', 'await client.callBuffer(name, key)'],
+    ['a pipeline of named commands', "await client.pipeline([['set', 'a', 'b']]).exec()"],
+    ['a multi of named commands', "await client.multi([['del', 'a']]).exec()"],
+    [
+      'defineCommand',
+      "client.defineCommand('x', { lua: 'return redis.call(\"SET\", KEYS[1], 1)' })"
+    ],
+    ['hmset', 'await client.hmset(key, { a: 1 })'],
+    ['move', 'await client.move(key, 1)'],
+    ['bitop', 'await client.bitop("AND", key, key)'],
+    ['xreadgroup', 'await client.xreadgroup("GROUP", "g", "c", "STREAMS", key, ">")'],
+    ['georadius', 'await client.georadius(key, 0, 0, 1, "km")'],
+    ['geosearchstore', 'await client.geosearchstore(key, key)'],
+    ['config', "await client.config('SET', 'maxmemory', '1')"],
+    ['client', "await client.client('KILL', 'ID', '1')"],
+    ['acl', "await client.acl('SETUSER', 'x')"],
+    ['function', "await client.function('LOAD', 'code')"],
+    ['debug', "await client.debug('SLEEP', '1')"]
+  ]) {
+    it(`fails ${label}`, () => {
+      const result = run(sending(snippet))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
+  // Scenario: members reached by a name the gate cannot read.
+  // Rule: a computed name, a Reflect lookup with a variable or a mutating literal, and a computed
+  // destructuring all fail, while a Reflect.get of a harmless literal passes.
+  for (const [label, snippet] of [
+    ['a variable key', "const m = 'del'\n  const f = client[m]\n  await f(key)"],
+    ['Reflect.get with a mutating literal', "await Reflect.get(client, 'del')(key)"],
+    ['Reflect.get with a variable', 'await Reflect.get(client, name)(key)'],
+    ['a computed destructuring', 'const { [name]: f } = client\n  await f(key)']
+  ]) {
+    it(`fails ${label}`, () => {
+      const result = run(sending(snippet))
+      assert.notEqual(result.status, 0, result.output)
+    })
+  }
+
+  it('passes a Reflect.get of a harmless literal and a numeric index', () => {
     const result = run(
       sending(
-        'const m = new Map<string, number>()\n  m.set("a", 1)\n  [3, 1].sort()\n  new Set<string>().add("a")\n  "a".concat("b")'
+        "const code: unknown = Reflect.get(error, 'code')\n  const first = rows[0]\n  return [code, first]"
       )
     )
     assert.equal(result.status, 0, result.output)
@@ -192,12 +264,16 @@ describe('admin read-only gate, ioredis', () => {
     ['a default import', "import Redis from 'ioredis'\n"],
     ['a require', "const { Redis } = require('ioredis')\n"],
     ['a dynamic import', "export const load = () => import('ioredis')\n"],
-    ['an import-equals', "import redis = require('ioredis')\n"]
+    ['an import-equals', "import redis = require('ioredis')\n"],
+    ['a subpath import', "import Redis from 'ioredis/built/Redis'\n"],
+    ['a subpath require', "const Redis = require('ioredis/built/Redis')\n"],
+    ['an aliased require', "const load = require\nconst Redis = load('ioredis')\n"],
+    ['a computed dynamic import', "export const load = () => import('io' + 'redis')\n"]
   ]) {
     it(`fails ioredis as a value through ${label}`, () => {
       const result = run({ 'client.ts': text })
       assert.notEqual(result.status, 0, result.output)
-      assert.match(result.output, /ioredis/)
+      assert.match(result.output, /ioredis|module/)
     })
   }
 
