@@ -314,4 +314,20 @@ describe('CacheAdminService.revealValue reads', () => {
       })
     }
   )
+
+  // Scenario: the cut falls right after the first and the last unit of the high-surrogate range, and
+  // right after the units on either side of it.
+  // Rule: only a unit from 0xD800 to 0xDBFF is dropped; 0xD7FF and 0xDC00 are kept.
+  it.each([
+    ['0xD800', '\uD800', 'a'],
+    ['0xDBFF', '\uDBFF', 'a'],
+    ['0xD7FF', '\uD7FF', 'a\uD7FF'],
+    ['0xDC00', '\uDC00', 'a\uDC00']
+  ])('drops a cut-off unit only when it is a high surrogate (%s)', async (_name, unit, shown) => {
+    const reader = new BoundedReader('string', () => `a${unit}tail`)
+
+    expect(await reveal(reader, { revealStringLimit: 2 })).toMatchObject({
+      value: { kind: 'string', value: shown, isComplete: false }
+    })
+  })
 })
