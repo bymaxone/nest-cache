@@ -377,8 +377,9 @@ export class CacheAdminService {
     return {
       kind: 'string',
       value: capped,
-      // The range is inclusive: more than `bytes` back means the value goes on past what was read.
-      isComplete: Buffer.byteLength(value) <= bytes && capped.length === value.length
+      // A reply cut by the range holds more than `bytes` bytes, which is more than `limit` characters
+      // since a character takes at most three bytes per unit, so the length check alone tells a cut value.
+      isComplete: capped.length === value.length
     }
   }
 

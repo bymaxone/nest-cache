@@ -108,7 +108,7 @@ describe('CacheAdminService.revealValue reads', () => {
     const pages: [string, string[]][] = [
       ['9', ['a', '1', 'b', '2']],
       ['4', ['b', '2', 'c', '3']],
-      ['0', ['d', '4', 'e', '5']]
+      ['2', ['d', '4', 'e', '5']]
     ]
     const reader = new BoundedReader('hash', () => pages.shift())
 
@@ -186,6 +186,42 @@ describe('CacheAdminService.revealValue reads', () => {
     expect(await reveal(reader)).toMatchObject({
       status: 'revealed',
       value: { kind: 'string', value: '', isComplete: true }
+    })
+  })
+
+  // Scenario: a non-empty ranged answer.
+  // Rule: it is the value, and the type is not asked a second time: only an empty answer needs it.
+  it('does not ask for the type again when the ranged answer has text', async () => {
+    const reader = new BoundedReader('string', () => 'text')
+    const type = jest.spyOn(reader, 'type').mockResolvedValue('string')
+
+    await reveal(reader)
+
+    expect(type).toHaveBeenCalledTimes(1)
+  })
+
+  // Scenario: a list of three with the limit at two; LRANGE is asked for one more than the limit.
+  // Rule: the first two are shown and the value is reported incomplete.
+  it('truncates a list to the limit and reports it incomplete', async () => {
+    const reader = new BoundedReader('list', () => undefined)
+    jest.spyOn(reader, 'lrange').mockResolvedValue(['m1', 'm2', 'm3'])
+
+    expect(await reveal(reader, { revealLimit: 2 })).toMatchObject({
+      value: { kind: 'members', members: ['m1', 'm2'], isComplete: false }
+    })
+  })
+
+  // Scenario: a field that two pages both return, with a different value the second time.
+  // Rule: it is listed once, with the value it had when first seen.
+  it('keeps the first value of a field a scan returns twice', async () => {
+    const pages: [string, string[]][] = [
+      ['3', ['a', 'first']],
+      ['0', ['a', 'second']]
+    ]
+    const reader = new BoundedReader('hash', () => pages.shift())
+
+    expect(await reveal(reader)).toMatchObject({
+      value: { kind: 'hash', fields: [{ field: 'a', value: 'first' }], isComplete: true }
     })
   })
 })
