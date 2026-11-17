@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.23] - 2026-11-17
+
 ### Fixed
 
 - `CacheAdminService.revealValue` no longer shows a string cut in the middle of a character, and no longer shows a deleted collection as an
@@ -1008,7 +1010,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.22...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.23...HEAD
+[1.2.23]: https://github.com/bymaxone/nest-cache/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/bymaxone/nest-cache/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/bymaxone/nest-cache/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/bymaxone/nest-cache/compare/v1.2.19...v1.2.20
