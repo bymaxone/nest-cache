@@ -28,6 +28,9 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
  * `details` kills the mutants that blank the throw site's `{ ... }` object or
  * its string literals.
  */
+/** What a refusal prints of a number: a finite one as itself, `NaN` and an infinity as their names. */
+const shown = (value: number): number | string => (Number.isFinite(value) ? value : String(value))
+
 const expectCode = (fn: () => void, code: string, details?: Record<string, unknown>): void => {
   expect(fn).toThrow(CacheException)
   try {
@@ -545,7 +548,7 @@ describe('validateOptions', () => {
       typeof value === 'number' && Number.isInteger(value) && value < 2 ** 31
         ? `${field} too low`
         : `${field} not a valid timer delay`
-    expect((thrown as CacheException).details).toMatchObject({ value, reason })
+    expect((thrown as CacheException).details).toMatchObject({ received: shown(value), reason })
   })
 
   // The valid cluster settings still pass.
@@ -562,13 +565,18 @@ describe('validateOptions', () => {
   })
 
   // A shutdown timeout below the minimum must throw INVALID_OPTIONS — too short
-  // a window risks killing in-flight commands. Pins the `{ reason, value, min }`
+  // a window risks killing in-flight commands. Pins the `{ reason, option, received, min }`
   // details payload.
   it('rejects a shutdown timeout below the minimum', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h' }, shutdownTimeoutMs: 50 }),
       CACHE_ERROR_CODES.INVALID_OPTIONS,
-      { reason: 'shutdownTimeoutMs too low', value: 50, min: MIN_SHUTDOWN_TIMEOUT_MS }
+      {
+        reason: 'shutdownTimeoutMs too low',
+        option: 'shutdownTimeoutMs',
+        received: 50,
+        min: MIN_SHUTDOWN_TIMEOUT_MS
+      }
     )
   })
 
@@ -582,12 +590,17 @@ describe('validateOptions', () => {
 
   // A connect timeout below the minimum must throw — exercises the
   // `connectTimeout !== undefined && connectTimeout < MIN` guard's true branch.
-  // Pins the `{ reason, value, min }` details payload.
+  // Pins the `{ reason, option, received, min }` details payload.
   it('rejects a connect timeout below the minimum', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h', connectTimeout: 50 } }),
       CACHE_ERROR_CODES.INVALID_OPTIONS,
-      { reason: 'connectTimeout too low', value: 50, min: MIN_CONNECT_TIMEOUT_MS }
+      {
+        reason: 'connectTimeout too low',
+        option: 'connectTimeout',
+        received: 50,
+        min: MIN_CONNECT_TIMEOUT_MS
+      }
     )
   })
 
@@ -621,7 +634,8 @@ describe('validateOptions', () => {
         : { connection: { host: 'h', [field]: value } }
     expectCode(() => validateOptions(options), CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: `${field} not a valid timer delay`,
-      value,
+      option: field,
+      received: shown(value),
       max: MAX_TIMER_DELAY_MS
     })
   })
@@ -642,7 +656,12 @@ describe('validateOptions', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h', commandTimeout: value } }),
       CACHE_ERROR_CODES.INVALID_OPTIONS,
-      { reason: 'commandTimeout too low', value, min: MIN_COMMAND_TIMEOUT_MS }
+      {
+        reason: 'commandTimeout too low',
+        option: 'commandTimeout',
+        received: value,
+        min: MIN_COMMAND_TIMEOUT_MS
+      }
     )
   })
 

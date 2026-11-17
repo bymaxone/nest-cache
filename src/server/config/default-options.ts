@@ -26,6 +26,7 @@ import { CacheException } from '../errors/cache.exception'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
+import { describeReceived } from './describe-received'
 import type { ResolvedOptions } from './resolved-options'
 
 /**
@@ -286,7 +287,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
  * to queue behind.
  *
  * @param options - The raw consumer options.
- * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the type of the value received (a finite number as itself) and the accepted range.
  */
 function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
   const { pubsubMaxConcurrentHandlers: slots, pubsubMaxQueuedMessages: queued } = options
@@ -305,7 +306,8 @@ function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
     ) {
       throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
         reason: `${option} not an integer in range`,
-        value,
+        option,
+        received: describeReceived(value),
         min,
         max: MAX_TIMER_DELAY_MS
       })
@@ -333,7 +335,7 @@ interface NumericConnectionOptions {
  * @param options - The block, or `undefined` when it is not set.
  * @param fromUrl - What the block's `url` carries. It always replaces the discrete `port`, and the
  *   discrete `db` when its path names a database; a value it replaces is never used and not checked.
- * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the type of the value received (a finite number as itself) and the accepted range.
  */
 function validateConnectionNumbers(
   where: string,
@@ -369,7 +371,7 @@ function validateConnectionNumbers(
       throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
         reason: `${where}.${option} not an integer in range`,
         option: `${where}.${option}`,
-        value,
+        received: describeReceived(value),
         min,
         max,
         ...(why === undefined ? {} : { why })
@@ -394,14 +396,16 @@ function requireTimerDelay(option: string, value: number | undefined, min: numbe
   if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: `${option} not a valid timer delay`,
-      value,
+      option,
+      received: describeReceived(value),
       max: MAX_TIMER_DELAY_MS
     })
   }
   if (value < min) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: `${option} too low`,
-      value,
+      option,
+      received: describeReceived(value),
       min
     })
   }

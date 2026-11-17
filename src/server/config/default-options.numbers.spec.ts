@@ -66,7 +66,27 @@ describe.each(['standalone', 'cluster'] as const)('numeric connection options (%
 
         expect(details).toMatchObject({ option: `${where}.${option}` })
         expect(details).toHaveProperty('reason')
-        expect(Object.is(details?.['value'], value)).toBe(true)
+        expect(details).not.toHaveProperty('value')
+        expect(details?.['received']).toBe(
+          typeof value === 'number' && !Number.isFinite(value)
+            ? String(value)
+            : typeof value === 'string'
+              ? 'a string'
+              : value
+        )
+      })
+
+      // Scenario: a refusal of this option.
+      // Rule: it carries the `reason` naming the option, the range, and a `why` only where one is
+      // stated: port and db have none, because their range needs no explanation.
+      it('carries the reason and the range, and a why only for keepAlive and maxRetriesPerRequest', () => {
+        const details = refusal(withOption(spelling, option, -1))
+
+        expect(details?.['reason']).toBe(`${where}.${option} not an integer in range`)
+        expect(details).toMatchObject({ min: expect.any(Number), max: expect.any(Number) })
+        expect('why' in (details ?? {})).toBe(
+          option === 'keepAlive' || option === 'maxRetriesPerRequest'
+        )
       })
 
       // Scenario: the smallest and the largest value in range.
@@ -89,7 +109,7 @@ describe.each(['standalone', 'cluster'] as const)('numeric connection options (%
   it('refuses maxRetriesPerRequest null and says why', () => {
     const details = refusal(withOption(spelling, 'maxRetriesPerRequest', null))
 
-    expect(details).toMatchObject({ option: `${where}.maxRetriesPerRequest`, value: null })
+    expect(details).toMatchObject({ option: `${where}.maxRetriesPerRequest`, received: 'null' })
     expect(details?.['why']).toMatch(/only commandTimeout/)
   })
 
