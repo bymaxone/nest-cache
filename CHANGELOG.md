@@ -13,11 +13,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
   a hash with `HGETALL` and a set with `SMEMBERS` and cut the result in the process, so revealing a multi-megabyte string or a set of
   a million members pulled it all into the process and made the server assemble it. A string is now read with one `GETRANGE` of four
   bytes per character of `revealStringLimit`, and a hash or a set with `HSCAN` or `SSCAN` (`COUNT` `revealLimit`) followed until more than
-  `revealLimit` distinct entries were seen, with at most 100 calls, after which the value is reported incomplete. A list and a sorted set
+  `revealLimit` distinct entries were seen, with a bounded number of calls, after which the value is reported incomplete. A list and a sorted set
   were already read with a range. Measured on a real Redis with a 10 MB string and a set and a hash of 200 000 entries: the three reveals
   run no `GET`, `HGETALL` or `SMEMBERS`, make one `GETRANGE` and some `HSCAN` and `SSCAN` calls, and the server sends back less than 200 KB
-  in all. The three reads go through `call`, like the sorted-set read, so `IRedisReader` is unchanged, and their names are on the
-  read-only allowlist of `check:admin-readonly`.
+  in all. The three reads go through `call`, like the sorted-set read, so `IRedisReader` is unchanged.
 
   **Apply to a consumer:** nothing to change in the types. The entries of a large set or hash can come in a different order than before:
   they come in the server's scan order, not in the order of `SMEMBERS` or `HGETALL`; Redis documents neither order.
