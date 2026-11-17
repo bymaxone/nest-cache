@@ -70,6 +70,22 @@ export const DEFAULT_COMMAND_BATCH_LIMIT = 100
 export const DEFAULT_REVEAL_LIMIT = 200
 
 /**
+ * Most bytes one character takes in UTF-8, which is how many bytes of a string a reveal asks for per
+ * character of `revealStringLimit`, so the bytes it reads always hold the limit's worth
+ * of characters whatever the text is.
+ */
+export const REVEAL_BYTES_PER_CHARACTER = 4
+
+/**
+ * Most `HSCAN` or `SSCAN` calls one reveal makes.
+ *
+ * A scan page can come back empty while the cursor is not yet zero, as a sparse hash table is walked
+ * bucket by bucket, so the number of calls cannot be derived from the limit. A reveal that reaches this
+ * count stops and reports the value incomplete rather than keep the server busy for a debugging read.
+ */
+export const REVEAL_SCAN_CALLS_LIMIT = 100
+
+/**
  * Most characters one revealed string value carries.
  *
  * Same reasoning as {@link DEFAULT_REVEAL_LIMIT}: a cached HTML document or a

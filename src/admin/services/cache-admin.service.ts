@@ -17,6 +17,7 @@ import { CACHE_ERROR_CODES, CacheException, CacheService, guardClient } from '@b
 import { BYMAX_CACHE_ADMIN_OPTIONS } from '../bymax-cache-admin.constants'
 import type { ResolvedAdminOptions } from '../config/resolved-admin-options'
 import { findScope, isKeyInScope } from '../config/validate-scopes'
+import { REVEAL_BYTES_PER_CHARACTER } from '../constants/admin-defaults'
 import type { CacheScope } from '../interfaces/cache-scope.interface'
 import type {
   IRedisReader,
@@ -32,6 +33,7 @@ import type {
   RevealedValue
 } from '../types/keyspace.types'
 import { readKeyTtl, readKeyType, readSizeBytes } from '../utils/read-replies'
+import { scanUpTo } from '../utils/read-scan'
 
 /** The cursor Redis uses to mean "iteration finished". */
 const SCAN_END_CURSOR = '0'
@@ -354,6 +356,33 @@ export class CacheAdminService {
   }
 
   /**
+   * Reads a string with one ranged read of four bytes per character of the limit.
+   *
+   * @param client - The reader.
+   * @param key - The key to read.
+   * @returns The value cut to `revealStringLimit`, or `null` when the key vanished between reads.
+   */
+  private async readString(client: IRedisReader, key: string): Promise<RevealedValue | null> {
+    const limit = this.options.revealStringLimit
+    const bytes = limit * REVEAL_BYTES_PER_CHARACTER
+    const reply = await client.call('GETRANGE', key, 0, bytes)
+    const value = typeof reply === 'string' ? reply : ''
+    // An empty answer is both a string that is empty and a key that is gone, and the key was there a
+    // moment ago, so the type is asked again to tell them apart.
+    if (value === '' && (await client.type(key)) === TYPE_NONE) {
+      return null
+    }
+    const capped = value.slice(0, limit)
+    return {
+      kind: 'string',
+      value: capped,
+      // The range is inclusive, so a reply cut by it holds more than `bytes` bytes, which is more than
+      // `limit` UTF-16 units since a unit takes at most three bytes, so the length check alone tells a cut value.
+      isComplete: capped.length === value.length
+    }
+  }
+
+  /**
    * Reads a value according to its Redis type, truncating to the configured caps.
    *
    * @param client - The reader.
@@ -368,30 +397,34 @@ export class CacheAdminService {
   ): Promise<RevealedValue | null> {
     const limit = this.options.revealLimit
     switch (type) {
-      case 'string': {
-        const value = await client.get(key)
-        if (value === null) {
-          return null
-        }
-        const capped = value.slice(0, this.options.revealStringLimit)
-        return { kind: 'string', value: capped, isComplete: capped.length === value.length }
-      }
+      case 'string':
+        return this.readString(client, key)
       case 'hash': {
-        const all = Object.entries(await client.hgetall(key))
-        const kept = all.slice(0, limit)
+        const { entries, isComplete } = await scanUpTo(
+          limit,
+          (cursor) => client.call('HSCAN', key, cursor, 'COUNT', limit),
+          true
+        )
         return {
           kind: 'hash',
           // `field`, not `name`: Redis's own vocabulary for a hash is field/value
           // (`HSET key field value`, `HDEL key field`). A generic `name` loses the
           // domain term in the one place a reader would check it against the
           // server's documentation.
-          fields: kept.map(([field, value]) => ({ field, value })),
-          isComplete: kept.length === all.length
+          fields: entries.map(([field, value]) => ({ field, value })),
+          isComplete
         }
       }
-      case 'set':
+      case 'set': {
+        const { entries, isComplete } = await scanUpTo(
+          limit,
+          (cursor) => client.call('SSCAN', key, cursor, 'COUNT', limit),
+          false
+        )
+        return { kind: 'members', members: entries.map(([member]) => member), isComplete }
+      }
       case 'list': {
-        const all = type === 'set' ? await client.smembers(key) : await client.lrange(key, 0, limit)
+        const all = await client.lrange(key, 0, limit)
         const kept = all.slice(0, limit)
         return { kind: 'members', members: kept, isComplete: kept.length === all.length }
       }

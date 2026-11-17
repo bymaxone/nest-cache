@@ -108,7 +108,11 @@ export class FakeReader implements IRedisReader {
   }
   async call(command: string, ...args: (string | number)[]): Promise<unknown> {
     this.calls.push([command, ...args.map(String)])
-    return this.replies.call ?? []
+    const reply = this.replies.call
+    // A function answers per command, so a reveal that makes several calls can be given several replies.
+    return typeof reply === 'function'
+      ? Reflect.apply(reply, undefined, [command, args])
+      : (reply ?? [])
   }
 }
 

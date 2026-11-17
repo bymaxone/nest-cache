@@ -122,7 +122,7 @@ const MUTATING_COMMANDS = new Set([
 ])
 
 /** Command names the `call(...)` escape hatch may send. */
-const ALLOWED_CALL_COMMANDS = new Set(['ZRANGE'])
+const ALLOWED_CALL_COMMANDS = new Set(['ZRANGE', 'GETRANGE', 'HSCAN', 'SSCAN'])
 
 /** Source files of the subpath, excluding specs — a test may name anything. */
 function sourceFiles(dir) {
