@@ -105,7 +105,7 @@
     "test:e2e": "jest --config jest.e2e.config.ts --runInBand",
     "test:types": "tsc --noEmit -p tsconfig.typetest.json",
     "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.e2e.json"
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,cjs}": [
