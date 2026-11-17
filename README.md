@@ -750,6 +750,12 @@ The revealed value is shaped by the key's type:
 
 Every arm except `unsupported` carries `isComplete`; `false` means the value was cut.
 
+A reveal reads only a bounded part of a value, however large the value is: a string with one `GETRANGE` of four bytes per
+character of `revealStringLimit`, a hash or a set with `HSCAN` or `SSCAN` followed until one more than `revealLimit` entries
+were seen (at most 100 calls, after which the value is reported incomplete), a list and a sorted set with a range of
+`revealLimit`. The entries of a large set or hash come in the server's scan order, which can differ from the order
+`SMEMBERS` or `HGETALL` gives; none of these orders is documented by Redis.
+
 > [!IMPORTANT]
 > **List order is meaningful; set order is not**, and both arrive in the same `members` array. Sort for display only when `type === 'set'`.
 
