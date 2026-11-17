@@ -74,7 +74,8 @@ describe('cache admin issues no write (real Redis, a user that cannot write)', (
   let app: TestingModule
   let admin: CacheAdminService
   let status: CacheStatusService
-  const seen: string[] = []
+  /** Every command MONITOR showed, with the address of the connection that sent it. */
+  const seen: { source: string; name: string }[] = []
 
   beforeAll(async () => {
     redis = await startRedisContainer()
@@ -91,9 +92,7 @@ describe('cache admin issues no write (real Redis, a user that cannot write)', (
     monitor = new Redis(redis.url)
     const feed = await monitor.monitor()
     feed.on('monitor', (_time: string, args: string[], source: string) => {
-      if (!source.includes(String(redis.container.getMappedPort(6379)))) {
-        seen.push((args[0] ?? '').toLowerCase())
-      }
+      seen.push({ source, name: (args[0] ?? '').toLowerCase() })
     })
 
     const url = redis.url.replace('redis://', `redis://${USER}:${PASSWORD}@`)
@@ -129,12 +128,24 @@ describe('cache admin issues no write (real Redis, a user that cannot write)', (
     expect(denied).toEqual([])
   })
 
-  // Scenario: the same suite saw the commands the server received from the reader's connection.
-  // Rule: all of them are on the read allowlist.
-  it('sends only commands on the read allowlist', () => {
-    const unexpected = [...new Set(seen)].filter((name) => !ALLOWED_COMMANDS.has(name))
+  // Scenario: the same suite saw the commands the server received. The reader's connections are
+  // found by the server's own list of clients, by user.
+  // Rule: every command those connections sent is on the read allowlist, and there were some.
+  it('sends only commands on the read allowlist', async () => {
+    const clients = String(await owner.client('LIST'))
+    const readerAddresses = new Set(
+      clients
+        .split('\n')
+        .filter((line) => line.includes(`user=${USER} `))
+        .map((line) => /(?:^| )addr=(\S+)/.exec(line)?.[1] ?? '')
+    )
+    expect(readerAddresses.size).toBeGreaterThan(0)
+    const sent = seen.filter((event) => readerAddresses.has(event.source))
+    expect(sent.length).toBeGreaterThan(0)
+    const unexpected = [...new Set(sent.map((event) => event.name))].filter(
+      (name) => !ALLOWED_COMMANDS.has(name)
+    )
     expect(unexpected).toEqual([])
-    expect(seen.length).toBeGreaterThan(0)
   })
 
   // Scenario: the control. The same user, asked to write, is refused.
