@@ -8,3 +8,11 @@ pnpm-lock.yaml
 dist/
 coverage/
 reports/
+
+# Canonical copies from bymaxone/.github (script-templates/check-function-length), kept byte-identical so
+# a family check can compare them; formatting them would make each differ from the template.
+scripts/check-function-length.mjs
+scripts/function-length-key.mjs
+src/check-function-length.spec.ts
+src/check-function-length.baseline.spec.ts
+src/check-function-length.key.spec.ts
