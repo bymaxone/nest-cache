@@ -331,8 +331,8 @@ interface NumericConnectionOptions {
  *
  * @param where - The block the options sit in, echoed in the error details.
  * @param options - The block, or `undefined` when it is not set.
- * @param fromUrl - What the block's `url` carries; it replaces the discrete `port` and `db`, which are
- *   then never used and not checked.
+ * @param fromUrl - What the block's `url` carries. It always replaces the discrete `port`, and the
+ *   discrete `db` when its path names a database; a value it replaces is never used and not checked.
  * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
  */
 function validateConnectionNumbers(
