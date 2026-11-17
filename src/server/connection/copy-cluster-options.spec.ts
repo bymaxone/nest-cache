@@ -36,18 +36,37 @@ describe('copyClusterOptions', () => {
     expect(copy['redisOptions']).toEqual(redisOptions)
   })
 
-  // Scenario: keys that are undefined or null, and a key the lists do not name.
-  // Rule: unset keys and unknown keys are left out of the copy.
-  it('drops unset keys and keys that are not documented', () => {
+  // Scenario: keys that are undefined or null among the documented ones.
+  // Rule: the unset documented keys are left out of the copy.
+  it('drops the unset documented keys', () => {
     const copy = copyClusterOptions({
       scaleReads: undefined,
       slotsRefreshTimeout: null,
       maxRedirections: 0,
-      notAnOption: 'x',
-      redisOptions: { commandTimeout: undefined, connectTimeout: null, db: 0, nope: 1 }
+      redisOptions: { commandTimeout: undefined, connectTimeout: null, db: 0 }
     } as unknown as ClusterOptions)
 
     expect(copy).toEqual({ maxRedirections: 0, redisOptions: { db: 0 } })
+  })
+
+  // Scenario: an own key the typed lists do not name: an option a newer ioredis added, or one the
+  // declarations lag behind.
+  // Rule: it is copied as given, so the driver still receives it; only the documented keys are read
+  // through the lists.
+  it('forwards an own key that the lists do not name, as given', () => {
+    const copy = copyClusterOptions({
+      maxRedirections: 3,
+      futureClusterOption: 'a',
+      redisOptions: { db: 1, futureNodeOption: { nested: true }, anotherOne: undefined }
+    } as unknown as ClusterOptions) as Record<string, unknown>
+
+    expect(copy['futureClusterOption']).toBe('a')
+    expect(copy['maxRedirections']).toBe(3)
+    expect(copy['redisOptions']).toEqual({
+      db: 1,
+      futureNodeOption: { nested: true },
+      anotherOne: undefined
+    })
   })
 
   // Scenario: the groups are class instances whose values sit behind prototype getters.

@@ -265,6 +265,23 @@ describe('a class-instance cluster group that carries its values behind getters'
   })
 })
 
+describe('an own key of a cluster group that the typed lists do not name', () => {
+  // Scenario: the host passes an option a newer ioredis added, or one the declarations lag behind.
+  // Rule: it reaches the driver as given, in `cluster.options` and in `redisOptions`.
+  it('forwards it to ioredis', () => {
+    const options = built({
+      mode: 'cluster',
+      cluster: {
+        nodes: [{ host: 'n', port: 6379 }],
+        options: { futureClusterOption: 'a', redisOptions: { futureNodeOption: 'b' } }
+      }
+    })
+
+    expect(options['futureClusterOption']).toBe('a')
+    expect((options['redisOptions'] as Record<string, unknown>)['futureNodeOption']).toBe('b')
+  })
+})
+
 describe('a sentinel option that is spelled out but unset', () => {
   // Scenario: an optional sentinel field is present and holds undefined or null.
   // Rule: it is not passed to the driver, so a null password is never sent as one.

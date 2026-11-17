@@ -101,12 +101,13 @@ export const REDIS_OPTION_KEYS: Record<keyof ClusterRedisOptions, true> = {
 // Stryker restore BooleanLiteral
 
 /**
- * Copies the set keys of `source`, each read by property access; `undefined` and `null` are unset and
- * left out, so a spread of the copy never lets an unset key replace a default.
+ * Copies a group: the documented keys by property access, unset ones dropped, plus every own
+ * enumerable key the list does not name, as given. The union keeps an option a newer ioredis added, or
+ * one the installed declarations lag behind, from being lost, where a list alone would drop it.
  *
  * @param source - The group as the host wrote it; may be a class instance.
- * @param keys - The keys to read, as a complete record of the group's type.
- * @returns A plain object holding the set keys.
+ * @param keys - The documented keys, as a complete record of the group's type.
+ * @returns A plain object holding the set documented keys and the own keys the list does not name.
  */
 function copySet<T extends object>(
   source: T | undefined,
@@ -116,12 +117,17 @@ function copySet<T extends object>(
   if (source === undefined) {
     return copy
   }
-  for (const key of Object.keys(keys) as (keyof T)[]) {
-    // Reflect.get reads through getters and prototypes, like a property access; the key is a typed
-    // list entry, never a host-supplied string.
+  // Reflect.get reads through getters and prototypes, like a property access; the key is a typed
+  // list entry or an own key of the host's group, never a string the library builds.
+  for (const key of Object.keys(keys)) {
     const value: unknown = Reflect.get(source, key)
     if (value !== undefined && value !== null) {
       Reflect.set(copy, key, value)
+    }
+  }
+  for (const key of Object.keys(source)) {
+    if (!Object.hasOwn(keys, key)) {
+      Reflect.set(copy, key, Reflect.get(source, key))
     }
   }
   return copy
