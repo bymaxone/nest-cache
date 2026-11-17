@@ -79,14 +79,12 @@ describe.each(['standalone', 'cluster'] as const)('numeric connection options (%
       // Scenario: a refusal of this option.
       // Rule: it carries the `reason` naming the option, the range, and a `why` only where one is
       // stated: port and db have none, because their range needs no explanation.
-      it('carries the reason and the range, and a why only for keepAlive and maxRetriesPerRequest', () => {
+      it('carries the reason and the range, and no why for an ordinary out-of-range value', () => {
         const details = refusal(withOption(spelling, option, -1))
 
         expect(details?.['reason']).toBe(`${where}.${option} not an integer in range`)
         expect(details).toMatchObject({ min: expect.any(Number), max: expect.any(Number) })
-        expect('why' in (details ?? {})).toBe(
-          option === 'keepAlive' || option === 'maxRetriesPerRequest'
-        )
+        expect(details).not.toHaveProperty('why')
       })
 
       // Scenario: the smallest and the largest value in range.
@@ -148,5 +146,40 @@ describe('numeric connection options when a url is set', () => {
     expect(refusal({ connection: { url: 'redis://h:6379', keepAlive: 0 } })).toMatchObject({
       option: 'connection.keepAlive'
     })
+  })
+})
+
+describe('a null option group', () => {
+  // Scenario: a whole group is null: `cluster.options.redisOptions`, or `connection` in cluster mode,
+  // where a cluster ignores it.
+  // Rule: it counts as absent; it does not throw a TypeError, as 1.2.25 did not.
+  it.each([
+    [
+      'cluster.options.redisOptions',
+      {
+        mode: 'cluster',
+        cluster: { nodes: [{ host: 'n', port: 6379 }], options: { redisOptions: null } }
+      }
+    ],
+    [
+      'connection in cluster mode',
+      { mode: 'cluster', cluster: { nodes: [{ host: 'n', port: 6379 }] }, connection: null }
+    ]
+  ])('treats a null %s as absent', (_name, options) => {
+    expect(() => validateOptions(options as unknown as BymaxCacheModuleOptions)).not.toThrow()
+  })
+
+  // Scenario: a standalone connection that is null.
+  // Rule: it is the missing connection it always was, CONNECTION_FAILED, never a TypeError.
+  it('reports a null standalone connection as a missing connection', () => {
+    let thrown: unknown
+    try {
+      validateOptions({ connection: null } as unknown as BymaxCacheModuleOptions)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CacheException)
+    expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.CONNECTION_FAILED)
   })
 })
