@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.25] - 2026-11-17
+
 ### Added
 
 - `AdminReadCommand` is exported from `@bymax-one/nest-cache/admin`. It is the union `IRedisReader.call` takes (declared in 1.2.24 but not exported there), so a host that implements the reader can import it from the entry point.
@@ -1025,7 +1027,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.24...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.25...HEAD
+[1.2.25]: https://github.com/bymaxone/nest-cache/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/bymaxone/nest-cache/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/bymaxone/nest-cache/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/bymaxone/nest-cache/compare/v1.2.21...v1.2.22
