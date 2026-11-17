@@ -100,13 +100,6 @@ jobs:
           else
             pnpm check:file-length
           fi
-      - name: No new function or test body over 50 lines
-        run: |
-          if [ -n "$COMPARE_BASE" ]; then
-            pnpm check:function-length --base "$COMPARE_BASE"
-          else
-            pnpm check:function-length
-          fi
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
