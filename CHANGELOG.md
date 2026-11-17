@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.26] - 2026-11-17
+
 ### Changed
 
 - `port`, `db`, `keepAlive` and `maxRetriesPerRequest` of `connection`, and the same options in `cluster.options.redisOptions`, are checked when the module is configured (a `port` or `db` that the connection `url` replaces is not). Before, they were handed to the driver as given: `NaN`, an infinity or a string for `maxRetriesPerRequest` (and `-1`) switched the retry bound off, so a command queued during an outage waited for `commandTimeout` alone; `NaN` or `0` for `keepAlive` made the socket use the operating system's own delay, which lost the 30 s half-open probe; an invalid `port` or `db` failed at connect with a driver error. Each is now refused at boot with `cache.invalid_options`, naming the option, the type of the value received and the accepted range: `port` 1 to 65 535, `db` 0 or more, `keepAlive` 1 to 2 147 483 647 ms, `maxRetriesPerRequest` 0 to 2 147 483 647. `maxRetriesPerRequest: null` and `keepAlive: 0` are refused as well, with a `why` in `details`.
@@ -1035,7 +1037,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.25...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.26...HEAD
+[1.2.26]: https://github.com/bymaxone/nest-cache/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/bymaxone/nest-cache/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/bymaxone/nest-cache/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/bymaxone/nest-cache/compare/v1.2.22...v1.2.23
