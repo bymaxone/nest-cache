@@ -28,7 +28,7 @@ export interface BymaxCacheAdminModuleOptions {
   commandBatchLimit?: number
   /** Most members or hash fields one value reveal returns. Default: 200. */
   revealLimit?: number
-  /** Most characters one revealed string value carries. Default: 4096. */
+  /** Most UTF-16 units one revealed string value carries; a surrogate pair is never split. Default: 4096. */
   revealStringLimit?: number
   /** Register the module globally. Default: `false` — an admin surface is wired where it is used. */
   isGlobal?: boolean

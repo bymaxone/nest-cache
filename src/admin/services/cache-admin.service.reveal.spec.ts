@@ -224,4 +224,110 @@ describe('CacheAdminService.revealValue reads', () => {
       value: { kind: 'hash', fields: [{ field: 'a', value: 'first' }], isComplete: true }
     })
   })
+
+  // Scenario: strings of two-, three- and four-byte characters and a mix, behind ASCII prefixes of
+  // zero to three, cut at limits around the boundary.
+  // Rule: the shown text never ends in half a surrogate pair and is the longest whole-character
+  // prefix that fits the limit, counted in UTF-16 units; a string that fits is shown whole.
+  it('never cuts a surrogate pair in half and shows the longest whole-character prefix', async () => {
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+    const wholePrefix = (text: string, limit: number): string => {
+      let shown = ''
+      for (const character of text) {
+        if (shown.length + character.length > limit) {
+          break
+        }
+        shown += character
+      }
+      return shown
+    }
+    const failures: string[] = []
+    for (const unit of ['\u00e9', '\u20ac', '\u{1F600}', 'a\u{1F600}', '\u{1F600}\u20ac']) {
+      for (let prefix = 0; prefix <= 3; prefix += 1) {
+        for (let limit = 4; limit <= 9; limit += 1) {
+          const stored = 'a'.repeat(prefix) + unit.repeat(10)
+          const result = await reveal(new BoundedReader('string', () => stored), {
+            revealStringLimit: limit
+          })
+          const shown =
+            result.status === 'revealed' && result.value.kind === 'string'
+              ? result.value.value
+              : null
+          const complete =
+            result.status === 'revealed' && result.value.kind === 'string'
+              ? result.value.isComplete
+              : null
+          if (
+            shown === null ||
+            lone.test(shown) ||
+            shown !== wholePrefix(stored, limit) ||
+            complete !== false
+          ) {
+            failures.push(`${JSON.stringify(unit)} prefix ${prefix} limit ${limit}`)
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([])
+  })
+
+  // Scenario: a value that fits the limit, even though it ends in a lone surrogate it was stored with.
+  // Rule: nothing was cut, so nothing is dropped: it is returned as stored and complete.
+  it('returns a value that fits the limit as stored, whatever it ends in', async () => {
+    const stored = 'ab\uD83D'
+    const reader = new BoundedReader('string', () => stored)
+
+    expect(await reveal(reader, { revealStringLimit: 3 })).toMatchObject({
+      value: { kind: 'string', value: stored, isComplete: true }
+    })
+  })
+
+  // Scenario: a hash, a set, a list and a sorted set deleted between the TYPE and the read, so the
+  // read answers nothing, and a scan that gave up with nothing found.
+  // Rule: a finished read of nothing is `missing`, as for a string; a scan stopped by its call cap is
+  // incomplete, not missing, since it did not finish.
+  it.each([
+    ['hash', (): unknown => ['0', []]],
+    ['set', (): unknown => ['0', []]],
+    ['zset', (): unknown => []]
+  ])('reports a %s that vanished between reads as missing', async (type, answer) => {
+    const reader = new BoundedReader(type, answer)
+
+    expect(await reveal(reader)).toEqual({ status: 'missing', key: 'app:k' })
+  })
+
+  it('reports a list that vanished between reads as missing', async () => {
+    const reader = new BoundedReader('list', () => undefined)
+    jest.spyOn(reader, 'lrange').mockResolvedValue([])
+
+    expect(await reveal(reader)).toEqual({ status: 'missing', key: 'app:k' })
+  })
+
+  it.each([['hash'], ['set']])(
+    'keeps a %s whose scan was stopped by the call cap incomplete',
+    async (type) => {
+      const reader = new BoundedReader(type, () => ['5', []])
+
+      expect(await reveal(reader)).toMatchObject({
+        status: 'revealed',
+        value: { isComplete: false }
+      })
+    }
+  )
+
+  // Scenario: the cut falls right after the first and the last unit of the high-surrogate range, and
+  // right after the units on either side of it.
+  // Rule: only a unit from 0xD800 to 0xDBFF is dropped; 0xD7FF and 0xDC00 are kept.
+  it.each([
+    ['0xD800', '\uD800', 'a'],
+    ['0xDBFF', '\uDBFF', 'a'],
+    ['0xD7FF', '\uD7FF', 'a\uD7FF'],
+    ['0xDC00', '\uDC00', 'a\uDC00']
+  ])('drops a cut-off unit only when it is a high surrogate (%s)', async (_name, unit, shown) => {
+    const reader = new BoundedReader('string', () => `a${unit}tail`)
+
+    expect(await reveal(reader, { revealStringLimit: 2 })).toMatchObject({
+      value: { kind: 'string', value: shown, isComplete: false }
+    })
+  })
 })

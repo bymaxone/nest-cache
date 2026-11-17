@@ -1701,7 +1701,7 @@ export class HealthController {
 | `scanRoundsLimit`   | `number`                | `100`   | Most `SCAN` round trips one listing request makes before it returns a cursor; a whole number from 1 to 10 000     |
 | `commandBatchLimit` | `number`                | `100`   | Most commands one pipeline flush sends; a flush always carries at least one key, so a lower limit may be exceeded |
 | `revealLimit`       | `number`                | `200`   | Most members or hash fields one reveal returns                                                                    |
-| `revealStringLimit` | `number`                | `4096`  | Most characters one revealed string carries                                                                       |
+| `revealStringLimit` | `number`                | `4096`  | Most UTF-16 units one revealed string carries; a surrogate pair is never split                                    |
 | `isGlobal`          | `boolean`               | `false` | Register the module globally                                                                                      |
 
 Each threshold must be a positive integer; `scanRoundsLimit` is also at most 10 000.
