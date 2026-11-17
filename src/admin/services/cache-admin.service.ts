@@ -356,12 +356,11 @@ export class CacheAdminService {
   }
 
   /**
-   * Reads a value according to its Redis type, truncating to the configured caps.
+   * Reads a string with one ranged read of four bytes per character of the limit.
    *
    * @param client - The reader.
    * @param key - The key to read.
-   * @param type - The key's type.
-   * @returns The value, or `null` when the key vanished between reads.
+   * @returns The value cut to `revealStringLimit`, or `null` when the key vanished between reads.
    */
   private async readString(client: IRedisReader, key: string): Promise<RevealedValue | null> {
     const limit = this.options.revealStringLimit
@@ -377,12 +376,20 @@ export class CacheAdminService {
     return {
       kind: 'string',
       value: capped,
-      // A reply cut by the range holds more than `bytes` bytes, which is more than `limit` characters
-      // since a character takes at most three bytes per unit, so the length check alone tells a cut value.
+      // The range is inclusive, so a reply cut by it holds more than `bytes` bytes, which is more than
+      // `limit` UTF-16 units since a unit takes at most three bytes, so the length check alone tells a cut value.
       isComplete: capped.length === value.length
     }
   }
 
+  /**
+   * Reads a value according to its Redis type, truncating to the configured caps.
+   *
+   * @param client - The reader.
+   * @param key - The key to read.
+   * @param type - The key's type.
+   * @returns The value, or `null` when the key vanished between reads.
+   */
   private async readValue(
     client: IRedisReader,
     key: string,

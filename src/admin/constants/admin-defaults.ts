@@ -71,7 +71,7 @@ export const DEFAULT_REVEAL_LIMIT = 200
 
 /**
  * Most bytes one character takes in UTF-8, which is how many bytes of a string a reveal asks for per
- * character of {@link DEFAULT_REVEAL_STRING_LIMIT}, so the bytes it reads always hold the limit's worth
+ * character of `revealStringLimit`, so the bytes it reads always hold the limit's worth
  * of characters whatever the text is.
  */
 export const REVEAL_BYTES_PER_CHARACTER = 4
