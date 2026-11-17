@@ -99,6 +99,31 @@ describe('copyClusterOptions', () => {
     expect(copyClusterOptions(options as unknown as ClusterOptions)).toEqual({ redisOptions: {} })
   })
 
+  // Scenario: a copied key, documented or not.
+  // Rule: it is defined as an ordinary data property (enumerable, writable, configurable), so the
+  // object handed to the driver behaves like any plain options object.
+  it('defines every copied key as an enumerable, writable and configurable property', () => {
+    const copy = copyClusterOptions({
+      scaleReads: 'slave',
+      futureClusterOption: 'a',
+      redisOptions: { db: 1, futureNodeOption: 'b' }
+    } as unknown as ClusterOptions) as Record<string, unknown>
+    const redisOptions = copy['redisOptions'] as Record<string, unknown>
+
+    for (const [group, key] of [
+      [copy, 'scaleReads'],
+      [copy, 'futureClusterOption'],
+      [redisOptions, 'db'],
+      [redisOptions, 'futureNodeOption']
+    ] as const) {
+      expect(Object.getOwnPropertyDescriptor(group, key)).toMatchObject({
+        enumerable: true,
+        writable: true,
+        configurable: true
+      })
+    }
+  })
+
   // Scenario: the groups are class instances whose values sit behind prototype getters.
   // Rule: each value is read through its getter, and the source is not mutated.
   it('reads class-instance groups through their getters', () => {

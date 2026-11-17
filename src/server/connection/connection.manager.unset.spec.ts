@@ -396,7 +396,11 @@ describe('a credential or tls field that is null', () => {
 
     expect(thrown).toBeInstanceOf(CacheException)
     expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-    expect((thrown as CacheException).details).toMatchObject({ option: name, received: 'null' })
+    expect((thrown as CacheException).details).toMatchObject({
+      reason: `${name} must not be null`,
+      option: name,
+      received: 'null'
+    })
   })
 
   it.each(SECRET_SPELLINGS)('accepts an undefined %s as unset', (_name, build) => {
