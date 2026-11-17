@@ -12,6 +12,7 @@ import { bootAdminApp } from './fixtures/test-admin-app.module'
 import { startRedisContainer, type StartedRedis } from './helpers/start-redis-container'
 
 import type { TestingModule } from '@nestjs/testing'
+import type { RedisKey } from 'ioredis'
 
 const NAMESPACE = 'e2e-reveal'
 const SCOPES: readonly CacheScope[] = [
@@ -133,7 +134,7 @@ describe('cache admin reveal of large values (real Redis)', () => {
     const key = `${NAMESPACE}:vanish:${type}`
     await seed(client, key)
     const original = client.type.bind(client)
-    const spy = jest.spyOn(client, 'type').mockImplementation(async (name: string) => {
+    const spy = jest.spyOn(client, 'type').mockImplementation(async (name: RedisKey) => {
       const reply = await original(name)
       await client.del(name)
       return reply
