@@ -104,24 +104,27 @@ describe.each(SPELLINGS)('refusal details of %s', (name, build) => {
   // Scenario: the option holds a string, a symbol, a function or an object carrying a sentinel.
   // Rule: the refusal names the option and the type received, and no part of the value appears in the
   // details, the message or anything a logger renders from the exception.
-  it.each(SECRETS.filter(([label]) => name !== 'shutdownTimeoutMs' || label !== 'null'))(
-    'names %s and echoes none of it',
-    (_label, value, received) => {
-      const error = refusal(build(value))
+  // `null` is an unset option everywhere but `maxRetriesPerRequest`, where it is the driver's "retry
+  // forever": only there is it a value to refuse (the unset spellings are in connection.manager.unset.spec).
+  it.each(
+    SECRETS.filter(
+      ([label]) => label !== 'null' || /maxRetriesPerRequest|password|username|tls/.test(name)
+    )
+  )('names %s and echoes none of it', (_label, value, received) => {
+    const error = refusal(build(value))
 
-      expect(error).toBeInstanceOf(CacheException)
-      expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-      expect(error?.details).toMatchObject({ received })
-      expect(error?.details).not.toHaveProperty('value')
-      for (const rendered of [
-        JSON.stringify(error),
-        String(error?.message),
-        inspect(error, { depth: 9 })
-      ]) {
-        expect(rendered).not.toContain('SENTINEL')
-      }
+    expect(error).toBeInstanceOf(CacheException)
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error?.details).toMatchObject({ received })
+    expect(error?.details).not.toHaveProperty('value')
+    for (const rendered of [
+      JSON.stringify(error),
+      String(error?.message),
+      inspect(error, { depth: 9 })
+    ]) {
+      expect(rendered).not.toContain('SENTINEL')
     }
-  )
+  })
 
   // Scenario: the option holds a finite number out of range.
   // Rule: the number is printed as it is: it is a quantity, not a secret.

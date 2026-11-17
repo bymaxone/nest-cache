@@ -16,6 +16,7 @@ import type { ClusterOptions, RedisOptions } from 'ioredis'
 
 import type { CacheEventName } from '../../shared/types/cache-event.types'
 import { BYMAX_CACHE_EVENTS, BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
+import { isUnset } from '../config/is-unset'
 import type { ResolvedOptions } from '../config/resolved-options'
 import {
   DEFAULT_COMMAND_TIMEOUT_MS,
@@ -264,20 +265,21 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         throw new CacheException(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode: 'cluster' })
       }
       const supplied = cluster.options ?? {}
+      const redisOptions = supplied.redisOptions
       return new Cluster(cluster.nodes, {
-        // Fail-fast defaults, as the other modes get: without them a cluster that goes
-        // down after boot queues every command for as long as it stays down.
-        enableOfflineQueue: false,
         ...supplied,
-        ...(overrides?.enableOfflineQueue !== undefined && {
-          enableOfflineQueue: overrides.enableOfflineQueue
-        }),
+        // Fail-fast defaults, as the other modes get: without them a cluster that goes
+        // down after boot queues every command for as long as it stays down. Each known key is
+        // read by property access and an unset one (undefined or null) takes the default, where
+        // a spread would let an explicit `undefined` replace it with "no bound".
+        enableOfflineQueue: overrides?.enableOfflineQueue ?? supplied.enableOfflineQueue ?? false,
         redisOptions: {
-          connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-          commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
-          maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
-          disconnectTimeout: DISCONNECT_TIMEOUT_MS,
-          ...supplied.redisOptions
+          ...redisOptions,
+          connectTimeout: redisOptions?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS,
+          commandTimeout: redisOptions?.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
+          maxRetriesPerRequest:
+            redisOptions?.maxRetriesPerRequest ?? DEFAULT_MAX_RETRIES_PER_REQUEST,
+          disconnectTimeout: redisOptions?.disconnectTimeout ?? DISCONNECT_TIMEOUT_MS
         }
       } as OwnedClusterOptions)
     }
@@ -300,16 +302,16 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       ...overrides,
       sentinels: sentinel.sentinels,
       name: sentinel.name,
-      ...(sentinel.sentinelPassword !== undefined && {
+      ...(!isUnset(sentinel.sentinelPassword) && {
         sentinelPassword: sentinel.sentinelPassword
       }),
-      ...(sentinel.password !== undefined && { password: sentinel.password }),
+      ...(!isUnset(sentinel.password) && { password: sentinel.password }),
       // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
       // wire level; our public interface accepts 'replica' per Redis 7 naming.
-      ...(sentinel.role !== undefined && {
+      ...(!isUnset(sentinel.role) && {
         role: sentinel.role === 'replica' ? 'slave' : sentinel.role
       }),
-      ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap }),
+      ...(!isUnset(sentinel.natMap) && { natMap: sentinel.natMap }),
       // TLS configured for the data nodes (`connection.tls` or a `rediss://` url) covers the sentinels
       // too: without these two options ioredis talks to them in cleartext, `sentinelPassword` and
       // discovery included.
@@ -337,12 +339,12 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       keepAlive: c.keepAlive ?? DEFAULT_KEEP_ALIVE_MS,
       noDelay: c.noDelay ?? true,
       family: c.family ?? 4,
-      ...(c.host !== undefined && { host: c.host }),
-      ...(c.port !== undefined && { port: c.port }),
-      ...(c.password !== undefined && { password: c.password }),
-      ...(c.db !== undefined && { db: c.db }),
-      ...(c.username !== undefined && { username: c.username }),
-      ...(c.tls !== undefined && { tls: c.tls }),
+      ...(!isUnset(c.host) && { host: c.host }),
+      ...(!isUnset(c.port) && { port: c.port }),
+      ...(!isUnset(c.password) && { password: c.password }),
+      ...(!isUnset(c.db) && { db: c.db }),
+      ...(!isUnset(c.username) && { username: c.username }),
+      ...(!isUnset(c.tls) && { tls: c.tls }),
       ...fromUrl
     }
   }

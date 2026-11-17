@@ -7,6 +7,12 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- An option that is present but unset (`undefined`, or `null`) now takes its default, in every group, instead of replacing it. In `cluster.options.redisOptions` an explicit `undefined` for `connectTimeout`, `commandTimeout`, `maxRetriesPerRequest` or `disconnectTimeout`, and in `cluster.options` for `enableOfflineQueue`, replaced the default through an object spread, so the library's fail-fast value was lost and the driver applied its own; each of those keys is now read by property access and an unset one takes the default, which also honours a group that is a class instance whose values sit behind getters. `null` is read as unset too, for every option with a default and for `port`, `db`, the sentinel `role` and `natMap` and the two Pub/Sub bounds. Two kinds of option refuse `null` instead, and only `undefined` means unset there: `maxRetriesPerRequest`, because `null` is the driver's "retry without limit", and every credential or tls field (`password`, `username` and `tls` of `connection` and of `cluster.options.redisOptions`, and the sentinel `password` and `sentinelPassword`), because their default is the weaker security posture: a secret that failed to load and arrived as `null` would otherwise connect without authentication or without tls, silently.
+
+  **Apply to a consumer:** a host that set `undefined` in `cluster.options.redisOptions` to drop a bound now gets the default bound back; give the option an explicit value instead. A host that passed `null` for `port`, `db`, `keepAlive`, `connectTimeout`, `commandTimeout`, `shutdownTimeoutMs` or a Pub/Sub bound, which was refused at boot, now boots with the default. A host that passed `null` for a credential or tls field, which before reached the driver as it was, now fails at boot with `cache.invalid_options` (`details.received` is `'null'`): pass `undefined`, or omit the field, when no credential is meant, and fix the loading of the secret otherwise. `maxRetriesPerRequest: null` is unchanged: refused.
+
 ## [1.2.26] - 2026-11-17
 
 ### Changed
