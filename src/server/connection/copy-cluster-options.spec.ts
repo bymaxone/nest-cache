@@ -90,6 +90,15 @@ describe('copyClusterOptions', () => {
     expect(redisOptions['db']).toBe(2)
   })
 
+  // Scenario: a whole group is null.
+  // Rule: it counts as absent, like undefined: the copy has an empty redisOptions and nothing else.
+  it.each([
+    ['cluster.options', null],
+    ['redisOptions', { redisOptions: null }]
+  ])('treats a null %s as absent', (_name, options) => {
+    expect(copyClusterOptions(options as unknown as ClusterOptions)).toEqual({ redisOptions: {} })
+  })
+
   // Scenario: the groups are class instances whose values sit behind prototype getters.
   // Rule: each value is read through its getter, and the source is not mutated.
   it('reads class-instance groups through their getters', () => {

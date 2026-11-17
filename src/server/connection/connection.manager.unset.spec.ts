@@ -265,6 +265,25 @@ describe('a class-instance cluster group that carries its values behind getters'
   })
 })
 
+describe('a cluster group that is null', () => {
+  // Scenario: `cluster.options`, or `cluster.options.redisOptions`, is null.
+  // Rule: the group counts as absent, so the client boots with the library defaults.
+  it.each([
+    ['cluster.options', null],
+    ['cluster.options.redisOptions', { redisOptions: null }]
+  ])('boots with the defaults when %s is null', (_name, group) => {
+    const options = built({
+      mode: 'cluster',
+      cluster: { nodes: [{ host: 'n', port: 6379 }], options: group }
+    })
+    const redisOptions = options['redisOptions'] as Record<string, unknown>
+
+    expect(options['enableOfflineQueue']).toBe(false)
+    expect(redisOptions['commandTimeout']).toBe(DEFAULT_COMMAND_TIMEOUT_MS)
+    expect(redisOptions['connectTimeout']).toBe(DEFAULT_CONNECT_TIMEOUT_MS)
+  })
+})
+
 describe('an own key of a cluster group that the typed lists do not name', () => {
   // Scenario: the host passes an option a newer ioredis added, or one the declarations lag behind.
   // Rule: it reaches the driver as given, in `cluster.options` and in `redisOptions`.

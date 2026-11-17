@@ -110,11 +110,11 @@ export const REDIS_OPTION_KEYS: Record<keyof ClusterRedisOptions, true> = {
  * @returns A plain object holding the set documented keys and the own keys the list does not name.
  */
 function copySet<T extends object>(
-  source: T | undefined,
+  source: T | null | undefined,
   keys: Readonly<Record<keyof T, true>>
 ): Partial<T> {
   const copy: Partial<T> = {}
-  if (source === undefined) {
+  if (source === undefined || source === null) {
     return copy
   }
   // Reflect.get reads through getters and prototypes, like a property access; the key is a typed
@@ -149,7 +149,7 @@ function copySet<T extends object>(
  * @param options - The host's `cluster.options`; may be a class instance.
  * @returns A plain copy of the set keys, `redisOptions` included.
  */
-export function copyClusterOptions(options: ClusterOptions | undefined): ClusterOptions {
+export function copyClusterOptions(options: ClusterOptions | null | undefined): ClusterOptions {
   const copy = copySet(options, CLUSTER_OPTION_KEYS)
   return { ...copy, redisOptions: copySet(options?.redisOptions, REDIS_OPTION_KEYS) }
 }
