@@ -33,6 +33,7 @@ import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
+import { copyClusterOptions } from './copy-cluster-options'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
@@ -264,22 +265,24 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       if (!cluster) {
         throw new CacheException(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode: 'cluster' })
       }
-      const supplied = cluster.options ?? {}
-      const redisOptions = supplied.redisOptions
+      // Copied by property access from a typed key list, unset keys dropped: the spreads below can then
+      // neither lose a value a class instance keeps behind a getter nor let an explicit `undefined`
+      // replace a default with "no bound".
+      const supplied = copyClusterOptions(cluster.options)
       return new Cluster(cluster.nodes, {
-        ...supplied,
         // Fail-fast defaults, as the other modes get: without them a cluster that goes
-        // down after boot queues every command for as long as it stays down. Each known key is
-        // read by property access and an unset one (undefined or null) takes the default, where
-        // a spread would let an explicit `undefined` replace it with "no bound".
-        enableOfflineQueue: overrides?.enableOfflineQueue ?? supplied.enableOfflineQueue ?? false,
+        // down after boot queues every command for as long as it stays down.
+        enableOfflineQueue: false,
+        ...supplied,
+        ...(overrides?.enableOfflineQueue !== undefined && {
+          enableOfflineQueue: overrides.enableOfflineQueue
+        }),
         redisOptions: {
-          ...redisOptions,
-          connectTimeout: redisOptions?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS,
-          commandTimeout: redisOptions?.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
-          maxRetriesPerRequest:
-            redisOptions?.maxRetriesPerRequest ?? DEFAULT_MAX_RETRIES_PER_REQUEST,
-          disconnectTimeout: redisOptions?.disconnectTimeout ?? DISCONNECT_TIMEOUT_MS
+          connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
+          commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
+          maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
+          disconnectTimeout: DISCONNECT_TIMEOUT_MS,
+          ...supplied.redisOptions
         }
       } as OwnedClusterOptions)
     }

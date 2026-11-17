@@ -208,6 +208,63 @@ describe('a cluster option that is spelled out but unset', () => {
   })
 })
 
+describe('a class-instance cluster group that carries its values behind getters', () => {
+  // Scenario: the host builds `cluster.options.redisOptions` and `cluster.options` as class instances
+  // whose values, secrets included, sit behind prototype getters.
+  // Rule: every documented key reaches the driver, because each is read by property access from a typed
+  // key list; the spread of a class instance would drop them, and the client would then connect without
+  // the password or without tls (the validator reads these keys by property access too).
+  it('hands a getter-backed password, username and tls to the driver', () => {
+    const tls = { servername: 'redis.internal' }
+    class Secrets {
+      get password(): string {
+        return 'from-a-getter'
+      }
+      get username(): string {
+        return 'app'
+      }
+      get tls(): typeof tls {
+        return tls
+      }
+      get keyPrefix(): string {
+        return 'p:'
+      }
+    }
+    const options = built({
+      mode: 'cluster',
+      cluster: { nodes: [{ host: 'n', port: 6379 }], options: { redisOptions: new Secrets() } }
+    })
+    const redisOptions = options['redisOptions'] as Record<string, unknown>
+
+    expect(redisOptions['password']).toBe('from-a-getter')
+    expect(redisOptions['username']).toBe('app')
+    expect(redisOptions['tls']).toBe(tls)
+    expect(redisOptions['keyPrefix']).toBe('p:')
+  })
+
+  it('hands the getter-backed keys of a class-instance cluster.options to the driver', () => {
+    class Options {
+      get scaleReads(): string {
+        return 'slave'
+      }
+      get slotsRefreshTimeout(): number {
+        return 1234
+      }
+      get enableOfflineQueue(): boolean {
+        return true
+      }
+    }
+    const options = built({
+      mode: 'cluster',
+      cluster: { nodes: [{ host: 'n', port: 6379 }], options: new Options() }
+    })
+
+    expect(options['scaleReads']).toBe('slave')
+    expect(options['slotsRefreshTimeout']).toBe(1234)
+    expect(options['enableOfflineQueue']).toBe(true)
+  })
+})
+
 describe('a sentinel option that is spelled out but unset', () => {
   // Scenario: an optional sentinel field is present and holds undefined or null.
   // Rule: it is not passed to the driver, so a null password is never sent as one.
