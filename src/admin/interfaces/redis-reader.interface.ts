@@ -10,9 +10,16 @@
  * **Every command named here is read-only.** No `DEL`, no `SET`, no `EXPIRE`, no
  * `UNLINK`, no `FLUSHDB`. That is worth stating because the client this surface
  * holds can do all of them — and it is enforced rather than asserted: the
- * `check:admin-readonly` gate fails the build if a mutating command appears in
- * this subpath.
+ * `check:admin-readonly` and `check:admin-types` gates fail the build if a mutating
+ * command appears in this subpath or its reader is cast out of this contract.
  */
+
+/**
+ * The commands `IRedisReader.call` may send: the read commands this surface uses that have no
+ * method on the reader. `pnpm check:admin-types` holds the union to the installed ioredis's table of
+ * write commands, so adding a name here is a deliberate edit that the gate checks.
+ */
+export type AdminReadCommand = 'GETRANGE' | 'HSCAN' | 'SSCAN' | 'ZRANGE'
 
 /** One entry of a pipeline's result: an error, or a value. */
 /**
@@ -71,11 +78,10 @@ export interface IRedisReader {
    * argument overload and rejects it), so the sorted-set read goes through here
    * as `ZRANGE key start stop WITHSCORES`.
    *
-   * It is a general escape hatch, which is exactly why the `check:admin-readonly`
-   * gate inspects the command names this subpath passes to it rather than
-   * trusting that only reads are sent.
+   * The command is typed as {@link AdminReadCommand}, so a write, or a name computed at run
+   * time, does not compile; `check:admin-types` and `check:admin-readonly` hold the same line.
    */
-  call(command: string, ...args: (string | number)[]): Promise<unknown>
+  call(command: AdminReadCommand, ...args: (string | number)[]): Promise<unknown>
 }
 
 /** How the administration surface obtains its reader. */

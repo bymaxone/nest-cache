@@ -114,7 +114,7 @@ public, MIT, zero-runtime-dependency package.
 1. Read the relevant section of `docs/technical_specification.md` and the matching
    `CACHE-xxx` task in `docs/development_tasks.md`.
 2. TDD: write the failing `*.spec.ts` first; keep 100% coverage.
-3. Run `pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports`.
+3. Run `pnpm typecheck && pnpm lint && pnpm check:admin-readonly && pnpm check:admin-types && pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports`.
 
 ## 9. Guidelines Reference
 
@@ -353,9 +353,10 @@ here has to be maintained by whoever adds a rule, and is wrong the first time so
   relatively on purpose: Jest runs them against the source tree, not the bundle.
 
   The subpath also issues **no mutating Redis command**, enforced by
-  `pnpm check:admin-readonly` rather than by convention. A new Redis call there is in scope for
-  review even though the gate covers it, because the gate reports on the command list it was
-  handed.
+  `pnpm check:admin-readonly` and `pnpm check:admin-types` rather than by convention. A new Redis
+  call there is in scope for review even though the gates cover it: the first reads names, the
+  second reads types and holds `IRedisReader.call` to the `AdminReadCommand` union, and the end-to-end
+  ACL suite is what proves the property.
 
 - **The admin scope pattern shape is a security boundary. Do not propose widening it.**
   `SCOPE_PATTERN_SHAPE` in `src/admin/config/validate-scopes.ts` admits one or more literal

@@ -1745,7 +1745,7 @@ A scope with `isReadable: false` is refused **before** any read, so the value ne
 
 ### 18.4 Read-only guarantee
 
-The subpath issues no mutating Redis command. `pnpm check:admin-readonly` (`scripts/check-admin-readonly.mjs`, part of `prepublishOnly`) enforces it:
+The subpath issues no mutating Redis command. `pnpm check:admin-types` holds it to the reader contract (its `call` takes the `AdminReadCommand` union; no expression of an ioredis client type; no cast out of the contract), and `test/e2e/cache-admin-readonly-acl.e2e-spec.ts` runs the whole API as a Redis user with no write permission. `pnpm check:admin-readonly` (`scripts/check-admin-readonly.mjs`, part of `prepublishOnly`) enforces it:
 
 1. No file under `src/admin` may declare a method named after a mutating command. The reader contracts (`IRedisReader`, `IRedisPipeline`), through which `CacheAdminService` reads, are where such a declaration would appear.
 2. Every command name passed to the `call(...)` escape hatch must be on a read-only allowlist.

@@ -60,6 +60,8 @@ jobs:
         run: pnpm check:mutants
       - name: The admin subpath issues no mutating command
         run: pnpm check:admin-readonly
+      - name: The admin subpath reaches Redis only through the reader contract
+        run: pnpm check:admin-types
       - name: Choose the revision the baseline is compared with
         env:
           BASE_REF: ${{ github.base_ref }}
