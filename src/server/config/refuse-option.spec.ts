@@ -1,0 +1,45 @@
+/**
+ * Unit tests for {@link refuseOption}.
+ *
+ * Layer: server. What the exception it throws carries, and that none of the value's content does.
+ */
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
+import { CacheException } from '../errors/cache.exception'
+import { refuseOption } from './refuse-option'
+
+function thrownBy(fn: () => never): CacheException {
+  try {
+    fn()
+  } catch (error) {
+    return error as CacheException
+  }
+  throw new Error('refuseOption did not throw')
+}
+
+describe('refuseOption', () => {
+  // Scenario: a refusal with a bound and a reason for it.
+  // Rule: INVALID_OPTIONS whose details are reason, option, received and the bounds, in that content.
+  it('throws INVALID_OPTIONS with reason, option, received and the bounds', () => {
+    const error = thrownBy(() => refuseOption('o', 'r', 'SENTINEL-secret', { min: 1, why: 'w' }))
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect(error.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error.details).toEqual({
+      reason: 'o r',
+      option: 'o',
+      received: 'a string',
+      min: 1,
+      why: 'w'
+    })
+  })
+
+  // Scenario: a refusal with no bounds.
+  // Rule: the details are reason, option and received only.
+  it('adds nothing when there are no bounds', () => {
+    expect(thrownBy(() => refuseOption('o', 'r', 7)).details).toEqual({
+      reason: 'o r',
+      option: 'o',
+      received: 7
+    })
+  })
+})

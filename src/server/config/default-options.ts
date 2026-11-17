@@ -7,6 +7,8 @@
  * fields cannot be reassigned once registered. See
  * `docs/technical_specification.md` §4.6.
  */
+import type { RedisOptions } from 'ioredis'
+
 import {
   DEFAULT_KEY_ESCAPING,
   DEFAULT_KEY_SEPARATOR,
@@ -24,6 +26,7 @@ import { CacheException } from '../errors/cache.exception'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
+import { refuseOption } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 
 /**
@@ -219,15 +222,13 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
   ] as const
   for (const [option, value, target] of ignored) {
     if (value !== undefined) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: `connection.${option} is ignored in cluster mode; set ${target}`,
-        option: `connection.${option}`
-      })
+      refuseOption(`connection.${option}`, `is ignored in cluster mode; set ${target}`, value)
     }
   }
   const redisOptions = options.cluster?.options?.redisOptions
   requireTimerDelay('connectTimeout', redisOptions?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
   requireTimerDelay('commandTimeout', redisOptions?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  validateConnectionNumbers('cluster.options.redisOptions', redisOptions)
 }
 
 /**
@@ -270,6 +271,11 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   )
   requireTimerDelay('connectTimeout', options.connection?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
   requireTimerDelay('commandTimeout', options.connection?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  validateConnectionNumbers(
+    'connection',
+    options.connection,
+    options.connection?.url ? parseRedisUrl(options.connection.url) : undefined
+  )
   validateHandlerBounds(options)
 }
 
@@ -278,7 +284,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
  * to queue behind.
  *
  * @param options - The raw consumer options.
- * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the type of the value received (a finite number as itself) and the accepted range.
  */
 function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
   const { pubsubMaxConcurrentHandlers: slots, pubsubMaxQueuedMessages: queued } = options
@@ -295,11 +301,71 @@ function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
       value !== undefined &&
       (!Number.isInteger(value) || value < min || value > MAX_TIMER_DELAY_MS)
     ) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: `${option} not an integer in range`,
-        value,
+      refuseOption(option, 'not an integer in range', value, {
         min,
         max: MAX_TIMER_DELAY_MS
+      })
+    }
+  }
+}
+
+/** The numeric connection options a connection block and `cluster.options.redisOptions` share. */
+interface NumericConnectionOptions {
+  readonly port?: unknown
+  readonly db?: unknown
+  readonly keepAlive?: unknown
+  readonly maxRetriesPerRequest?: unknown
+}
+
+/**
+ * Rejects a numeric connection option the driver would take literally and a bound would be lost:
+ * `NaN`, an infinity, a fraction or a string. The driver counts retries only when
+ * `maxRetriesPerRequest` is a number from 0, and hands `keepAlive` to the socket, where `NaN` and 0
+ * mean the operating system's own delay instead of the 30 s probe. `maxRetriesPerRequest`
+ * of `null` is refused too: it is the driver's "retry without limit", which would undo the fail-fast
+ * outage design and leave only `commandTimeout` to bound a command.
+ *
+ * @param where - The block the options sit in, echoed in the error details.
+ * @param options - The block, or `undefined` when it is not set.
+ * @param fromUrl - What the block's `url` carries. It always replaces the discrete `port`, and the
+ *   discrete `db` when its path names a database; a value it replaces is never used and not checked.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the type of the value received (a finite number as itself) and the accepted range.
+ */
+function validateConnectionNumbers(
+  where: string,
+  options: NumericConnectionOptions | undefined,
+  fromUrl: Partial<RedisOptions> = {}
+): void {
+  if (options === undefined) {
+    return
+  }
+  const ranges = [
+    ['port', fromUrl.port === undefined ? options.port : undefined, 1, 65_535, undefined],
+    ['db', fromUrl.db === undefined ? options.db : undefined, 0, MAX_TIMER_DELAY_MS, undefined],
+    [
+      'keepAlive',
+      options.keepAlive,
+      1,
+      MAX_TIMER_DELAY_MS,
+      '0 is the OS default delay: the 30 s probe is lost'
+    ],
+    [
+      'maxRetriesPerRequest',
+      options.maxRetriesPerRequest,
+      0,
+      MAX_TIMER_DELAY_MS,
+      'null lifts the retry bound: only commandTimeout would bound a command'
+    ]
+  ] as const
+  for (const [option, value, min, max, why] of ranges) {
+    const unset = value === undefined
+    const inRange =
+      typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+    if (!unset && !inRange) {
+      refuseOption(`${where}.${option}`, 'not an integer in range', value, {
+        min,
+        max,
+        ...(why === undefined ? {} : { why })
       })
     }
   }
@@ -319,18 +385,10 @@ function requireTimerDelay(option: string, value: number | undefined, min: numbe
     return
   }
   if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: `${option} not a valid timer delay`,
-      value,
-      max: MAX_TIMER_DELAY_MS
-    })
+    refuseOption(option, 'not a valid timer delay', value, { max: MAX_TIMER_DELAY_MS })
   }
   if (value < min) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: `${option} too low`,
-      value,
-      min
-    })
+    refuseOption(option, 'too low', value, { min })
   }
 }
 

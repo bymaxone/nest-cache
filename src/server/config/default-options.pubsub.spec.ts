@@ -52,13 +52,14 @@ describe('Pub/Sub handler bounds', () => {
   })
 
   // Scenario: a concurrency bound that is not a positive integer, or too large to hold.
-  // Rule: it is refused with the option, the value and the range, and no part of anything else.
+  // Rule: it is refused with the option, the number received and the range, and no part of anything else.
   it.each([0, -1, 1.5, NaN, Infinity, 2 ** 31])(
     'refuses pubsubMaxConcurrentHandlers %p',
     (value) => {
       expect(refusal({ ...base, pubsubMaxConcurrentHandlers: value })).toEqual({
         reason: 'pubsubMaxConcurrentHandlers not an integer in range',
-        value,
+        option: 'pubsubMaxConcurrentHandlers',
+        received: Number.isFinite(value) ? value : String(value),
         min: 1,
         max: 2 ** 31 - 1
       })
@@ -72,7 +73,8 @@ describe('Pub/Sub handler bounds', () => {
       refusal({ ...base, pubsubMaxConcurrentHandlers: 1, pubsubMaxQueuedMessages: value })
     ).toEqual({
       reason: 'pubsubMaxQueuedMessages not an integer in range',
-      value,
+      option: 'pubsubMaxQueuedMessages',
+      received: Number.isFinite(value) ? value : String(value),
       min: 0,
       max: 2 ** 31 - 1
     })
