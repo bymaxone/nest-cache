@@ -16,6 +16,7 @@ import type { ClusterOptions, RedisOptions } from 'ioredis'
 
 import type { CacheEventName } from '../../shared/types/cache-event.types'
 import { BYMAX_CACHE_EVENTS, BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
+import { isUnset } from '../config/is-unset'
 import type { ResolvedOptions } from '../config/resolved-options'
 import {
   DEFAULT_COMMAND_TIMEOUT_MS,
@@ -32,6 +33,7 @@ import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
+import { copyClusterOptions } from './copy-cluster-options'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
@@ -263,7 +265,10 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       if (!cluster) {
         throw new CacheException(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode: 'cluster' })
       }
-      const supplied = cluster.options ?? {}
+      // Copied by property access from a typed key list, unset keys dropped: the spreads below can then
+      // neither lose a value a class instance keeps behind a getter nor let an explicit `undefined`
+      // replace a default with "no bound".
+      const supplied = copyClusterOptions(cluster.options)
       return new Cluster(cluster.nodes, {
         // Fail-fast defaults, as the other modes get: without them a cluster that goes
         // down after boot queues every command for as long as it stays down.
@@ -300,16 +305,16 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       ...overrides,
       sentinels: sentinel.sentinels,
       name: sentinel.name,
-      ...(sentinel.sentinelPassword !== undefined && {
+      ...(!isUnset(sentinel.sentinelPassword) && {
         sentinelPassword: sentinel.sentinelPassword
       }),
-      ...(sentinel.password !== undefined && { password: sentinel.password }),
+      ...(!isUnset(sentinel.password) && { password: sentinel.password }),
       // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
       // wire level; our public interface accepts 'replica' per Redis 7 naming.
-      ...(sentinel.role !== undefined && {
+      ...(!isUnset(sentinel.role) && {
         role: sentinel.role === 'replica' ? 'slave' : sentinel.role
       }),
-      ...(sentinel.natMap !== undefined && { natMap: sentinel.natMap }),
+      ...(!isUnset(sentinel.natMap) && { natMap: sentinel.natMap }),
       // TLS configured for the data nodes (`connection.tls` or a `rediss://` url) covers the sentinels
       // too: without these two options ioredis talks to them in cleartext, `sentinelPassword` and
       // discovery included.
@@ -337,12 +342,12 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       keepAlive: c.keepAlive ?? DEFAULT_KEEP_ALIVE_MS,
       noDelay: c.noDelay ?? true,
       family: c.family ?? 4,
-      ...(c.host !== undefined && { host: c.host }),
-      ...(c.port !== undefined && { port: c.port }),
-      ...(c.password !== undefined && { password: c.password }),
-      ...(c.db !== undefined && { db: c.db }),
-      ...(c.username !== undefined && { username: c.username }),
-      ...(c.tls !== undefined && { tls: c.tls }),
+      ...(!isUnset(c.host) && { host: c.host }),
+      ...(!isUnset(c.port) && { port: c.port }),
+      ...(!isUnset(c.password) && { password: c.password }),
+      ...(!isUnset(c.db) && { db: c.db }),
+      ...(!isUnset(c.username) && { username: c.username }),
+      ...(!isUnset(c.tls) && { tls: c.tls }),
       ...fromUrl
     }
   }

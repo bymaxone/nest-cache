@@ -26,6 +26,7 @@ import { CacheException } from '../errors/cache.exception'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
+import { isUnset } from './is-unset'
 import { refuseOption } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 
@@ -204,6 +205,33 @@ function validateNamespace(namespace: string, separator: string, keyEscaping: st
 }
 
 /**
+ * Refuses a `null` credential or tls field. Where an option's default is the weaker security posture,
+ * only `undefined` means unset: a secret that failed to load and reached the options as `null` would
+ * otherwise connect without authentication or without tls, silently.
+ *
+ * @param options - The raw consumer options.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the field, with `received` `'null'`.
+ */
+function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
+  const redisOptions = options.cluster?.options?.redisOptions
+  const fields = [
+    ['connection.password', options.connection?.password],
+    ['connection.username', options.connection?.username],
+    ['connection.tls', options.connection?.tls],
+    ['sentinel.password', options.sentinel?.password],
+    ['sentinel.sentinelPassword', options.sentinel?.sentinelPassword],
+    ['cluster.options.redisOptions.password', redisOptions?.password],
+    ['cluster.options.redisOptions.username', redisOptions?.username],
+    ['cluster.options.redisOptions.tls', redisOptions?.tls]
+  ] as const
+  for (const [option, value] of fields) {
+    if ((value as unknown) === null) {
+      refuseOption(option, 'must not be null', value)
+    }
+  }
+}
+
+/**
  * Validates the cluster-specific options.
  *
  * @param options - The raw consumer options, already known to carry a `cluster` block.
@@ -221,7 +249,7 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
     ['lazyConnect', connection?.lazyConnect, 'cluster.options.lazyConnect']
   ] as const
   for (const [option, value, target] of ignored) {
-    if (value !== undefined) {
+    if (!isUnset(value)) {
       refuseOption(`connection.${option}`, `is ignored in cluster mode; set ${target}`, value)
     }
   }
@@ -253,6 +281,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
     }
     validateClusterOptions(options)
   }
+  validateNoNullSecrets(options)
   validateConnectionUrl(options.connection?.url)
   if (mode === 'standalone') {
     validateStandaloneConnection(options)
@@ -288,7 +317,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
  */
 function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
   const { pubsubMaxConcurrentHandlers: slots, pubsubMaxQueuedMessages: queued } = options
-  if (slots === undefined && queued !== undefined) {
+  if (isUnset(slots) && !isUnset(queued)) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: 'pubsubMaxQueuedMessages needs pubsubMaxConcurrentHandlers'
     })
@@ -298,7 +327,7 @@ function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
     ['pubsubMaxQueuedMessages', queued, 0]
   ] as const) {
     if (
-      value !== undefined &&
+      !isUnset(value) &&
       (!Number.isInteger(value) || value < min || value > MAX_TIMER_DELAY_MS)
     ) {
       refuseOption(option, 'not an integer in range', value, {
@@ -358,7 +387,8 @@ function validateConnectionNumbers(
     ]
   ] as const
   for (const [option, value, min, max, why] of ranges) {
-    const unset = value === undefined
+    // `null` is unset too, except for `maxRetriesPerRequest`, where it is the driver's "retry forever".
+    const unset = option === 'maxRetriesPerRequest' ? value === undefined : isUnset(value)
     const inRange =
       typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
     if (!unset && !inRange) {
@@ -376,12 +406,12 @@ function validateConnectionNumbers(
  * fraction, an infinity or a delay above 2^31-1 ms is stored as 1 ms, so the timer fires at once.
  *
  * @param option - The option name, echoed in the error details.
- * @param value - The configured delay in milliseconds; `undefined` means the option is unset.
+ * @param value - The configured delay in milliseconds; `undefined` or `null` means the option is unset.
  * @param min - The smallest accepted delay.
  * @throws {CacheException} `INVALID_OPTIONS` when the value is not a finite integer within range or is below `min`.
  */
-function requireTimerDelay(option: string, value: number | undefined, min: number): void {
-  if (value === undefined) {
+function requireTimerDelay(option: string, value: number | null | undefined, min: number): void {
+  if (isUnset(value)) {
     return
   }
   if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
@@ -419,8 +449,12 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     allowFlushInProduction: options.allowFlushInProduction ?? false,
     isGlobal: options.isGlobal ?? true,
     scripts: options.scripts,
-    pubsubMaxConcurrentHandlers: options.pubsubMaxConcurrentHandlers,
-    pubsubMaxQueuedMessages: options.pubsubMaxQueuedMessages
+    pubsubMaxConcurrentHandlers: isUnset(options.pubsubMaxConcurrentHandlers)
+      ? undefined
+      : options.pubsubMaxConcurrentHandlers,
+    pubsubMaxQueuedMessages: isUnset(options.pubsubMaxQueuedMessages)
+      ? undefined
+      : options.pubsubMaxQueuedMessages
   }
   // The three connection shapes carry the Redis credentials — a `url` holds the
   // password inline, and the discrete forms hold it as a field. This object is
