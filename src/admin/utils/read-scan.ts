@@ -71,7 +71,9 @@ export async function scanUpTo(
     // A name already seen keeps its first value, and the new ones follow in the order they came.
     found = new Map([...found, ...page.entries.filter(([name]) => !found.has(name))])
     cursor = page.cursor
-    isReadable = page.unreadable !== true
+    if (page.unreadable) {
+      isReadable = false
+    }
     if (cursor === '0' || found.size > limit) {
       break
     }
