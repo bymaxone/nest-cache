@@ -13,6 +13,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
   **Apply to a consumer:** a host that set `undefined` in `cluster.options.redisOptions` to drop a bound now gets the default bound back; give the option an explicit value instead. A host that passed `null` for `port`, `db`, `keepAlive`, `connectTimeout`, `commandTimeout` or a Pub/Sub bound, which was refused at boot, now boots with the default. A host that passed `null` for a credential or tls field, which before reached the driver as it was, now fails at boot with `cache.invalid_options` (`details.received` is `'null'`): pass `undefined`, or omit the field, when no credential is meant, and fix the loading of the secret otherwise. `maxRetriesPerRequest: null` is unchanged: refused.
 
+- The refusal of `connectTimeout` or `commandTimeout` now names the option with its group, like every other numeric option: `connection.connectTimeout` and `cluster.options.redisOptions.connectTimeout` (and the same for `commandTimeout`) in `details.option` and in `details.reason`. Before, both groups reported the bare name, so a host that set the timer in a cluster's node options was told about an option it had not written. `shutdownTimeoutMs` is a top-level option and keeps its name.
+
+  **Apply to a consumer:** a host or a test that matches on `details.option` or `details.reason` of a timer refusal (`'connectTimeout too low'`, `option: 'commandTimeout'`) matches the prefixed text instead (`'connection.connectTimeout too low'`); the codes, the accepted ranges and what is refused are unchanged.
+
 ## [1.2.26] - 2026-11-17
 
 ### Changed
