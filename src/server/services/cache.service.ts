@@ -218,7 +218,7 @@ export class CacheService {
   }
 
   /**
-   * Deletes many keys under the same prefix in one round trip.
+   * Deletes many keys under the same prefix.
    *
    * @param prefix - Entity-group prefix shared by every id.
    * @param ids - Entity ids to delete. An empty list is a no-op (no Redis call).
@@ -357,7 +357,7 @@ export class CacheService {
   }
 
   /**
-   * Writes many `[id, value]` pairs under the same prefix in one round trip.
+   * Writes many `[id, value]` pairs under the same prefix.
    *
    * @typeParam T - The values' static type.
    * @param prefix - Entity-group prefix shared by every entry.
