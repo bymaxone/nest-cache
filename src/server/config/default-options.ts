@@ -27,7 +27,7 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { isUnset } from './is-unset'
-import { refuseOption } from './refuse-option'
+import { refuseOption, refuseValue } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 
 /**
@@ -126,49 +126,37 @@ function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
  *   code unit (an astral character or an unpaired surrogate), or a glob metacharacter.
  */
 function validateSeparator(separator: string, keyEscaping: string): void {
+  const refuse = (problem: string, bounds?: Readonly<Record<string, number | string>>): never =>
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'keySeparator', problem, separator, bounds)
   // Checked before the namespace `includes` guard, which would otherwise absorb this
   // case: `'anything'.includes('')` is true for every string, so an empty
   // separator used to be rejected by a check written for a different condition
   // and reported as "namespace contains key separator" — something the consumer
   // did not do.
   if (separator === '') {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'empty key separator',
-      separator
-    })
+    refuse('is empty')
   }
   if (keyEscaping !== 'legacy' && keyEscaping !== 'strict') {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'unknown keyEscaping',
-      keyEscaping
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'keyEscaping', 'is unknown', keyEscaping, {
+      allowed: 'legacy or strict'
     })
   }
   // Only under strict: legacy never rewrites a part, so the escape character cannot reappear inside
   // one, and a configuration that boots today must keep booting.
   if (keyEscaping === 'strict' && separator.includes(ESCAPE_CHAR)) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'key separator contains the escape character',
-      separator
-    })
+    refuse('contains the escape character')
   }
   // Only under strict. An astral character is two surrogate code units, and a pattern holding the
   // pair or one half of it cannot be judged exactly against the ids strict stores (a lone surrogate
   // reaches Redis as U+FFFD, a pair is escaped whole), so the separator is asked to be BMP.
   if (keyEscaping === 'strict' && /[\ud800-\udfff]/.test(separator)) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'key separator contains a surrogate code unit',
-      separator
-    })
+    refuse('contains a surrogate code unit')
   }
   // Only under strict, like the `%` rule above. A glob character in the separator widens every
   // pattern built from it, `flushNamespace`'s `{namespace}{separator}*` included.
   const separatorGlob = keyEscaping === 'strict' ? findGlobMetacharacter(separator) : null
   if (separatorGlob !== null) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'key separator contains glob metacharacter',
-      separator,
-      metacharacter: separatorGlob
-    })
+    refuse('contains glob metacharacter', { metacharacter: separatorGlob })
   }
 }
 
@@ -179,28 +167,39 @@ function validateSeparator(separator: string, keyEscaping: string): void {
  * @param namespace - The resolved namespace.
  * @param separator - The resolved key separator.
  * @param keyEscaping - The resolved key composition mode.
- * @throws {CacheException} `INVALID_NAMESPACE` when the namespace is empty or contains a Redis glob
- *   metacharacter or the separator, or when {@link validateSeparator} refuses the separator.
+ * @throws {CacheException} `INVALID_NAMESPACE` when the namespace or the separator is not a string,
+ *   the namespace is empty or contains a Redis glob metacharacter or the separator, or when
+ *   {@link validateSeparator} refuses the separator. The details name the option and the type
+ *   received, never the value.
  */
 function validateNamespace(namespace: string, separator: string, keyEscaping: string): void {
-  if (!namespace || namespace.trim() === '') {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, { namespace })
+  if (typeof namespace !== 'string') {
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'namespace', 'must be a string', namespace)
+  }
+  if (typeof separator !== 'string') {
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'keySeparator', 'must be a string', separator)
+  }
+  if (namespace.trim() === '') {
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'namespace', 'is empty', namespace)
   }
   validateSeparator(separator, keyEscaping)
   const metacharacter = findGlobMetacharacter(namespace)
   if (metacharacter !== null) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'namespace contains glob metacharacter',
+    refuseValue(
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      'namespace',
+      'contains glob metacharacter',
       namespace,
-      metacharacter
-    })
+      { metacharacter }
+    )
   }
   if (namespace.includes(separator)) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'namespace contains key separator',
-      namespace,
-      separator
-    })
+    refuseValue(
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      'namespace',
+      'contains key separator',
+      namespace
+    )
   }
 }
 

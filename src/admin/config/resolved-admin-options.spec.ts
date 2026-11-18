@@ -121,7 +121,11 @@ describe('resolveAdminOptions', () => {
     expectCode(
       () => resolveAdminOptions({ scopes: SCOPES, scanRoundsLimit: value }),
       CACHE_ERROR_CODES.INVALID_SCOPE,
-      { reason: 'threshold must be positive', option: 'scanRoundsLimit', value }
+      {
+        reason: 'scanRoundsLimit must be a positive integer',
+        option: 'scanRoundsLimit',
+        received: Number.isFinite(value) ? value : String(value)
+      }
     )
   })
 
@@ -129,7 +133,12 @@ describe('resolveAdminOptions', () => {
     expectCode(
       () => resolveAdminOptions({ scopes: SCOPES, scanRoundsLimit: 10_001 }),
       CACHE_ERROR_CODES.INVALID_SCOPE,
-      { reason: 'threshold too large', option: 'scanRoundsLimit', value: 10_001, max: 10_000 }
+      {
+        reason: 'scanRoundsLimit is too large',
+        option: 'scanRoundsLimit',
+        received: 10_001,
+        max: 10_000
+      }
     )
   })
 
@@ -140,9 +149,9 @@ describe('resolveAdminOptions', () => {
       () => resolveAdminOptions({ scopes: SCOPES, probeTimeoutMs: 2 ** 31 }),
       CACHE_ERROR_CODES.INVALID_SCOPE,
       {
-        reason: 'timer delay too large',
+        reason: 'probeTimeoutMs is too large',
         option: 'probeTimeoutMs',
-        value: 2 ** 31,
+        received: 2 ** 31,
         max: 2 ** 31 - 1
       }
     )
@@ -154,7 +163,7 @@ describe('resolveAdminOptions', () => {
     ).toBe(2 ** 31 - 1)
   })
 
-  // The rejection names the option and the value, so a consumer fixes the line
+  // The rejection names the option and the number received, so a consumer fixes the line
   // they wrote rather than searching for it.
   it('names the offending option and value', () => {
     try {
@@ -162,9 +171,9 @@ describe('resolveAdminOptions', () => {
     } catch (error) {
       expect((error as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_SCOPE)
       expect((error as CacheException).details).toEqual({
-        reason: 'threshold must be positive',
+        reason: 'scanLimit must be a positive integer',
         option: 'scanLimit',
-        value: 0
+        received: 0
       })
     }
     expect.hasAssertions()
@@ -184,7 +193,7 @@ describe('resolveAdminOptions', () => {
     expectCode(
       () => resolveAdminOptions({ scopes: SCOPES, [option]: 0 }),
       CACHE_ERROR_CODES.INVALID_SCOPE,
-      { reason: 'threshold must be positive', option, value: 0 }
+      { reason: `${option} must be a positive integer`, option, received: 0 }
     )
   })
 

@@ -153,3 +153,97 @@ describe('INVALID_OPTIONS sites in default-options.ts', () => {
     expect(source.match(/CACHE_ERROR_CODES\.INVALID_OPTIONS/g)).toHaveLength(1)
   })
 })
+
+/** A value of each kind a host can hand over, every one carrying the sentinel where it can. */
+const HOLDERS: ReadonlyArray<readonly [string, unknown, number | string]> = [
+  ['a symbol', Symbol(SENTINEL), 'a symbol'],
+  ['a function', Object.defineProperty(() => 1, 'name', { value: SENTINEL }), 'a function'],
+  ['an object', { token: SENTINEL }, 'an object'],
+  ['an array', [SENTINEL], 'an array'],
+  ['a boolean', true, 'a boolean'],
+  ['a number', 42, 42]
+]
+
+/** Every key and namespace option, with how to refuse it by value and by a string that carries the sentinel. */
+const NAMESPACE_SPELLINGS: ReadonlyArray<
+  readonly [string, (value: unknown) => BymaxCacheModuleOptions, readonly string[]]
+> = [
+  [
+    'namespace',
+    (v) => ({ connection: { host: 'h' }, namespace: v }) as never,
+    [`${SENTINEL}*`, `${SENTINEL}?`, `${SENTINEL}[`, `${SENTINEL}\\`, `${SENTINEL}:x`]
+  ],
+  ['keySeparator', (v) => ({ connection: { host: 'h' }, keySeparator: v }) as never, ['']],
+  [
+    'keySeparator under strict',
+    (v) => ({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: v }) as never,
+    [`${SENTINEL}%`, `${SENTINEL}*`, `${SENTINEL}\ud800`, `${SENTINEL}\u{1F600}`]
+  ],
+  [
+    'keyEscaping',
+    (v) => ({ connection: { host: 'h' }, keyEscaping: v }) as never,
+    [`${SENTINEL}-mode`]
+  ]
+]
+
+describe.each(NAMESPACE_SPELLINGS)(
+  'INVALID_NAMESPACE refusal details of %s',
+  (name, build, strings) => {
+    const option = name.split(' ')[0] as string
+
+    // Scenario: the option holds a string carrying the sentinel that the rules refuse.
+    // Rule: the refusal names the option and `a string`; no part of the string appears anywhere.
+    it.each(strings)('names a refused string %j and echoes none of it', (value) => {
+      const error = refusal(build(value))
+
+      expect(error).toBeInstanceOf(CacheException)
+      expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+      expect(error?.details).toMatchObject({ option, received: 'a string' })
+      for (const key of ['namespace', 'separator', 'keyEscaping', 'value']) {
+        expect(error?.details).not.toHaveProperty(key)
+      }
+      for (const rendered of [
+        JSON.stringify(error),
+        String(error?.message),
+        inspect(error, { depth: 9 })
+      ]) {
+        expect(rendered).not.toContain('SENTINEL')
+      }
+    })
+
+    // Scenario: the option holds something that is not a string.
+    // Rule: a refusal, never a TypeError from a string method, naming the type and echoing none of it.
+    it.each(HOLDERS)(
+      'refuses %s with a CacheException that names its type',
+      (_label, value, received) => {
+        const error = refusal(build(value))
+
+        expect(error).toBeInstanceOf(CacheException)
+        expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+        expect(error?.details).toMatchObject({
+          reason: `${option} ${option === 'keyEscaping' ? 'is unknown' : 'must be a string'}`,
+          option,
+          received
+        })
+        for (const rendered of [
+          JSON.stringify(error),
+          String(error?.message),
+          inspect(error, { depth: 9 })
+        ]) {
+          expect(rendered).not.toContain('SENTINEL')
+        }
+      }
+    )
+  }
+)
+
+describe('INVALID_NAMESPACE sites in default-options.ts', () => {
+  // Scenario: a namespace or separator refusal is added to default-options.ts.
+  // Rule: it goes through refuseValue, the one place that describes the value, so none builds a
+  // details object that could carry it.
+  it('throws INVALID_NAMESPACE only through refuseValue', () => {
+    const source = readFileSync(join(__dirname, 'default-options.ts'), 'utf8')
+
+    expect(source).not.toMatch(/new CacheException\(\s*CACHE_ERROR_CODES\.INVALID_NAMESPACE/)
+  })
+})
