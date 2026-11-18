@@ -3,7 +3,8 @@
  *
  * Layer: admin. The reply comes back through `call`, so it is `unknown`. It is read the way the
  * sorted-set reply is, for both wire shapes: a flat alternating sequence under RESP2 and pairs
- * under RESP3, and a page that is not an array is an empty page that ends the scan.
+ * under RESP3. A page that is not an array ends the scan and is marked unreadable, so that what was
+ * read is never reported as everything there is, and an unreadable first page is not a deleted key.
  */
 
 import { REVEAL_SCAN_CALLS_LIMIT } from '../constants/admin-defaults'
@@ -14,6 +15,8 @@ export interface ScanPage {
   readonly cursor: string
   /** The page's members, or its field and value pairs for a hash. */
   readonly entries: readonly (readonly [string, string])[]
+  /** `true` when the reply was not a page: the scan stops there without having reached its end. */
+  readonly unreadable?: true
 }
 
 /**
@@ -22,11 +25,11 @@ export interface ScanPage {
  * @param reply - Whatever the server answered.
  * @param paired - `true` for `HSCAN`, whose elements are fields and values; `false` for `SSCAN`,
  *   whose elements are members, reported with an empty second slot.
- * @returns The page; an unreadable reply is an empty page with cursor `"0"`.
+ * @returns The page; an unreadable reply is an empty page with cursor `"0"`, marked `unreadable`.
  */
 export function readScanPage(reply: unknown, paired: boolean): ScanPage {
   if (!Array.isArray(reply) || !Array.isArray(reply[1])) {
-    return { cursor: '0', entries: [] }
+    return { cursor: '0', entries: [], unreadable: true }
   }
   const entries: [string, string][] = []
   let pendingField: string | null = null
@@ -62,14 +65,19 @@ export async function scanUpTo(
 ): Promise<{ entries: [string, string][]; isComplete: boolean }> {
   let found = new Map<string, string>()
   let cursor = '0'
+  let isReadable = true
   for (let call = 0; call < REVEAL_SCAN_CALLS_LIMIT; call += 1) {
     const page = readScanPage(await fetch(cursor), paired)
     // A name already seen keeps its first value, and the new ones follow in the order they came.
     found = new Map([...found, ...page.entries.filter(([name]) => !found.has(name))])
     cursor = page.cursor
+    isReadable = page.unreadable !== true
     if (cursor === '0' || found.size > limit) {
       break
     }
   }
-  return { entries: [...found].slice(0, limit), isComplete: cursor === '0' && found.size <= limit }
+  return {
+    entries: [...found].slice(0, limit),
+    isComplete: isReadable && cursor === '0' && found.size <= limit
+  }
 }
