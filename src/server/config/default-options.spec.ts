@@ -179,12 +179,12 @@ describe('validateOptions', () => {
   })
 
   // An empty-string namespace must throw INVALID_NAMESPACE — keys would lose
-  // their isolation prefix. Pins the `{ namespace }` details payload.
+  // their isolation prefix. The details name the option and the type received, never the value.
   it('rejects an empty-string namespace', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h' }, namespace: '' }),
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
-      { namespace: '' }
+      { reason: 'namespace is empty', option: 'namespace', received: 'a string' }
     )
   })
 
@@ -206,8 +206,8 @@ describe('validateOptions', () => {
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
       {
         reason: 'namespace contains key separator',
-        namespace: 'a:b',
-        separator: DEFAULT_KEY_SEPARATOR
+        option: 'namespace',
+        received: 'a string'
       }
     )
   })
@@ -223,7 +223,8 @@ describe('validateOptions', () => {
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
       {
         reason: 'namespace contains glob metacharacter',
-        namespace: 'ten*ant',
+        option: 'namespace',
+        received: 'a string',
         metacharacter: '*'
       }
     )
@@ -237,7 +238,8 @@ describe('validateOptions', () => {
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
       {
         reason: 'namespace contains glob metacharacter',
-        namespace: 'ten?ant',
+        option: 'namespace',
+        received: 'a string',
         metacharacter: '?'
       }
     )
@@ -253,7 +255,8 @@ describe('validateOptions', () => {
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
       {
         reason: 'namespace contains glob metacharacter',
-        namespace: 'ten[ant',
+        option: 'namespace',
+        received: 'a string',
         metacharacter: '['
       }
     )
@@ -268,7 +271,8 @@ describe('validateOptions', () => {
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
       {
         reason: 'namespace contains glob metacharacter',
-        namespace: 'ten\\ant',
+        option: 'namespace',
+        received: 'a string',
         metacharacter: '\\'
       }
     )
@@ -291,7 +295,7 @@ describe('validateOptions', () => {
     expectCode(
       () => validateOptions({ connection: { host: 'h' }, keySeparator: '' }),
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
-      { reason: 'empty key separator', separator: '' }
+      { reason: 'keySeparator is empty', option: 'keySeparator', received: 'a string' }
     )
   })
 
@@ -305,7 +309,12 @@ describe('validateOptions', () => {
           keyEscaping: 'Strict' as unknown as 'strict'
         }),
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
-      { reason: 'unknown keyEscaping', keyEscaping: 'Strict' }
+      {
+        reason: 'keyEscaping is unknown',
+        option: 'keyEscaping',
+        received: 'a string',
+        allowed: 'legacy or strict'
+      }
     )
   })
 
@@ -316,13 +325,21 @@ describe('validateOptions', () => {
       () =>
         validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: '%' }),
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
-      { reason: 'key separator contains the escape character', separator: '%' }
+      {
+        reason: 'keySeparator contains the escape character',
+        option: 'keySeparator',
+        received: 'a string'
+      }
     )
     expectCode(
       () =>
         validateOptions({ connection: { host: 'h' }, keyEscaping: 'strict', keySeparator: 'a%b' }),
       CACHE_ERROR_CODES.INVALID_NAMESPACE,
-      { reason: 'key separator contains the escape character', separator: 'a%b' }
+      {
+        reason: 'keySeparator contains the escape character',
+        option: 'keySeparator',
+        received: 'a string'
+      }
     )
   })
 
@@ -360,8 +377,9 @@ describe('validateOptions', () => {
       expect(caught).toBeInstanceOf(CacheException)
       expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
       expect((caught as CacheException).details).toEqual({
-        reason: 'key separator contains glob metacharacter',
-        separator,
+        reason: 'keySeparator contains glob metacharacter',
+        option: 'keySeparator',
+        received: 'a string',
         metacharacter: separator.includes('*') ? '*' : separator
       })
       expect((caught as Error).message).toContain('glob metacharacter')
@@ -388,8 +406,9 @@ describe('validateOptions', () => {
       expect(caught).toBeInstanceOf(CacheException)
       expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
       expect((caught as CacheException).details).toEqual({
-        reason: 'key separator contains a surrogate code unit',
-        separator
+        reason: 'keySeparator contains a surrogate code unit',
+        option: 'keySeparator',
+        received: 'a string'
       })
       expect((caught as Error).message).toContain('unpaired surrogate')
     }

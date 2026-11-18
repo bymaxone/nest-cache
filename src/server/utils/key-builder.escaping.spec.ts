@@ -203,8 +203,9 @@ describe('KeyBuilder key escaping', () => {
         expect(caught).toBeInstanceOf(CacheException)
         expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
         expect((caught as CacheException).details).toEqual({
-          reason: 'key separator contains glob metacharacter',
-          separator,
+          reason: 'keySeparator contains glob metacharacter',
+          option: 'keySeparator',
+          received: 'a string',
           metacharacter: separator.includes('*') ? '*' : separator
         })
         expect((caught as Error).message).toContain('keyEscaping')
@@ -489,8 +490,9 @@ describe('KeyBuilder key escaping', () => {
       expect(caught).toBeInstanceOf(CacheException)
       expect((caught as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
       expect((caught as CacheException).details).toEqual({
-        reason: 'key separator contains the escape character',
-        separator: '%'
+        reason: 'keySeparator contains the escape character',
+        option: 'keySeparator',
+        received: 'a string'
       })
     })
 

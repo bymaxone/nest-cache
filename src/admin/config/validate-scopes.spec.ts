@@ -55,9 +55,9 @@ describe('validateScopes', () => {
     'rejects the pattern %s',
     (pattern) => {
       expectCode(() => validateScopes([scope({ pattern })]), CACHE_ERROR_CODES.INVALID_SCOPE, {
-        reason: 'pattern must be a literal prefix optionally followed by *',
-        scopeId: 'cache',
-        pattern
+        reason: 'scopes[0].pattern must be a literal prefix optionally followed by *',
+        option: 'scopes[0].pattern',
+        received: 'a string'
       })
     }
   )
@@ -87,7 +87,11 @@ describe('validateScopes', () => {
     expectCode(
       () => validateScopes([scope(), scope({ pattern: 'other:*' })]),
       CACHE_ERROR_CODES.INVALID_SCOPE,
-      { reason: 'duplicate scope id', scopeId: 'cache' }
+      {
+        reason: 'scopes[1].id duplicates scopes[0].id',
+        option: 'scopes[1].id',
+        received: 'a string'
+      }
     )
   })
 
@@ -98,7 +102,7 @@ describe('validateScopes', () => {
     expectCode(
       () => validateScopes([scope({ [field]: '' } as Partial<CacheScope>)]),
       CACHE_ERROR_CODES.INVALID_SCOPE,
-      { reason: 'empty scope field', field, scopeId: field === 'id' ? '' : 'cache' }
+      { reason: `scopes[0].${field} is empty`, option: `scopes[0].${field}`, received: 'a string' }
     )
   })
 
@@ -107,7 +111,9 @@ describe('validateScopes', () => {
   // see from the payload.
   it('rejects an empty scope list', () => {
     expectCode(() => validateScopes([]), CACHE_ERROR_CODES.INVALID_SCOPE, {
-      reason: 'no scopes declared'
+      reason: 'scopes is empty',
+      option: 'scopes',
+      received: 'an array'
     })
   })
 
