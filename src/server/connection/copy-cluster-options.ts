@@ -11,8 +11,7 @@ import type { ClusterOptions } from 'ioredis'
 
 type ClusterRedisOptions = NonNullable<ClusterOptions['redisOptions']>
 
-// Stryker disable BooleanLiteral: the values of the two records below are all `true` and only their keys
-// are read, so flipping a value changes nothing; the keys are the list, and the type checks it is complete.
+// Stryker disable BooleanLiteral: only the keys of the two records below are read, so flipping a `true` value changes nothing
 /**
  * Every key of ioredis `ClusterOptions`. Typed as a complete record, so a key the driver adds fails
  * the type check here instead of being dropped.
