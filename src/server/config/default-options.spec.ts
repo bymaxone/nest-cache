@@ -545,11 +545,16 @@ describe('validateOptions', () => {
 
     expect(thrown).toBeInstanceOf(CacheException)
     expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-    const reason =
+    const option = `cluster.options.redisOptions.${field}`
+    const problem =
       typeof value === 'number' && Number.isInteger(value) && value < 2 ** 31
-        ? `${field} too low`
-        : `${field} not a valid timer delay`
-    expect((thrown as CacheException).details).toMatchObject({ received: shown(value), reason })
+        ? 'too low'
+        : 'not a valid timer delay'
+    expect((thrown as CacheException).details).toMatchObject({
+      received: shown(value),
+      reason: `${option} ${problem}`,
+      option
+    })
   })
 
   // The valid cluster settings still pass.
@@ -597,8 +602,8 @@ describe('validateOptions', () => {
       () => validateOptions({ connection: { host: 'h', connectTimeout: 50 } }),
       CACHE_ERROR_CODES.INVALID_OPTIONS,
       {
-        reason: 'connectTimeout too low',
-        option: 'connectTimeout',
+        reason: 'connection.connectTimeout too low',
+        option: 'connection.connectTimeout',
         received: 50,
         min: MIN_CONNECT_TIMEOUT_MS
       }
@@ -633,9 +638,10 @@ describe('validateOptions', () => {
       field === 'shutdownTimeoutMs'
         ? { connection: { host: 'h' }, shutdownTimeoutMs: value }
         : { connection: { host: 'h', [field]: value } }
+    const option = field === 'shutdownTimeoutMs' ? field : `connection.${field}`
     expectCode(() => validateOptions(options), CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: `${field} not a valid timer delay`,
-      option: field,
+      reason: `${option} not a valid timer delay`,
+      option,
       received: shown(value),
       max: MAX_TIMER_DELAY_MS
     })
@@ -658,8 +664,8 @@ describe('validateOptions', () => {
       () => validateOptions({ connection: { host: 'h', commandTimeout: value } }),
       CACHE_ERROR_CODES.INVALID_OPTIONS,
       {
-        reason: 'commandTimeout too low',
-        option: 'commandTimeout',
+        reason: 'connection.commandTimeout too low',
+        option: 'connection.commandTimeout',
         received: value,
         min: MIN_COMMAND_TIMEOUT_MS
       }

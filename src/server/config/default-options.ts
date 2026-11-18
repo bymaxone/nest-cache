@@ -232,6 +232,24 @@ function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
 }
 
 /**
+ * Validates the connect and command timers of one option group.
+ *
+ * @param group - The group's path, prefixed to each option name in the error.
+ * @param source - The group's options; `undefined` or `null` means the group is absent.
+ * @throws {CacheException} `INVALID_OPTIONS` when a timer is out of range.
+ */
+function requireTimers(
+  group: string,
+  source:
+    | { connectTimeout?: number | null | undefined; commandTimeout?: number | null | undefined }
+    | null
+    | undefined
+): void {
+  requireTimerDelay(`${group}.connectTimeout`, source?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
+  requireTimerDelay(`${group}.commandTimeout`, source?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+}
+
+/**
  * Validates the cluster-specific options.
  *
  * @param options - The raw consumer options, already known to carry a `cluster` block.
@@ -254,8 +272,7 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
     }
   }
   const redisOptions = options.cluster?.options?.redisOptions
-  requireTimerDelay('connectTimeout', redisOptions?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
-  requireTimerDelay('commandTimeout', redisOptions?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  requireTimers('cluster.options.redisOptions', redisOptions)
   validateConnectionNumbers('cluster.options.redisOptions', redisOptions)
 }
 
@@ -298,8 +315,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
     options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
     MIN_SHUTDOWN_TIMEOUT_MS
   )
-  requireTimerDelay('connectTimeout', options.connection?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
-  requireTimerDelay('commandTimeout', options.connection?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  requireTimers('connection', options.connection)
   validateConnectionNumbers(
     'connection',
     options.connection,
@@ -405,7 +421,7 @@ function validateConnectionNumbers(
  * Rejects a timeout that `setTimeout` would not honour or that is below its minimum: `NaN`, a
  * fraction, an infinity or a delay above 2^31-1 ms is stored as 1 ms, so the timer fires at once.
  *
- * @param option - The option name, echoed in the error details.
+ * @param option - The option's full name, group prefix included, echoed in the error details.
  * @param value - The configured delay in milliseconds; `undefined` or `null` means the option is unset.
  * @param min - The smallest accepted delay.
  * @throws {CacheException} `INVALID_OPTIONS` when the value is not a finite integer within range or is below `min`.
