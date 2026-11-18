@@ -220,7 +220,11 @@ describe.each(NAMESPACE_SPELLINGS)(
 
         expect(error).toBeInstanceOf(CacheException)
         expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
-        expect(error?.details).toMatchObject({ option, received })
+        expect(error?.details).toMatchObject({
+          reason: `${option} ${option === 'keyEscaping' ? 'is unknown' : 'must be a string'}`,
+          option,
+          received
+        })
         for (const rendered of [
           JSON.stringify(error),
           String(error?.message),

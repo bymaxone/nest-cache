@@ -58,7 +58,11 @@ describe('scope field refusals', () => {
   // Rule: INVALID_SCOPE naming the field by position and the type received, never a TypeError and
   // never the value.
   describe.each(['id', 'label', 'pattern', 'origin'])('%s', (field) => {
-    it.each(HOLDERS.filter(([label]) => label !== 'a string'))(
+    it.each([
+      ...HOLDERS.filter(([label]) => label !== 'a string'),
+      ['undefined', undefined, 'undefined'],
+      ['null', null, 'null']
+    ] as ReadonlyArray<readonly [string, unknown, number | string]>)(
       'refuses %s',
       (_label, value, received) => {
         const error = refusal(() => validateScopes([{ ...SCOPE, [field]: value } as never]))
