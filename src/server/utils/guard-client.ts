@@ -26,7 +26,7 @@ const OFFLINE = "Stream isn't writeable and enableOfflineQueue options is false"
  * @returns `COMMAND_TIMEOUT` for ioredis's timeout, `CONNECTION_LOST` (`reason: 'offline'`) for its
  *   offline rejection, otherwise `error` itself.
  */
-function mapCommandFailure(error: unknown): unknown {
+export function mapCommandFailure(error: unknown): unknown {
   if (!(error instanceof Error)) {
     return error
   }

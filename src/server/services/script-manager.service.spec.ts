@@ -85,6 +85,24 @@ describe('ScriptManagerService', () => {
     expect(result).toEqual(['ok'])
   })
 
+  // Scenario: a call whose keys and arguments together pass the documented maximum, and one at it.
+  // Rule: the call is refused with the script name and the maximum, before any command is sent, since
+  // a spread of a longer list overflows the call stack; a list at the maximum goes through.
+  it('refuses more keys and arguments than the maximum, and accepts the maximum', async () => {
+    const keys = Array.from({ length: 15_000 }, (_, index) => `k${index}`)
+    const args = Array.from({ length: 10_000 }, (_, index) => index)
+
+    await expect(registry.eval('cas', keys, [...args, 1])).rejects.toMatchObject({
+      code: CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED,
+      details: { name: 'cas', reason: 'too many keys and arguments', max: 25_000 }
+    })
+    expect(script).not.toHaveBeenCalled()
+    expect(evalsha).not.toHaveBeenCalled()
+
+    await expect(registry.eval('cas', keys, args)).resolves.toEqual(['ok'])
+    expect(evalsha.mock.calls[0]).toHaveLength(3 + keys.length + args.length - 1)
+  })
+
   // When the SHA is already cached, eval must skip the load (the `?? load` branch).
   it('reuses a cached SHA on eval without reloading', async () => {
     await registry.load('cas')

@@ -42,7 +42,7 @@ const ROOT = pkg.root
 // reason stated here. Measured sizes are taken after the comments are stripped. A comment that
 // explains a suppression lives in the source next to the code, where it ships with the bundle.
 //
-// The server budget (13 162 B) covers the key escape (the token writer and decoder, the escape sets
+// The server budget (13 466 B) covers the key escape (the token writer and decoder, the escape sets
 // and the `KeyBuilder` helpers), the read-validation routing, the timer-delay checks, the
 // command-failure mapping, the scan hint clamp, the shared client guard and the error catalog, the
 // refusal of a client after a failed boot, the short `disconnectTimeout` every client is created
@@ -59,6 +59,9 @@ const ROOT = pkg.root
 // gets, with the copy that reads them by property access. The copy also forwards every own key the lists do not name. The null option group is read as absent, and the `why` that only the two refusals with a
 // distinct cause carry. It also covers the refusal of a namespace, a separator or a key escaping
 // mode through the same helper, which reports the option and the type received and never the value.
+// It also covers the sending of a host-sized array in parts (the chunker, the one transaction a long
+// `mset` runs in and the reporting of its failures) and the refusal of an `eval` with more keys and
+// arguments than a call can carry.
 //
 // The admin budget (5 931 B) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
@@ -73,7 +76,7 @@ const ROOT = pkg.root
 // threshold by option name and received type, which restates the server's describing rule because the
 // admin entry reaches the server only through its public surface.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 13_162 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 13_466 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_931 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }

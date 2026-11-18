@@ -25,6 +25,8 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { chunkOf, MAX_COMMAND_ARGUMENTS } from '../utils/chunk'
+import { execTransaction } from '../utils/exec-transaction'
 import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
@@ -227,7 +229,11 @@ export class CacheService {
       return 0
     }
     const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
-    return this.client().del(...keys)
+    let removed = 0
+    for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
+      removed += await this.client().del(...part)
+    }
+    return removed
   }
 
   /**
@@ -338,7 +344,10 @@ export class CacheService {
       return []
     }
     const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
-    const values = await this.client().mget(...keys)
+    const values: Array<string | null> = []
+    for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
+      values.push(...(await this.client().mget(...part)))
+    }
     const decoded: Array<T | null> = []
     // One at a time, in order, so the element a failure names is the first bad one.
     for (const [index, value] of values.entries()) {
@@ -364,7 +373,15 @@ export class CacheService {
     for (const [id, value] of entries) {
       pairs.push(this.keyBuilder.build(prefix, id), this.serializer.serialize(value))
     }
-    await this.client().mset(...pairs)
+    if (pairs.length <= MAX_COMMAND_ARGUMENTS) {
+      await this.client().mset(...pairs)
+      return
+    }
+    const transaction = this.client().multi()
+    for (const part of chunkOf(pairs, MAX_COMMAND_ARGUMENTS)) {
+      transaction.mset(...part)
+    }
+    await execTransaction(transaction)
   }
 
   // ─── Hash commands ─────────────────────────────────────────────────────────
