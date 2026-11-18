@@ -45,11 +45,12 @@ describe('readScanPage', () => {
   })
 
   // Scenario: a numeric cursor, a reply that is not an array, and a reply whose elements are not.
-  // Rule: the cursor is a string, and anything unreadable ends the scan with nothing.
+  // Rule: the cursor is a string, and anything unreadable ends the scan with nothing, marked unreadable
+  // so the scan does not report that it finished.
   it.each([[null], ['OK'], [[]], [['5', 'not-an-array']]])(
     'treats an unreadable reply %p as an empty page that ends the scan',
     (reply) => {
-      expect(readScanPage(reply, true)).toEqual({ cursor: '0', entries: [] })
+      expect(readScanPage(reply, true)).toEqual({ cursor: '0', entries: [], unreadable: true })
     }
   )
 

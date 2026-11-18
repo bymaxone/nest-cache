@@ -754,10 +754,10 @@ Every arm except `unsupported` carries `isComplete`; `false` means the value was
 
 A reveal reads only a bounded part of a value, however large the value is: a string with one `GETRANGE` of four bytes per
 character of `revealStringLimit`, a hash or a set with `HSCAN` or `SSCAN` followed until one more than `revealLimit` entries
-were seen (a bounded number of calls, after which the value is reported incomplete), a list and a sorted set with a range of
+were seen (a bounded number of calls, after which the value is reported incomplete, as it is when a page cannot be read), a list and a sorted set with a range of
 `revealLimit`. The entries of a large set or hash come in the server's scan order, which can differ from the order
 `SMEMBERS` or `HGETALL` gives; none of these orders is documented by Redis. A hash, set, list or sorted set
-that is gone by the time it is read, deleted or expired after its type was asked, is reported `missing`, as for a string.
+that is gone by the time it is read, deleted or expired after its type was asked, is reported `missing`, as for a string. A reply of a shape that cannot be read, for a scan page or a sorted-set range, is never reported as everything there is: the value comes back incomplete.
 
 > [!IMPORTANT]
 > **List order is meaningful; set order is not**, and both arrive in the same `members` array. Sort for display only when `type === 'set'`.
