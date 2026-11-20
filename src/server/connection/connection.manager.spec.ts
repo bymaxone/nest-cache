@@ -488,24 +488,29 @@ describe('ConnectionManager', () => {
       expect(onEvent).toHaveBeenCalledWith('end', { role: 'main' })
     })
 
-    // With no events bag at all, emitting must not throw — covers the `events?.`
-    // nullish short-circuit.
-    it('does not throw when no events bag is supplied', () => {
+    // With no events bag at all, the connect listener is still attached and handles the event, and
+    // the manager goes on serving the same client — covers the `events?.` nullish short-circuit.
+    it('handles a connect event without an events bag and keeps the client', () => {
       const manager = makeManager({})
-      manager.getClient()
-      const client = redisInstances[0]
+      const client = manager.getClient()
 
-      expect(() => client?.emit('connect')).not.toThrow()
+      expect(redisInstances[0]?.emit('connect')).toBe(true)
+      expect(manager.getClient()).toBe(client)
     })
 
-    // With an events bag whose onEvent is undefined, emitting must not throw —
-    // covers the `onEvent?.` nullish short-circuit.
-    it('does not throw when onEvent is undefined', () => {
-      const manager = makeManager({}, {})
-      manager.getClient()
-      const client = redisInstances[0]
+    // With an events bag whose onEvent is undefined, the connect listener is still attached and
+    // handles the event, and the other hooks are not called in its place — covers the `onEvent?.`
+    // nullish short-circuit.
+    it('handles a connect event when onEvent is undefined and calls no other hook', () => {
+      const onOperation = jest.fn()
+      const onQueue = jest.fn()
+      const manager = makeManager({}, { onOperation, onQueue })
+      const client = manager.getClient()
 
-      expect(() => client?.emit('connect')).not.toThrow()
+      expect(redisInstances[0]?.emit('connect')).toBe(true)
+      expect(onOperation).not.toHaveBeenCalled()
+      expect(onQueue).not.toHaveBeenCalled()
+      expect(manager.getClient()).toBe(client)
     })
 
     // A throwing onEvent must be swallowed — observability must never crash the

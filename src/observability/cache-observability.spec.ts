@@ -207,6 +207,54 @@ describe('CacheObservability', () => {
       expect(unhandled).toEqual([])
     })
 
+    // The default Nest `Logger` drops what its methods return, so a LoggerService installed with
+    // `Logger.overrideLogger` that rejects cannot be absorbed behind it; passing it as `logger` can.
+    // Each method returns a rejected promise that records whether anyone adopted it, and whether it was
+    // given a rejection handler: what absorb reads and installs, Nest drops. (A real unhandled rejection cannot be observed here, the test runner owns that handler.)
+    describe('with a LoggerService installed through Logger.overrideLogger', () => {
+      const emitWithOverride = async (
+        useAsLogger: boolean
+      ): Promise<{ calls: number; consumed: number; handled: number }> => {
+        const previous: unknown = Reflect.get(Logger, 'staticInstanceRef')
+        const seen = { calls: 0, consumed: 0, handled: 0 }
+        const method = (): Promise<never> => {
+          seen.calls += 1
+          const rejection = Promise.reject<never>(new Error('logger down'))
+          // Handled up front, so a path that drops it cannot raise an unhandled rejection here.
+          rejection.catch(() => undefined)
+          const adopt = rejection.then.bind(rejection)
+          rejection.then = ((ok, rejected) => {
+            seen.consumed += 1
+            if (typeof rejected === 'function') {
+              seen.handled += 1
+            }
+            return adopt(ok, rejected)
+          }) as typeof rejection.then
+          return rejection
+        }
+        const service = { debug: method, log: method, warn: method, error: method }
+        try {
+          Logger.overrideLogger(service)
+          const observability = useAsLogger
+            ? new CacheObservability({ logger: service })
+            : new CacheObservability()
+          observability.events.onEvent?.('ready', { role: 'main' })
+          await new Promise((resolve) => setImmediate(resolve))
+        } finally {
+          Reflect.set(Logger, 'staticInstanceRef', previous)
+        }
+        return seen
+      }
+
+      it('is called through the default Logger, which drops what it returns', async () => {
+        expect(await emitWithOverride(false)).toEqual({ calls: 1, consumed: 0, handled: 0 })
+      })
+
+      it('has what it returns consumed and given a rejection handler when passed as the logger', async () => {
+        expect(await emitWithOverride(true)).toEqual({ calls: 1, consumed: 1, handled: 1 })
+      })
+    })
+
     it('writes through a Nest logger named BymaxCache when none is given', () => {
       const contexts: unknown[] = []
       const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(function (this: Logger) {
