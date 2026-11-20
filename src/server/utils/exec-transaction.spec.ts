@@ -57,9 +57,10 @@ describe('execTransaction', () => {
 
   // A rejection that carries no queued refusal is passed on as it is.
   it.each([
-    ['an empty list', aborted()],
-    ['no list', new Error('connection reset')]
-  ])('rejects with the error itself when it has %s', async (_case, error) => {
+    ['an Error with an empty list', aborted()],
+    ['an Error with no list', new Error('connection reset')],
+    ['a value that is not an Error', 'connection reset']
+  ])('rejects with the error itself when it is %s', async (_case, error) => {
     const failure = await execTransaction(transaction(async () => Promise.reject(error))).catch(
       (thrown: unknown) => thrown
     )
