@@ -411,8 +411,8 @@ export class CacheService extends CacheCollectionCommands {
     ids: readonly string[],
     options?: ReadOptions<T>
   ): Promise<Array<T | null>> {
-    // As for `get`: a payload that decodes to `null` is still a hit.
-    let present = false
+    // As for `get`: a payload that decodes to `null` is still a hit. Set before the classifier runs.
+    let present: boolean
     return this.track(
       'mget',
       async () => {
