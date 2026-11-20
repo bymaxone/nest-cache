@@ -20,15 +20,15 @@ function fanOut(
   bags: readonly ICacheEvents[],
   call: (bag: ICacheEvents) => unknown
 ): Promise<void> {
-  const pending: unknown[] = []
   let failure: { error: unknown } | undefined
-  for (const bag of bags) {
+  const pending = bags.map((bag): unknown => {
     try {
-      pending.push(call(bag))
+      return call(bag)
     } catch (error) {
       failure ??= { error }
+      return undefined
     }
-  }
+  })
   const settled = Promise.all(pending).then(() => undefined)
   if (failure !== undefined) {
     settled.catch(() => undefined)

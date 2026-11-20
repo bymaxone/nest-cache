@@ -109,6 +109,23 @@ describe('callHook', () => {
       ])
     })
 
+    it('logs a first failure that is a rejection, under a Logger named BymaxCache', async () => {
+      const contexts: unknown[] = []
+      const lines = await logged(async (fresh) => {
+        const { Logger: Fresh } = await import('@nestjs/common')
+        jest.spyOn(Fresh.prototype, 'warn').mockImplementation(function (this: object, line) {
+          contexts.push(Reflect.get(this, 'context'), line)
+        })
+        fresh('onQueue', () => Promise.reject(new Error('x')))
+      })
+
+      expect(lines).toEqual([])
+      expect(contexts).toEqual([
+        'BymaxCache',
+        { event: 'CACHE_HOOK_FAILED', message: 'A host hook failed', hook: 'onQueue' }
+      ])
+    })
+
     it('logs each hook once', async () => {
       const lines = await logged((fresh) => {
         const fail = (): never => {
