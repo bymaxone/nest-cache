@@ -30,7 +30,7 @@ export function reportOperation(
   operation: CacheOperationName,
   outcome: CacheOperationOutcome
 ): void {
-  callHook(() => events?.onOperation?.(operation, outcome))
+  callHook('onOperation', () => events?.onOperation?.(operation, outcome))
 }
 
 /**

@@ -107,6 +107,8 @@ shared (zero deps)
 
 From `@bymax-one/nest-cache/metrics`: `CacheConnectionTally`, `CacheConnectionTallyOptions`, `CacheConnectionMetrics`, the token `CACHE_CONNECTION_TALLY` and the metric names `CACHE_EVENTS_METRIC` and `CACHE_READY_METRIC`. From `@bymax-one/nest-cache/observability`: `CacheObservability`, `CacheObservabilityOptions`, `CacheObservabilityLogger`, `CacheOperationMetrics`, `CacheHealthIndicator`, `CACHE_HEALTH_INDICATOR_NAME`, `combineCacheEvents`, the token `CACHE_OBSERVABILITY`, the log codes `CACHE_LOG_EVENTS` and the metric names `CACHE_OPERATIONS_METRIC`, `CACHE_PUBSUB_QUEUED_METRIC` and `CACHE_PUBSUB_DROPPED_METRIC`.
 
+The main entry also exports `guardClient` at runtime, because `@bymax-one/nest-cache/admin` imports it from there. It is an internal export and is not supported: it is absent from the declarations, and it can change or disappear in any release.
+
 `/metrics` and `/observability` are the only entries that load `@bymax-one/nest-core` or `prom-client`, both optional peers: `.`, `/admin` and `/shared` never import either.
 
 The `/shared` subpath is safe to import in isomorphic code, test helpers, CLI scripts, or shared packages that must not pull in NestJS or ioredis.
@@ -673,11 +675,11 @@ bag is called, in order, and one that throws or rejects does not hide the event 
 
 ### Metrics
 
-| Metric                             | Type    | Labels                 | Meaning                                                                                          |
-| ---------------------------------- | ------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `bymax_cache_operations_total`     | counter | `operation`, `outcome` | Commands since start, by command and how each ended                                              |
-| `bymax_cache_pubsub_queued`        | gauge   | none                   | Pub/Sub messages waiting for a handler slot now; `0` when `pubsubMaxConcurrentHandlers` is unset |
-| `bymax_cache_pubsub_dropped_total` | counter | none                   | Pub/Sub messages dropped because every handler slot and the queue were taken                     |
+| Metric                             | Type    | Labels                 | Meaning                                                                                                                                                                                                                       |
+| ---------------------------------- | ------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bymax_cache_operations_total`     | counter | `operation`, `outcome` | Commands since start, by command and how each ended                                                                                                                                                                           |
+| `bymax_cache_pubsub_queued`        | gauge   | none                   | Pub/Sub messages waiting for a handler slot now; `0` when `pubsubMaxConcurrentHandlers` is unset                                                                                                                              |
+| `bymax_cache_pubsub_dropped_total` | counter | none                   | Pub/Sub messages dropped because every handler slot and the queue were taken; it follows the library's own report of drops, which sums those after the first over a 10 s window, so it can trail the real drops by up to 10 s |
 
 - **`operation` is a `CacheOperationName`** (exported from `/shared`). `pipeline()` and `getClient()` hand out the raw client and run no
   command of their own, so a command sent through them is not counted.
@@ -726,6 +728,9 @@ rejection, which ends the Node process (exit code 1) unless the application hand
 | `CACHE_FORCED_DISCONNECT` | `warn`  | A connection did not quit within `shutdownTimeoutMs` and was cut                         | `role`                                                   |
 | `CACHE_HANDLER_ERROR`     | `error` | A Pub/Sub handler failed, or its message could not be decoded (the failure is swallowed) | `role`, `err` (an `Error` other than a `CacheException`) |
 | `CACHE_PUBSUB_DROPPED`    | `warn`  | Messages were dropped because every handler slot and the queue were taken                | `role`, `dropped`                                        |
+| `CACHE_HOOK_FAILED`       | `warn`  | A hook of your `events` threw or rejected; only the first failure of each hook is logged | `hook` (`onEvent`, `onOperation` or `onQueue`)           |
+
+`CACHE_HOOK_FAILED` is written by the main entry through a Nest `Logger` named `BymaxCache`, once per hook for the life of the process, with the hook's name only: what the hook threw is never logged, and a later failure of the same hook is absorbed silently. Each hook receives a frozen copy of the event data made for that call, and `combineCacheEvents` gives every bag its own copy, so one hook cannot alter what another sees.
 
 ---
 

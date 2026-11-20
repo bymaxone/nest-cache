@@ -7,9 +7,18 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- A transaction discarded because a command was refused as it was queued (an `OOM` on the first chunk of a large `mset`, say) rejected with ioredis's generic `EXECABORT`, which hid the refusal. It now rejects with the first queued command's own error, mapped like any command's.
+- A host hook in `events` that threw or rejected left no trace. The first failure of each hook (`onEvent`, `onOperation`, `onQueue`) is now logged once, as `CACHE_HOOK_FAILED` with the hook's name and nothing the hook threw; a later failure of the same hook is absorbed silently. Each hook receives a frozen copy of the event data made for that call, and `combineCacheEvents` gives every bag its own copy, then raises its first failure to the module so it is logged too.
+- `CacheObservability.events.onEvent` called directly with no object (`null`, a string) threw a `TypeError`; it reads that as an empty payload.
+
+  **Apply to a consumer:** a host that matched `EXECABORT` on a failed `mset` now gets the first queued command's error instead. A hook that wrote to the `data` it received gets a `TypeError` in strict mode, which the library absorbs and logs: copy the data first. Nothing else changes.
+
 ### Documentation
 
 - A `LoggerService` installed through `Logger.overrideLogger` must not reject: Nest drops what its methods return, so a rejection is unhandled and ends the Node process (exit code 1) unless the application handles `unhandledRejection`. Pass the service as `logger` to have the library absorb it. `dist/` is unchanged.
+- `bymax_cache_pubsub_dropped_total` can trail the real drops by up to 10 s, because the library reports the drops after the first one summed over a 10 s window: the README says so. The README also names `guardClient` as an internal export that is not supported, and lists `CACHE_HOOK_FAILED`.
 
 ## [1.2.27] - 2026-11-20
 

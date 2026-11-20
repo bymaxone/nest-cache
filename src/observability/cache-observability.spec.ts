@@ -255,6 +255,25 @@ describe('CacheObservability', () => {
       })
     })
 
+    // Called directly, a hook can get anything for its data: no object must not throw.
+    it.each([[null], [undefined], ['text'], [7]])(
+      'reads %p as an empty payload instead of throwing',
+      (payload) => {
+        const { logger, calls } = recorder()
+        const observability = new CacheObservability({ logger })
+
+        expect(() =>
+          observability.events.onEvent?.('ready', payload as unknown as Record<string, unknown>)
+        ).not.toThrow()
+        expect(calls).toEqual([
+          [
+            'log',
+            { event: CACHE_LOG_EVENTS.ready, message: 'Redis connection ready', role: 'unknown' }
+          ]
+        ])
+      }
+    )
+
     it('writes through a Nest logger named BymaxCache when none is given', () => {
       const contexts: unknown[] = []
       const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(function (this: Logger) {
