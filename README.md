@@ -85,7 +85,7 @@ so you control exact versions and the supply-chain surface stays minimal.
 
 ## 📦 Subpath Exports
 
-One package, five entry points — import only what your app needs:
+One package, several entry points — import only what your app needs:
 
 | Subpath           | Import                                | Purpose                                                                                                                                             |                                     Dependencies                                     |
 | ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------: |
@@ -677,10 +677,7 @@ bag is called, in order, and one that throws or rejects does not hide the event 
 | `bymax_cache_pubsub_queued`        | gauge   | none                   | Pub/Sub messages waiting for a handler slot now; `0` when `pubsubMaxConcurrentHandlers` is unset |
 | `bymax_cache_pubsub_dropped_total` | counter | none                   | Pub/Sub messages dropped because every handler slot and the queue were taken                     |
 
-- **`operation` is one of 31 command names**: `get`, `getRaw`, `set`, `setRaw`, `setNx`, `del`,
-  `delMany`, `exists`, `incr`, `decr`, `expire`, `ttl`, `persist`, `mget`, `mset`, `hget`, `hset`,
-  `hgetall`, `hdel`, `sadd`, `srem`, `smembers`, `sismember`, `scard`, `keys`, `scan`,
-  `flushNamespace`, `eval`, `isHealthy`, `ping` and `info`. `pipeline()` and `getClient()` hand out the raw client and run no
+- **`operation` is a `CacheOperationName`** (exported from `/shared`). `pipeline()` and `getClient()` hand out the raw client and run no
   command of their own, so a command sent through them is not counted.
 - **`outcome` is `hit`, `miss`, `ok` or `error`.** A read that finds something (`get`, `getRaw`,
   `mget` with at least one value, `hget`, `hgetall`, `smembers`) or answers true (`exists`,
