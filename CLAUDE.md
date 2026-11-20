@@ -3,7 +3,7 @@
 > **Type:** npm public library (NOT an application)
 > **Package:** `@bymax-one/nest-cache` — typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management
 > **Runtime:** Node.js 24+ | Zero direct dependencies (functionality via peer deps)
-> **Status:** v1.2.7 — 100% coverage, 100% mutation score. Ships the `./admin` subpath (read-only administration); the namespace is rejected when it carries a Redis glob metacharacter, because `flushNamespace` builds a destructive match pattern from it. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
+> **Status:** v1.2.27 — 100% coverage, 100% mutation score. Ships the `./admin` subpath (read-only administration) and the optional `./metrics` and `./observability` subpaths; the namespace is rejected when it carries a Redis glob metacharacter, because `flushNamespace` builds a destructive match pattern from it. See [docs/mutation_testing_results.md](./docs/mutation_testing_results.md).
 
 ---
 
@@ -53,17 +53,19 @@
 - **100% statements / branches / functions / lines** enforced by `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
 - Mutation testing (Stryker `break: 100`) is the deeper gate. `ignoreStatic: false` (rigorous — exposes module-level constant mutants). Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>` — acceptable for genuine equivalents only; minimize, and never disable a mutant a test could kill.
 
-**8. Build** — tsup builds 3 subpaths → ESM (.mjs) + CJS (.cjs) + .d.ts. `sideEffects: false`. Peer deps (`@nestjs/*`, `ioredis`, `reflect-metadata`) always external.
+**8. Build** — tsup builds 5 subpaths → ESM (.mjs) + CJS (.cjs) + .d.ts. `sideEffects: false`. Peer deps (`@nestjs/*`, `ioredis`, `reflect-metadata`) always external.
 
 ---
 
 ## Subpaths
 
-| Subpath      | Purpose                                           | Peer Deps                              |
-| ------------ | ------------------------------------------------- | -------------------------------------- |
-| `.` (server) | NestJS module + cache services                    | NestJS 11, ioredis 6, reflect-metadata |
-| `./admin`    | Read-only administration (health, INFO, keyspace) | NestJS 11, ioredis 6, the server entry |
-| `./shared`   | Types + constants (zero deps)                     | None                                   |
+| Subpath           | Purpose                                                         | Peer Deps                                                                         |
+| ----------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `.` (server)      | NestJS module + cache services                                  | NestJS 11, ioredis 6, reflect-metadata                                            |
+| `./admin`         | Read-only administration (health, INFO, keyspace)               | NestJS 11, ioredis 6, the server entry                                            |
+| `./metrics`       | Connection-lifecycle metrics on the app's registry              | NestJS 11, the server entry, optional peers `@bymax-one/nest-core`, `prom-client` |
+| `./observability` | Operation/backlog/drop metrics, readiness indicator, log events | Same as `./metrics`                                                               |
+| `./shared`        | Types + constants (zero deps)                                   | None                                                                              |
 
 **`./admin` rules.** Privileged and deliberately separate — never fold it into `.`.
 Its sources import the server surface by **package specifier** (`@bymax-one/nest-cache`),
