@@ -30,7 +30,7 @@ import {
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
-import { callHook } from '../utils/call-hook'
+import { fireEvent } from '../utils/call-hook'
 import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
@@ -355,7 +355,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
 
   /** Forwards a lifecycle event to `events.onEvent`, swallowing consumer throws. */
   private emit(event: CacheEventName, data: Record<string, unknown>): void {
-    callHook(() => this.events?.onEvent?.(event, data))
+    fireEvent(this.events, event, data)
   }
 
   /** Wires lifecycle listeners that forward to `events.onEvent`, swallowing throws. */

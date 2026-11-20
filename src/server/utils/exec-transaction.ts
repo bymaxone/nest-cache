@@ -12,15 +12,34 @@ import { CacheException } from '../errors/cache.exception'
 import { guardClient, mapCommandFailure } from './guard-client'
 
 /**
+ * The command failure behind a discarded transaction. When a command is refused as it is queued (an
+ * `OOM` for one, say), `EXEC` rejects with a generic `EXECABORT` and ioredis keeps the refusals on
+ * `previousErrors`; the first of them is what the caller must see, not the generic abort.
+ *
+ * @param error - What `EXEC` rejected with.
+ * @returns The first queued command's error, or `error` itself when there is none.
+ */
+function firstQueued(error: unknown): unknown {
+  const previous: unknown =
+    error instanceof Error ? Reflect.get(error, 'previousErrors') : undefined
+  return Array.isArray(previous) && previous.length > 0 ? (previous[0] as unknown) : error
+}
+
+/**
  * Runs a transaction and returns the reply of each queued command.
  *
  * @param transaction - The transaction, with its commands already queued.
  * @returns The replies, in the order the commands were queued.
  * @throws {CacheException} `CONNECTION_LOST` (`reason: 'transaction_aborted'`) when `EXEC` answers
- *   nothing, and otherwise the first failing command's error, mapped like any command's.
+ *   nothing, and otherwise the first failing command's error, mapped like any command's: a command
+ *   refused as it was queued reports its own refusal, not the `EXECABORT` that followed it.
  */
 export async function execTransaction(transaction: ChainableCommander): Promise<unknown[]> {
-  const replies = await guardClient(transaction).exec()
+  const replies = await guardClient(transaction)
+    .exec()
+    .catch((error: unknown) => {
+      throw mapCommandFailure(firstQueued(error))
+    })
   if (replies === null) {
     throw new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'transaction_aborted' })
   }

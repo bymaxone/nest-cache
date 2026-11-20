@@ -46,7 +46,8 @@ describe('combineCacheEvents', () => {
   })
 
   // Scenario: the first bag throws, rejects, or hands back a thenable that throws.
-  // Rule: the second still hears the event, and nothing escapes or goes unhandled.
+  // Rule: the second still hears the event, nothing goes unhandled, and the failure is raised to the
+  // module (a throw, or a rejection of the returned promise) so it can log it.
   it.each([
     [
       'throws',
@@ -63,18 +64,69 @@ describe('combineCacheEvents', () => {
         }
       })
     ]
-  ])('keeps going when a bag %s', async (_how, onQueue) => {
+  ])('keeps going when a bag %s, then raises the failure', async (_how, onQueue) => {
     const unhandled: unknown[] = []
     const record = (reason: unknown): void => void unhandled.push(reason)
     process.on('unhandledRejection', record)
     const second = jest.fn()
     const events = combineCacheEvents({ onQueue: onQueue as () => void }, { onQueue: second })
 
-    expect(() => events.onQueue?.(5)).not.toThrow()
+    const raised = await Promise.resolve()
+      .then(() => events.onQueue?.(5))
+      .then(
+        () => 'resolved',
+        () => 'raised'
+      )
     await settle()
     process.off('unhandledRejection', record)
 
     expect(second).toHaveBeenCalledWith(5)
+    expect(raised).toBe('raised')
     expect(unhandled).toEqual([])
+  })
+
+  // Rule: a bag that throws after another rejected leaves no unhandled rejection behind.
+  it('leaves no unhandled rejection when one bag throws and another rejects', async () => {
+    const unhandled: unknown[] = []
+    const record = (reason: unknown): void => void unhandled.push(reason)
+    process.on('unhandledRejection', record)
+    const events = combineCacheEvents(
+      { onQueue: async (): Promise<void> => Promise.reject(new Error('async')) },
+      {
+        onQueue: (): void => {
+          throw new Error('sync')
+        }
+      }
+    )
+
+    expect(() => events.onQueue?.(1)).toThrow('sync')
+    await settle()
+    process.off('unhandledRejection', record)
+
+    expect(unhandled).toEqual([])
+  })
+
+  // Rule: every bag gets its own frozen copy of the data, so a write in one cannot reach the next
+  // and the library's own object is never the one handed out.
+  it('gives each bag its own frozen copy of the data', () => {
+    const seen: Array<Record<string, unknown>> = []
+    const writer: ICacheEvents = {
+      onEvent: (_event, data) => {
+        seen.push(data)
+        expect(() => {
+          data['role'] = 'changed'
+        }).toThrow(TypeError)
+      }
+    }
+    const reader: ICacheEvents = { onEvent: (_event, data) => void seen.push(data) }
+    const original = { role: 'main' }
+
+    combineCacheEvents(writer, reader).onEvent?.('ready', original)
+
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).not.toBe(seen[1])
+    expect(seen[0]).not.toBe(original)
+    expect(seen.map((data) => data['role'])).toEqual(['main', 'main'])
+    expect(Object.isFrozen(seen[1])).toBe(true)
   })
 })

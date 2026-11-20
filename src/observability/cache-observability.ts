@@ -201,9 +201,12 @@ export class CacheObservability {
    * Counts a drop and writes the log event of a connection or Pub/Sub event.
    *
    * @param event - The lifecycle event name.
-   * @param data - The payload that accompanied it.
+   * @param payload - The payload that accompanied it.
    */
-  private observe(event: CacheEventName, data: Record<string, unknown>): void {
+  private observe(event: CacheEventName, payload: Record<string, unknown> | null): void {
+    // Called directly, the hook may get no object at all: read it as an empty payload.
+    const data: Record<string, unknown> =
+      typeof payload === 'object' && payload !== null ? payload : {}
     const entry = this.entryFor(event, data)
     if (entry === undefined) {
       return
