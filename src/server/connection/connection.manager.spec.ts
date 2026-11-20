@@ -450,6 +450,7 @@ describe('ConnectionManager', () => {
       const sub = manager.createSubscriberClient()
 
       expect(sub).not.toBe(main)
+      expect(redisInstances).toHaveLength(2)
       expect(redisInstances[0]?.options['enableOfflineQueue']).toBe(false)
       expect(redisInstances[1]?.options['enableOfflineQueue']).toBe(true)
       expect(redisInstances[0]?.options['disconnectTimeout']).toBe(1)
