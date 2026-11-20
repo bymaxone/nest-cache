@@ -18,7 +18,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Documentation
 
 - A `LoggerService` installed through `Logger.overrideLogger` must not reject: Nest drops what its methods return, so a rejection is unhandled and ends the Node process (exit code 1) unless the application handles `unhandledRejection`. Pass the service as `logger` to have the library absorb it. `dist/` is unchanged.
-- `bymax_cache_pubsub_dropped_total` can trail the real drops by up to 10 s, because the library reports the drops after the first one summed over a 10 s window: the README says so. The README also names `guardClient` as an internal export that is not supported, and lists `CACHE_HOOK_FAILED`.
+- `bymax_cache_pubsub_dropped_total` can trail the real drops by up to 10 s, because the library reports the drops after the first one summed over a 10 s window.
 
 ## [1.2.27] - 2026-11-20
 

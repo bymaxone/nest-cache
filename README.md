@@ -730,7 +730,7 @@ rejection, which ends the Node process (exit code 1) unless the application hand
 | `CACHE_PUBSUB_DROPPED`    | `warn`  | Messages were dropped because every handler slot and the queue were taken                | `role`, `dropped`                                        |
 | `CACHE_HOOK_FAILED`       | `warn`  | A hook of your `events` threw or rejected; only the first failure of each hook is logged | `hook` (`onEvent`, `onOperation` or `onQueue`)           |
 
-`CACHE_HOOK_FAILED` is written by the main entry through a Nest `Logger` named `BymaxCache`, once per hook for the life of the process, with the hook's name only: what the hook threw is never logged, and a later failure of the same hook is absorbed silently. `onEvent` receives a frozen copy of the event data made for that call, and `combineCacheEvents` gives every bag its own copy, so one hook cannot alter what another sees.
+`CACHE_HOOK_FAILED` is written by the main entry through a Nest `Logger` named `BymaxCache`, once per hook for the life of the process, with the hook's name only: what the hook threw is never logged, and a later failure of the same hook is absorbed silently. `onEvent` receives a frozen copy of the event data made for that call.
 
 ---
 
