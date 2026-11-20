@@ -171,8 +171,8 @@ describe('CacheService', () => {
       expect(await cache.delMany('d', ['a', 'b'])).toBe(2)
     })
 
-    // An empty id list must short-circuit to 0 WITHOUT touching Redis — the
-    // empty-guard branch (also avoids a `del()` with no keys).
+    // An empty id list gives 0 and sends no command: no part is built, so `del()` is never
+    // called with no keys.
     it('delMany returns 0 for an empty list without calling Redis', async () => {
       const spy = jest.spyOn(connection, 'getClient')
 
@@ -321,7 +321,7 @@ describe('CacheService', () => {
       expect(deserializeSpy).toHaveBeenCalledTimes(2)
     })
 
-    // An empty id list must return [] WITHOUT calling Redis — the mget empty guard.
+    // An empty id list gives [] and sends no command: no part is built.
     it('mget returns [] for an empty list without calling Redis', async () => {
       const spy = jest.spyOn(connection, 'getClient')
 
