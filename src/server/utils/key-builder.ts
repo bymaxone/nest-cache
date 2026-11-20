@@ -8,6 +8,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 
 import { BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
+import { refuseValue } from '../config/refuse-option'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
@@ -151,11 +152,13 @@ export class KeyBuilder {
     // boundaries into glob syntax that reaches into the owner field. Escaping only this part cannot fix that.
     const glob = this.separator.split('').find((unit) => GLOB_CHARS.includes(unit))
     if (glob !== undefined) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-        reason: 'key separator contains glob metacharacter',
-        separator: this.separator,
-        metacharacter: glob
-      })
+      refuseValue(
+        CACHE_ERROR_CODES.INVALID_NAMESPACE,
+        'keySeparator',
+        'contains glob metacharacter',
+        this.separator,
+        { metacharacter: glob }
+      )
     }
     return `${fields.join(this.separator)}${this.separator}*`
   }
@@ -174,10 +177,12 @@ export class KeyBuilder {
    */
   escapePart(part: string): string {
     if (this.separator.includes(ESCAPE_CHAR)) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-        reason: 'key separator contains the escape character',
-        separator: this.separator
-      })
+      refuseValue(
+        CACHE_ERROR_CODES.INVALID_NAMESPACE,
+        'keySeparator',
+        'contains the escape character',
+        this.separator
+      )
     }
     return escapeKeyPart(part, this.prefixEscapes)
   }

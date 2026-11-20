@@ -649,11 +649,12 @@ describe('CacheAdminService.revealValue', () => {
   })
 
   // A reply that is not a list at all yields no members rather than throwing — a
-  // reveal route must not fail on an unexpected shape.
-  it('ignores a sorted set reply that is not an array', async () => {
+  // reveal route must not fail on an unexpected shape — and is reported incomplete, as an unreadable
+  // scan page is: a reply that could not be read never claims to hold everything there is.
+  it('reports a sorted set reply that is not an array as incomplete', async () => {
     const reader = new FakeReader([], { type: 'zset', call: 'nonsense' })
     expect(await build(reader).revealValue('cache', 'app:z')).toMatchObject({
-      value: { kind: 'scored', members: [], isComplete: true }
+      value: { kind: 'scored', members: [], isComplete: false }
     })
   })
 

@@ -18,6 +18,7 @@ import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import { MAX_EVAL_ARGUMENTS } from '../utils/chunk'
 import { describeError } from '../utils/describe-error'
 import { guardClient } from '../utils/guard-client'
 
@@ -161,6 +162,13 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     const entry = this.scripts.get(name)
     if (!entry) {
       throw new CacheException(CACHE_ERROR_CODES.SCRIPT_NOT_REGISTERED, { name })
+    }
+    if (keys.length + args.length > MAX_EVAL_ARGUMENTS) {
+      throw new CacheException(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED, {
+        name,
+        reason: 'too many keys and arguments',
+        max: MAX_EVAL_ARGUMENTS
+      })
     }
     const client = guardClient(this.connection.getClient())
     if (this.options.mode === 'cluster') {

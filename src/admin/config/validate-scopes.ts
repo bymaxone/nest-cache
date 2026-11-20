@@ -9,6 +9,7 @@
 import { CACHE_ERROR_CODES, CacheException } from '@bymax-one/nest-cache'
 
 import type { CacheScope } from '../interfaces/cache-scope.interface'
+import { refuseAdminOption } from './refuse-scope-option'
 
 /**
  * The only shape a scope pattern may take: one or more literal characters,
@@ -106,43 +107,49 @@ function readField(scope: CacheScope, field: (typeof REQUIRED_FIELDS)[number]): 
  *
  * @param scopes - The scopes the application declares.
  * @returns A frozen list of frozen scopes, in declaration order.
- * @throws {CacheException} `INVALID_SCOPE` when the list is empty, a required
- *   field is empty, an id repeats, or a pattern has no literal prefix.
+ * @throws {CacheException} `INVALID_SCOPE` when the list is not a non-empty array, a scope is not an
+ *   object, a required field is not a non-empty string, an id repeats, or a pattern has no literal
+ *   prefix. The details name the option by its position and the type received, never the value.
  *
  * @deprecated Implementation helper; will leave the public surface in 2.0.0. Do not depend on it.
  */
 export function validateScopes(scopes: readonly CacheScope[]): readonly CacheScope[] {
+  if (!Array.isArray(scopes as unknown)) {
+    refuseAdminOption('scopes', 'must be an array', scopes)
+  }
   if (scopes.length === 0) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, { reason: 'no scopes declared' })
+    refuseAdminOption('scopes', 'is empty', scopes)
   }
 
-  const seen = new Set<string>()
+  const seen: string[] = []
   const validated: CacheScope[] = []
 
-  for (const scope of scopes) {
+  for (const [index, scope] of scopes.entries()) {
+    const at = `scopes[${index}]`
+    if (typeof scope !== 'object' || scope === null) {
+      refuseAdminOption(at, 'must be an object', scope)
+    }
     for (const field of REQUIRED_FIELDS) {
-      if (readField(scope, field) === '') {
-        throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
-          reason: 'empty scope field',
-          field,
-          scopeId: scope.id
-        })
+      const value: unknown = readField(scope, field)
+      if (typeof value !== 'string') {
+        refuseAdminOption(`${at}.${field}`, 'must be a string', value)
+      }
+      if (value === '') {
+        refuseAdminOption(`${at}.${field}`, 'is empty', value)
       }
     }
-    if (seen.has(scope.id)) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
-        reason: 'duplicate scope id',
-        scopeId: scope.id
-      })
+    const first = seen.indexOf(scope.id)
+    if (first !== -1) {
+      refuseAdminOption(`${at}.id`, `duplicates scopes[${first}].id`, scope.id)
     }
     if (!SCOPE_PATTERN_SHAPE.test(scope.pattern)) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
-        reason: 'pattern must be a literal prefix optionally followed by *',
-        scopeId: scope.id,
-        pattern: scope.pattern
-      })
+      refuseAdminOption(
+        `${at}.pattern`,
+        'must be a literal prefix optionally followed by *',
+        scope.pattern
+      )
     }
-    seen.add(scope.id)
+    seen.push(scope.id)
     validated.push(
       Object.freeze({
         id: scope.id,

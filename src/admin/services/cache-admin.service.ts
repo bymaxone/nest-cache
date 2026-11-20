@@ -115,14 +115,15 @@ function replyAt(replies: PipelineReply[] | null, index: number): unknown {
  *
  * @param reply - Whatever the server answered.
  * @param limit - Most members to return.
- * @returns The paired members and whether the reply was returned whole.
+ * @returns The paired members and whether the reply was returned whole; a reply that is not a list
+ *   holds none and is never whole.
  */
 function readScoredMembers(
   reply: unknown,
   limit: number
 ): { members: { member: string; score: string }[]; isComplete: boolean } {
   if (!Array.isArray(reply)) {
-    return { members: [], isComplete: true }
+    return { members: [], isComplete: false }
   }
   const members: { member: string; score: string }[] = []
   let pairCount = 0

@@ -7,6 +7,8 @@
  * fields cannot be reassigned once registered. See
  * `docs/technical_specification.md` §4.6.
  */
+import type { RedisOptions } from 'ioredis'
+
 import {
   DEFAULT_KEY_ESCAPING,
   DEFAULT_KEY_SEPARATOR,
@@ -24,6 +26,8 @@ import { CacheException } from '../errors/cache.exception'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
+import { isUnset } from './is-unset'
+import { refuseOption, refuseValue } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 
 /**
@@ -122,49 +126,37 @@ function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
  *   code unit (an astral character or an unpaired surrogate), or a glob metacharacter.
  */
 function validateSeparator(separator: string, keyEscaping: string): void {
+  const refuse = (problem: string, bounds?: Readonly<Record<string, number | string>>): never =>
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'keySeparator', problem, separator, bounds)
   // Checked before the namespace `includes` guard, which would otherwise absorb this
   // case: `'anything'.includes('')` is true for every string, so an empty
   // separator used to be rejected by a check written for a different condition
   // and reported as "namespace contains key separator" — something the consumer
   // did not do.
   if (separator === '') {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'empty key separator',
-      separator
-    })
+    refuse('is empty')
   }
   if (keyEscaping !== 'legacy' && keyEscaping !== 'strict') {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'unknown keyEscaping',
-      keyEscaping
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'keyEscaping', 'is unknown', keyEscaping, {
+      allowed: 'legacy or strict'
     })
   }
   // Only under strict: legacy never rewrites a part, so the escape character cannot reappear inside
   // one, and a configuration that boots today must keep booting.
   if (keyEscaping === 'strict' && separator.includes(ESCAPE_CHAR)) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'key separator contains the escape character',
-      separator
-    })
+    refuse('contains the escape character')
   }
   // Only under strict. An astral character is two surrogate code units, and a pattern holding the
   // pair or one half of it cannot be judged exactly against the ids strict stores (a lone surrogate
   // reaches Redis as U+FFFD, a pair is escaped whole), so the separator is asked to be BMP.
   if (keyEscaping === 'strict' && /[\ud800-\udfff]/.test(separator)) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'key separator contains a surrogate code unit',
-      separator
-    })
+    refuse('contains a surrogate code unit')
   }
   // Only under strict, like the `%` rule above. A glob character in the separator widens every
   // pattern built from it, `flushNamespace`'s `{namespace}{separator}*` included.
   const separatorGlob = keyEscaping === 'strict' ? findGlobMetacharacter(separator) : null
   if (separatorGlob !== null) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'key separator contains glob metacharacter',
-      separator,
-      metacharacter: separatorGlob
-    })
+    refuse('contains glob metacharacter', { metacharacter: separatorGlob })
   }
 }
 
@@ -175,29 +167,85 @@ function validateSeparator(separator: string, keyEscaping: string): void {
  * @param namespace - The resolved namespace.
  * @param separator - The resolved key separator.
  * @param keyEscaping - The resolved key composition mode.
- * @throws {CacheException} `INVALID_NAMESPACE` when the namespace is empty or contains a Redis glob
- *   metacharacter or the separator, or when {@link validateSeparator} refuses the separator.
+ * @throws {CacheException} `INVALID_NAMESPACE` when the namespace or the separator is not a string,
+ *   the namespace is empty or contains a Redis glob metacharacter or the separator, or when
+ *   {@link validateSeparator} refuses the separator. The details name the option and the type
+ *   received, never the value.
  */
 function validateNamespace(namespace: string, separator: string, keyEscaping: string): void {
-  if (!namespace || namespace.trim() === '') {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, { namespace })
+  if (typeof namespace !== 'string') {
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'namespace', 'must be a string', namespace)
+  }
+  if (typeof separator !== 'string') {
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'keySeparator', 'must be a string', separator)
+  }
+  if (namespace.trim() === '') {
+    refuseValue(CACHE_ERROR_CODES.INVALID_NAMESPACE, 'namespace', 'is empty', namespace)
   }
   validateSeparator(separator, keyEscaping)
   const metacharacter = findGlobMetacharacter(namespace)
   if (metacharacter !== null) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'namespace contains glob metacharacter',
+    refuseValue(
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      'namespace',
+      'contains glob metacharacter',
       namespace,
-      metacharacter
-    })
+      { metacharacter }
+    )
   }
   if (namespace.includes(separator)) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_NAMESPACE, {
-      reason: 'namespace contains key separator',
-      namespace,
-      separator
-    })
+    refuseValue(
+      CACHE_ERROR_CODES.INVALID_NAMESPACE,
+      'namespace',
+      'contains key separator',
+      namespace
+    )
   }
+}
+
+/**
+ * Refuses a `null` credential or tls field. Where an option's default is the weaker security posture,
+ * only `undefined` means unset: a secret that failed to load and reached the options as `null` would
+ * otherwise connect without authentication or without tls, silently.
+ *
+ * @param options - The raw consumer options.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the field, with `received` `'null'`.
+ */
+function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
+  const redisOptions = options.cluster?.options?.redisOptions
+  const fields = [
+    ['connection.password', options.connection?.password],
+    ['connection.username', options.connection?.username],
+    ['connection.tls', options.connection?.tls],
+    ['sentinel.password', options.sentinel?.password],
+    ['sentinel.sentinelPassword', options.sentinel?.sentinelPassword],
+    ['cluster.options.redisOptions.password', redisOptions?.password],
+    ['cluster.options.redisOptions.username', redisOptions?.username],
+    ['cluster.options.redisOptions.tls', redisOptions?.tls]
+  ] as const
+  for (const [option, value] of fields) {
+    if ((value as unknown) === null) {
+      refuseOption(option, 'must not be null', value)
+    }
+  }
+}
+
+/**
+ * Validates the connect and command timers of one option group.
+ *
+ * @param group - The group's path, prefixed to each option name in the error.
+ * @param source - The group's options; `undefined` or `null` means the group is absent.
+ * @throws {CacheException} `INVALID_OPTIONS` when a timer is out of range.
+ */
+function requireTimers(
+  group: string,
+  source:
+    | { connectTimeout?: number | null | undefined; commandTimeout?: number | null | undefined }
+    | null
+    | undefined
+): void {
+  requireTimerDelay(`${group}.connectTimeout`, source?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
+  requireTimerDelay(`${group}.commandTimeout`, source?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
 }
 
 /**
@@ -218,16 +266,13 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
     ['lazyConnect', connection?.lazyConnect, 'cluster.options.lazyConnect']
   ] as const
   for (const [option, value, target] of ignored) {
-    if (value !== undefined) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: `connection.${option} is ignored in cluster mode; set ${target}`,
-        option: `connection.${option}`
-      })
+    if (!isUnset(value)) {
+      refuseOption(`connection.${option}`, `is ignored in cluster mode; set ${target}`, value)
     }
   }
   const redisOptions = options.cluster?.options?.redisOptions
-  requireTimerDelay('connectTimeout', redisOptions?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
-  requireTimerDelay('commandTimeout', redisOptions?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  requireTimers('cluster.options.redisOptions', redisOptions)
+  validateConnectionNumbers('cluster.options.redisOptions', redisOptions)
 }
 
 /**
@@ -252,6 +297,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
     }
     validateClusterOptions(options)
   }
+  validateNoNullSecrets(options)
   validateConnectionUrl(options.connection?.url)
   if (mode === 'standalone') {
     validateStandaloneConnection(options)
@@ -268,8 +314,12 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
     options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
     MIN_SHUTDOWN_TIMEOUT_MS
   )
-  requireTimerDelay('connectTimeout', options.connection?.connectTimeout, MIN_CONNECT_TIMEOUT_MS)
-  requireTimerDelay('commandTimeout', options.connection?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
+  requireTimers('connection', options.connection)
+  validateConnectionNumbers(
+    'connection',
+    options.connection,
+    options.connection?.url ? parseRedisUrl(options.connection.url) : undefined
+  )
   validateHandlerBounds(options)
 }
 
@@ -278,11 +328,11 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
  * to queue behind.
  *
  * @param options - The raw consumer options.
- * @throws {CacheException} `INVALID_OPTIONS` naming the option, the value and the accepted range.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the type of the value received (a finite number as itself) and the accepted range.
  */
 function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
   const { pubsubMaxConcurrentHandlers: slots, pubsubMaxQueuedMessages: queued } = options
-  if (slots === undefined && queued !== undefined) {
+  if (isUnset(slots) && !isUnset(queued)) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: 'pubsubMaxQueuedMessages needs pubsubMaxConcurrentHandlers'
     })
@@ -292,14 +342,75 @@ function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
     ['pubsubMaxQueuedMessages', queued, 0]
   ] as const) {
     if (
-      value !== undefined &&
+      !isUnset(value) &&
       (!Number.isInteger(value) || value < min || value > MAX_TIMER_DELAY_MS)
     ) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: `${option} not an integer in range`,
-        value,
+      refuseOption(option, 'not an integer in range', value, {
         min,
         max: MAX_TIMER_DELAY_MS
+      })
+    }
+  }
+}
+
+/** The numeric connection options a connection block and `cluster.options.redisOptions` share. */
+interface NumericConnectionOptions {
+  readonly port?: unknown
+  readonly db?: unknown
+  readonly keepAlive?: unknown
+  readonly maxRetriesPerRequest?: unknown
+}
+
+/**
+ * Rejects a numeric connection option the driver would take literally and a bound would be lost:
+ * `NaN`, an infinity, a fraction or a string. The driver counts retries only when
+ * `maxRetriesPerRequest` is a number from 0, and hands `keepAlive` to the socket, where `NaN` and 0
+ * mean the operating system's own delay instead of the 30 s probe. `maxRetriesPerRequest`
+ * of `null` is refused too: it is the driver's "retry without limit", which would undo the fail-fast
+ * outage design and leave only `commandTimeout` to bound a command.
+ *
+ * @param where - The block the options sit in, echoed in the error details.
+ * @param options - The block, or `undefined` when it is not set.
+ * @param fromUrl - What the block's `url` carries. It always replaces the discrete `port`, and the
+ *   discrete `db` when its path names a database; a value it replaces is never used and not checked.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the type of the value received (a finite number as itself) and the accepted range.
+ */
+function validateConnectionNumbers(
+  where: string,
+  options: NumericConnectionOptions | null | undefined,
+  fromUrl: Partial<RedisOptions> = {}
+): void {
+  if (options === undefined || options === null) {
+    return
+  }
+  const ranges = [
+    ['port', fromUrl.port === undefined ? options.port : undefined, 1, 65_535, undefined],
+    ['db', fromUrl.db === undefined ? options.db : undefined, 0, MAX_TIMER_DELAY_MS, undefined],
+    [
+      'keepAlive',
+      options.keepAlive,
+      1,
+      MAX_TIMER_DELAY_MS,
+      { when: 0, text: '0 is the OS default delay: the 30 s probe is lost' }
+    ],
+    [
+      'maxRetriesPerRequest',
+      options.maxRetriesPerRequest,
+      0,
+      MAX_TIMER_DELAY_MS,
+      { when: null, text: 'null lifts the retry bound: only commandTimeout would bound a command' }
+    ]
+  ] as const
+  for (const [option, value, min, max, why] of ranges) {
+    // `null` is unset too, except for `maxRetriesPerRequest`, where it is the driver's "retry forever".
+    const unset = option === 'maxRetriesPerRequest' ? value === undefined : isUnset(value)
+    const inRange =
+      typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+    if (!unset && !inRange) {
+      refuseOption(`${where}.${option}`, 'not an integer in range', value, {
+        min,
+        max,
+        ...(why !== undefined && value === why.when ? { why: why.text } : {})
       })
     }
   }
@@ -309,28 +420,20 @@ function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
  * Rejects a timeout that `setTimeout` would not honour or that is below its minimum: `NaN`, a
  * fraction, an infinity or a delay above 2^31-1 ms is stored as 1 ms, so the timer fires at once.
  *
- * @param option - The option name, echoed in the error details.
- * @param value - The configured delay in milliseconds; `undefined` means the option is unset.
+ * @param option - The option's full name, group prefix included, echoed in the error details.
+ * @param value - The configured delay in milliseconds; `undefined` or `null` means the option is unset.
  * @param min - The smallest accepted delay.
  * @throws {CacheException} `INVALID_OPTIONS` when the value is not a finite integer within range or is below `min`.
  */
-function requireTimerDelay(option: string, value: number | undefined, min: number): void {
-  if (value === undefined) {
+function requireTimerDelay(option: string, value: number | null | undefined, min: number): void {
+  if (isUnset(value)) {
     return
   }
   if (!Number.isInteger(value) || value > MAX_TIMER_DELAY_MS) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: `${option} not a valid timer delay`,
-      value,
-      max: MAX_TIMER_DELAY_MS
-    })
+    refuseOption(option, 'not a valid timer delay', value, { max: MAX_TIMER_DELAY_MS })
   }
   if (value < min) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: `${option} too low`,
-      value,
-      min
-    })
+    refuseOption(option, 'too low', value, { min })
   }
 }
 
@@ -361,8 +464,12 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     allowFlushInProduction: options.allowFlushInProduction ?? false,
     isGlobal: options.isGlobal ?? true,
     scripts: options.scripts,
-    pubsubMaxConcurrentHandlers: options.pubsubMaxConcurrentHandlers,
-    pubsubMaxQueuedMessages: options.pubsubMaxQueuedMessages
+    pubsubMaxConcurrentHandlers: isUnset(options.pubsubMaxConcurrentHandlers)
+      ? undefined
+      : options.pubsubMaxConcurrentHandlers,
+    pubsubMaxQueuedMessages: isUnset(options.pubsubMaxQueuedMessages)
+      ? undefined
+      : options.pubsubMaxQueuedMessages
   }
   // The three connection shapes carry the Redis credentials — a `url` holds the
   // password inline, and the discrete forms hold it as a field. This object is

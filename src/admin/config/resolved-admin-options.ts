@@ -5,8 +5,6 @@
  * invariant, so a misconfigured surface fails to start rather than serving a
  * misleading answer on its first request.
  */
-import { CACHE_ERROR_CODES, CacheException } from '@bymax-one/nest-cache'
-
 import {
   DEFAULT_DEGRADED_ABOVE_MS,
   DEFAULT_PROBE_TIMEOUT_MS,
@@ -19,6 +17,7 @@ import {
 } from '../constants/admin-defaults'
 import type { BymaxCacheAdminModuleOptions } from '../interfaces/admin-module-options.interface'
 import type { CacheScope } from '../interfaces/cache-scope.interface'
+import { refuseAdminOption } from './refuse-scope-option'
 import { validateScopes } from './validate-scopes'
 
 /** Administration options after defaults are merged and validated. */
@@ -49,16 +48,12 @@ const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
  * is meaningless — 2.5 keys is not a page size.
  *
  * @param option - The option name, echoed so a consumer fixes the line they wrote.
- * @param value - The configured value.
+ * @param value - The configured value; only its type, or the number itself, reaches the details.
  * @throws {CacheException} `INVALID_SCOPE` when the value is not a positive integer.
  */
 function requirePositiveInteger(option: string, value: number): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
-      reason: 'threshold must be positive',
-      option,
-      value
-    })
+    refuseAdminOption(option, 'must be a positive integer', value)
   }
 }
 
@@ -91,20 +86,14 @@ export function resolveAdminOptions(
   requirePositiveInteger('degradedAboveMs', resolved.degradedAboveMs)
   requirePositiveInteger('probeTimeoutMs', resolved.probeTimeoutMs)
   if (resolved.probeTimeoutMs > MAX_TIMER_DELAY_MS) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
-      reason: 'timer delay too large',
-      option: 'probeTimeoutMs',
-      value: resolved.probeTimeoutMs,
+    refuseAdminOption('probeTimeoutMs', 'is too large', resolved.probeTimeoutMs, {
       max: MAX_TIMER_DELAY_MS
     })
   }
   requirePositiveInteger('scanLimit', resolved.scanLimit)
   requirePositiveInteger('scanRoundsLimit', resolved.scanRoundsLimit)
   if (resolved.scanRoundsLimit > MAX_SCAN_ROUNDS_LIMIT) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_SCOPE, {
-      reason: 'threshold too large',
-      option: 'scanRoundsLimit',
-      value: resolved.scanRoundsLimit,
+    refuseAdminOption('scanRoundsLimit', 'is too large', resolved.scanRoundsLimit, {
       max: MAX_SCAN_ROUNDS_LIMIT
     })
   }

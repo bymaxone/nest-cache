@@ -132,6 +132,35 @@ describe('CacheAdminService.revealValue reads', () => {
     })
   })
 
+  // Scenario: a hash whose second page comes back in a shape the reader cannot read.
+  // Rule: the entries of the first page are shown and the value is reported incomplete: an unreadable
+  // page is not the end of the scan, so the read never claims to hold everything.
+  it('reports a hash incomplete when a later HSCAN page is unreadable', async () => {
+    const pages: unknown[] = [['9', ['a', '1']], 'OK']
+    const reader = new BoundedReader('hash', () => pages.shift())
+
+    const result = await reveal(reader, { revealLimit: 3 })
+
+    expect(result).toMatchObject({
+      status: 'revealed',
+      value: { kind: 'hash', fields: [{ field: 'a', value: '1' }], isComplete: false }
+    })
+  })
+
+  // Scenario: a hash or a set whose first and only page is unreadable.
+  // Rule: the key is not reported as gone, since nothing says it was deleted: it reads as no
+  // entries, incomplete.
+  it.each([
+    ['hash', { kind: 'hash', fields: [], isComplete: false }],
+    ['set', { kind: 'members', members: [], isComplete: false }]
+  ])('does not call a %s with an unreadable page a deleted key', async (type, value) => {
+    const reader = new BoundedReader(type, () => 'OK')
+
+    const result = await reveal(reader)
+
+    expect(result).toMatchObject({ status: 'revealed', value })
+  })
+
   // Scenario: a hash of exactly the limit whose scan ends, and one more entry than the limit whose
   // scan also ends in the same page.
   // Rule: complete only when the scan ended and nothing past the limit was seen.
