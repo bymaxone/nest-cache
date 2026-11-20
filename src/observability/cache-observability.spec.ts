@@ -157,7 +157,7 @@ describe('CacheObservability', () => {
       expect(calls.map(([, entry]) => entry['role'])).toEqual(['unknown', 'unknown'])
     })
 
-    // QA-052: the error a host handler threw is the `err` object; its text is not in the message.
+    // The error a host handler threw is the `err` object; its text is never in the message.
     it('passes an Error as err and keeps its text out of the message and every other field', () => {
       const { logger, calls } = recorder()
       const failure = new Error(`handler failed for ${SENTINEL}`)

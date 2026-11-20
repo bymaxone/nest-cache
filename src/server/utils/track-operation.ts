@@ -1,3 +1,9 @@
+/**
+ * Reporting of how a cache command ended, to the host's `events.onOperation`.
+ *
+ * Layer: server. The outcome is one of a closed set, and an observer that fails never changes what
+ * the command returned or threw.
+ */
 import type {
   CacheOperationName,
   CacheOperationOutcome

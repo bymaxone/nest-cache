@@ -85,6 +85,8 @@ export abstract class CacheCollectionCommands {
     field: string,
     options?: ReadOptions<T>
   ): Promise<T | null> {
+    // Whether Redis returned a payload, not whether it decodes to a value: the JSON text `null` is a hit.
+    let present = false
     return this.track(
       'hget',
       async () => {
@@ -93,9 +95,10 @@ export abstract class CacheCollectionCommands {
         if (raw === null) {
           return null
         }
+        present = true
         return this.decode<T>(raw, options)
       },
-      (value) => found(value !== null)
+      () => found(present)
     )
   }
 

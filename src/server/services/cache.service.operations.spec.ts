@@ -115,6 +115,30 @@ describe('CacheService operation outcomes', () => {
     ])
   })
 
+  // Scenario: the stored payload is the JSON text `null`, which decodes to `null`.
+  // Rule: Redis returned a payload, so the read is a `hit`; only an absent key or field is a `miss`.
+  it('reports hit for a stored JSON null, and miss only for an absent key', async () => {
+    await cache.setRaw('u', 'n', 'null')
+    await cache.hset('u', 'h', 'f', null)
+    reported.length = 0
+
+    await expect(cache.get('u', 'n')).resolves.toBeNull()
+    await expect(cache.hget('u', 'h', 'f')).resolves.toBeNull()
+    await expect(cache.mget('u', ['n', 'absent'])).resolves.toEqual([null, null])
+    await cache.get('u', 'absent')
+    await cache.hget('u', 'h', 'absent')
+    await cache.mget('u', ['absent'])
+
+    expect(reported).toEqual([
+      ['get', 'hit'],
+      ['hget', 'hit'],
+      ['mget', 'hit'],
+      ['get', 'miss'],
+      ['hget', 'miss'],
+      ['mget', 'miss']
+    ])
+  })
+
   // Scenario: a scan runs to its end, and one runs against a client that cannot scan.
   it('reports a finished scan as ok and a refused one as error', async () => {
     await cache.set('u', '1', 1)

@@ -151,6 +151,8 @@ export class CacheService extends CacheCollectionCommands {
    *   does not satisfy it (the entry is left in place).
    */
   async get<T>(prefix: string, id: string, options?: ReadOptions<T>): Promise<T | null> {
+    // Whether Redis returned a payload, not whether it decodes to a value: the JSON text `null` is a hit.
+    let present = false
     return this.track(
       'get',
       async () => {
@@ -159,9 +161,10 @@ export class CacheService extends CacheCollectionCommands {
         if (raw === null) {
           return null
         }
+        present = true
         return this.decode<T>(raw, options)
       },
-      (value) => found(value !== null)
+      () => found(present)
     )
   }
 
@@ -408,6 +411,8 @@ export class CacheService extends CacheCollectionCommands {
     ids: readonly string[],
     options?: ReadOptions<T>
   ): Promise<Array<T | null>> {
+    // As for `get`: a payload that decodes to `null` is still a hit.
+    let present = false
     return this.track(
       'mget',
       async () => {
@@ -416,6 +421,7 @@ export class CacheService extends CacheCollectionCommands {
         for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
           values.push(...(await this.client().mget(...part)))
         }
+        present = values.some((value) => value !== null)
         const decoded: Array<T | null> = []
         // One at a time, in order, so the element a failure names is the first bad one.
         for (const [index, value] of values.entries()) {
@@ -423,7 +429,7 @@ export class CacheService extends CacheCollectionCommands {
         }
         return decoded
       },
-      (values) => found(values.some((value) => value !== null))
+      () => found(present)
     )
   }
 

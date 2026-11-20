@@ -5,6 +5,8 @@
  * rejected promise such a function returns: the process would then die on an unhandled rejection.
  * A synchronous throw, a rejected promise and a thenable that throws are all absorbed here.
  *
+ * Layer: server.
+ *
  * @param call - Invokes the hook.
  */
 export function callHook(call: () => unknown): void {
