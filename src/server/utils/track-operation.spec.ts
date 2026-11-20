@@ -78,7 +78,10 @@ describe('trackOperation', () => {
       }
     }
 
-    await expect(trackOperation(events, 'get', async () => 7)).resolves.toBe(7)
+    const classify = jest.fn(() => 'hit' as const)
+
+    await expect(trackOperation(events, 'get', async () => 7, classify)).resolves.toBe(7)
+    expect(classify).not.toHaveBeenCalled()
     await expect(
       trackOperation(events, 'get', async () => Promise.reject(new Error('boom')))
     ).rejects.toThrow('boom')
