@@ -163,10 +163,11 @@ export abstract class CacheCollectionCommands {
    * @returns The number of fields actually removed.
    */
   async hdel(prefix: string, id: string, ...fields: readonly string[]): Promise<number> {
+    // No command is sent, so nothing is reported either.
+    if (fields.length === 0) {
+      return 0
+    }
     return this.track('hdel', async () => {
-      if (fields.length === 0) {
-        return 0
-      }
       const key = this.keyBuilder.build(prefix, id)
       return this.client().hdel(key, ...fields)
     })
@@ -186,10 +187,10 @@ export abstract class CacheCollectionCommands {
    * @returns The number of members newly added (excludes ones already present).
    */
   async sadd(prefix: string, id: string, ...members: readonly string[]): Promise<number> {
+    if (members.length === 0) {
+      return 0
+    }
     return this.track('sadd', async () => {
-      if (members.length === 0) {
-        return 0
-      }
       return this.client().sadd(this.keyBuilder.build(prefix, id), ...members)
     })
   }
@@ -203,10 +204,10 @@ export abstract class CacheCollectionCommands {
    * @returns The number of members actually removed.
    */
   async srem(prefix: string, id: string, ...members: readonly string[]): Promise<number> {
+    if (members.length === 0) {
+      return 0
+    }
     return this.track('srem', async () => {
-      if (members.length === 0) {
-        return 0
-      }
       return this.client().srem(this.keyBuilder.build(prefix, id), ...members)
     })
   }

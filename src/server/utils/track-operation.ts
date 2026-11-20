@@ -34,6 +34,21 @@ export function reportOperation(
 }
 
 /**
+ * Whether the host set an operation hook, read inside a guard: a getter or a proxy trap on the
+ * host's `events` object can throw, and that must never fail the command it would observe.
+ *
+ * @param events - The host's callbacks.
+ * @returns True when there is a hook to call.
+ */
+function isObserved(events: ICacheEvents | undefined): boolean {
+  try {
+    return events?.onOperation !== undefined
+  } catch {
+    return false
+  }
+}
+
+/**
  * Runs one command and reports how it ended to `events.onOperation`, when that is set.
  *
  * @typeParam T - What the command resolves to.
@@ -50,7 +65,7 @@ export async function trackOperation<T>(
   run: () => Promise<T>,
   classify: (result: T) => CacheOperationOutcome = completed
 ): Promise<T> {
-  if (events?.onOperation === undefined) {
+  if (!isObserved(events)) {
     return run()
   }
   let result: T

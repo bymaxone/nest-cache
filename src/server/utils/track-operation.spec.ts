@@ -69,6 +69,21 @@ describe('trackOperation', () => {
     await expect(trackOperation({ onOperation }, 'get', async () => 3)).resolves.toBe(3)
   })
 
+  // Scenario: the host's `events` object throws when the hook is read (a getter, a Proxy trap).
+  // Rule: the command still runs and returns, and nothing is reported.
+  it('runs the command when reading the hook throws', async () => {
+    const events = {
+      get onOperation(): never {
+        throw new Error('trap')
+      }
+    }
+
+    await expect(trackOperation(events, 'get', async () => 7)).resolves.toBe(7)
+    await expect(
+      trackOperation(events, 'get', async () => Promise.reject(new Error('boom')))
+    ).rejects.toThrow('boom')
+  })
+
   it('names the two outcomes of a command with nothing to report', () => {
     expect([completed(), found(true), found(false)]).toEqual(['ok', 'hit', 'miss'])
   })

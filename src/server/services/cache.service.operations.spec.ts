@@ -139,6 +139,21 @@ describe('CacheService operation outcomes', () => {
     ])
   })
 
+  // Scenario: a call whose input is empty sends no command.
+  // Rule: nothing is reported, so a no-op does not count as a hit, a miss or an ok.
+  it.each([
+    ['delMany', (c: CacheService) => c.delMany('u', [])],
+    ['mget', (c: CacheService) => c.mget('u', [])],
+    ['mset', (c: CacheService) => c.mset('u', [])],
+    ['hdel', (c: CacheService) => c.hdel('u', '1')],
+    ['sadd', (c: CacheService) => c.sadd('u', '1')],
+    ['srem', (c: CacheService) => c.srem('u', '1')]
+  ] as const)('%s with nothing to send reports nothing', async (_name, call) => {
+    await call(cache)
+
+    expect(reported).toEqual([])
+  })
+
   // Scenario: a scan runs to its end, and one runs against a client that cannot scan.
   it('reports a finished scan as ok and a refused one as error', async () => {
     await cache.set('u', '1', 1)

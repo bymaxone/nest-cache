@@ -281,6 +281,9 @@ export class CacheService extends CacheCollectionCommands {
    * @returns The number of keys actually removed.
    */
   async delMany(prefix: string, ids: readonly string[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0
+    }
     return this.track('delMany', async () => {
       const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
       let removed = 0
@@ -411,6 +414,9 @@ export class CacheService extends CacheCollectionCommands {
     ids: readonly string[],
     options?: ReadOptions<T>
   ): Promise<Array<T | null>> {
+    if (ids.length === 0) {
+      return []
+    }
     // As for `get`: a payload that decodes to `null` is still a hit. Set before the classifier runs.
     let present: boolean
     return this.track(
@@ -443,10 +449,10 @@ export class CacheService extends CacheCollectionCommands {
    * @throws {CacheException} `SERIALIZATION_FAILED` when any value cannot be encoded.
    */
   async mset<T>(prefix: string, entries: ReadonlyArray<readonly [string, T]>): Promise<void> {
+    if (entries.length === 0) {
+      return
+    }
     return this.track('mset', async () => {
-      if (entries.length === 0) {
-        return
-      }
       const pairs: string[] = []
       for (const [id, value] of entries) {
         pairs.push(this.keyBuilder.build(prefix, id), this.serializer.serialize(value))

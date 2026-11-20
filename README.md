@@ -684,7 +684,8 @@ bag is called, in order, and one that throws or rejects does not hide the event 
   `sismember`) is a `hit`, and one that finds nothing is a `miss`; every other command that
   completes is `ok`; a command that rejects is `error`, and the caller still gets the rejection.
   `isHealthy` reports `error` when the server does not answer, though it resolves `false`.
-  A `scan` is reported once, when the iteration ends or fails.
+  A `scan` is reported once, when the iteration ends or fails. A call with nothing to send (an empty list, no fields) sends no command
+  and is not counted.
 - **Labels come from closed sets.** A key, an id, a tenant or an error message is never a label,
   and a name or an outcome outside the two sets is not counted.
 - A bad `events` callback of yours never changes what a command returns: a throw, or a rejected
