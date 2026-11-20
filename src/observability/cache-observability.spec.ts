@@ -190,6 +190,23 @@ describe('CacheObservability', () => {
       expect(Object.hasOwn(calls[0]?.[1] ?? {}, 'err')).toBe(false)
     })
 
+    // A host logger typed `=> void` may still be an async function; what it rejects with must not
+    // reach the process.
+    it('absorbs a rejection from an async logger method', async () => {
+      const unhandled: unknown[] = []
+      const record = (reason: unknown): void => void unhandled.push(reason)
+      process.on('unhandledRejection', record)
+      const rejecting = jest.fn(async () => Promise.reject(new Error('logger down')))
+      const logger = { debug: rejecting, log: rejecting, warn: rejecting, error: rejecting }
+
+      new CacheObservability({ logger }).events.onEvent?.('ready', { role: 'main' })
+      await new Promise((resolve) => setImmediate(resolve))
+      process.off('unhandledRejection', record)
+
+      expect(rejecting).toHaveBeenCalledTimes(1)
+      expect(unhandled).toEqual([])
+    })
+
     it('writes through a Nest logger named BymaxCache when none is given', () => {
       const contexts: unknown[] = []
       const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(function (this: Logger) {

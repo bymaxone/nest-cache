@@ -6,19 +6,7 @@
  */
 import type { ICacheEvents } from '@bymax-one/nest-cache'
 
-/**
- * Calls one hook, absorbing a throw, a rejected promise and a thenable that throws.
- *
- * @param call - Invokes the hook.
- */
-function absorb(call: () => unknown): void {
-  try {
-    // Adopts a promise or any thenable, so a rejection (or a `then` that throws) is handled here.
-    void Promise.resolve(call()).then(undefined, () => undefined)
-  } catch {
-    // One observer's failure must not reach the others or the cache.
-  }
-}
+import { absorb } from './absorb'
 
 /**
  * Builds the bag that forwards each callback to every given bag.

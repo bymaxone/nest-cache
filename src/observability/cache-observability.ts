@@ -18,6 +18,7 @@ import type {
   CacheOperationOutcome
 } from '@bymax-one/nest-cache/shared'
 
+import { absorb } from './absorb'
 import { CACHE_LOG_EVENTS, CACHE_OPERATION_NAMES, CACHE_OPERATION_OUTCOMES } from './constants'
 
 /** The logger methods this surface uses; a Nest `Logger` satisfies it. */
@@ -221,7 +222,9 @@ export class CacheObservability {
     if (data['err'] instanceof Error) {
       fields['err'] = data['err']
     }
-    this.logger[entry.level]({ event: entry.event, message: entry.message, ...fields })
+    absorb(() =>
+      this.logger[entry.level]({ event: entry.event, message: entry.message, ...fields })
+    )
   }
 
   /**
