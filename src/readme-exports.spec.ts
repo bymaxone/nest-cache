@@ -19,9 +19,13 @@ const ENTRIES = [
   'src/shared/index.ts'
 ] as const
 
-/** Names an entry file exports, from its `export { … }` and `export type { … }` lists. */
+/** Names an entry file exports publicly, from its `export { … }` and `export type { … }` lists. */
 function exportedNames(entry: string): string[] {
-  const source = readFileSync(join(ROOT, entry), 'utf8')
+  // An export marked `@internal` is stripped from the published declarations, so it is not documented.
+  const source = readFileSync(join(ROOT, entry), 'utf8').replace(
+    /\/\*\*\s*@internal\s*\*\/\s*export[^;\n]*/g,
+    ''
+  )
   const names: string[] = []
   for (const block of source.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
     for (const part of (block[1] ?? '').split(',')) {
