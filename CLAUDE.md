@@ -53,7 +53,7 @@
 - **100% statements / branches / functions / lines** enforced by `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
 - Mutation testing (Stryker `break: 100`) is the deeper gate. `ignoreStatic: false` (rigorous — exposes module-level constant mutants). Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>` — acceptable for genuine equivalents only; minimize, and never disable a mutant a test could kill.
 
-**8. Build** — tsup builds 5 subpaths → ESM (.mjs) + CJS (.cjs) + .d.ts. `sideEffects: false`. Peer deps (`@nestjs/*`, `ioredis`, `reflect-metadata`) always external.
+**8. Build** — tsup builds every subpath → ESM (.mjs) + CJS (.cjs) + .d.ts. `sideEffects: false`. Peer deps (`@nestjs/*`, `ioredis`, `reflect-metadata`) always external.
 
 ---
 
