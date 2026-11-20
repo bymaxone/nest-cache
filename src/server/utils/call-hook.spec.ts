@@ -51,7 +51,7 @@ describe('callHook', () => {
     expect(() => callHook(() => thenable)).not.toThrow()
   })
 
-  it('swallows a rejection delivered to a thenable', () => {
+  it('swallows a rejection delivered to a thenable', async () => {
     const calls: string[] = []
     const thenable = {
       then: (_ok: unknown, fail: (reason: unknown) => void): void => {
@@ -61,8 +61,10 @@ describe('callHook', () => {
     }
 
     callHook(() => thenable)
+    await settle()
 
     expect(calls).toEqual(['then'])
+    expect(unhandled).toEqual([])
   })
 
   it('does not touch a plain return value', () => {

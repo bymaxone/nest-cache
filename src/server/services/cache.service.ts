@@ -279,9 +279,6 @@ export class CacheService extends CacheCollectionCommands {
    */
   async delMany(prefix: string, ids: readonly string[]): Promise<number> {
     return this.track('delMany', async () => {
-      if (ids.length === 0) {
-        return 0
-      }
       const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
       let removed = 0
       for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
@@ -414,9 +411,6 @@ export class CacheService extends CacheCollectionCommands {
     return this.track(
       'mget',
       async () => {
-        if (ids.length === 0) {
-          return []
-        }
         const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
         const values: Array<string | null> = []
         for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
@@ -516,10 +510,6 @@ export class CacheService extends CacheCollectionCommands {
    */
   async *scan(prefix: string, pattern: string, count = SCAN_COUNT): AsyncIterable<string> {
     const events = this.options.events
-    if (events?.onOperation === undefined) {
-      yield* this.scanKeys(prefix, pattern, count)
-      return
-    }
     let outcome: CacheOperationOutcome = 'ok'
     try {
       yield* this.scanKeys(prefix, pattern, count)

@@ -13,10 +13,8 @@ import type { ICacheEvents } from '@bymax-one/nest-cache'
  */
 function absorb(call: () => unknown): void {
   try {
-    const result = call()
-    if (typeof (result as { then?: unknown } | null | undefined)?.then === 'function') {
-      ;(result as PromiseLike<unknown>).then(undefined, () => undefined)
-    }
+    // Adopts a promise or any thenable, so a rejection (or a `then` that throws) is handled here.
+    void Promise.resolve(call()).then(undefined, () => undefined)
   } catch {
     // One observer's failure must not reach the others or the cache.
   }

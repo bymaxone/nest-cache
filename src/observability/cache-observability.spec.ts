@@ -138,6 +138,15 @@ describe('CacheObservability', () => {
     })
 
     // Scenario: a role the library never emits, which a host callback could not have produced.
+    // The delay belongs to the reconnect event alone; a number under that name elsewhere is not logged.
+    it('adds a delay to no event but the reconnect', () => {
+      const { logger, calls } = recorder()
+
+      new CacheObservability({ logger }).events.onEvent?.('close', { role: 'main', delay: 250 })
+
+      expect(Object.hasOwn(calls[0]?.[1] ?? {}, 'delay')).toBe(false)
+    })
+
     it('logs an unrecognised role as unknown', () => {
       const { logger, calls } = recorder()
       const observability = new CacheObservability({ logger })
@@ -182,10 +191,14 @@ describe('CacheObservability', () => {
     })
 
     it('writes through a Nest logger named BymaxCache when none is given', () => {
-      const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+      const contexts: unknown[] = []
+      const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(function (this: Logger) {
+        contexts.push(Reflect.get(this, 'context'))
+      })
       try {
         new CacheObservability().events.onEvent?.('ready', { role: 'main' })
 
+        expect(contexts).toEqual(['BymaxCache'])
         expect(spy).toHaveBeenCalledWith({
           event: CACHE_LOG_EVENTS.ready,
           message: 'Redis connection ready',
