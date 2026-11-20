@@ -207,6 +207,47 @@ describe('CacheObservability', () => {
       expect(unhandled).toEqual([])
     })
 
+    // The default Nest `Logger` drops what its methods return, so a LoggerService installed with
+    // `Logger.overrideLogger` that rejects cannot be absorbed behind it; passing it as `logger` can.
+    // Each method returns a thenable that records whether anyone consumed it: what absorb reads, Nest
+    // drops. (A real unhandled rejection cannot be observed here, the test runner owns that handler.)
+    describe('with a LoggerService installed through Logger.overrideLogger', () => {
+      const emitWithOverride = async (
+        useAsLogger: boolean
+      ): Promise<{ calls: number; consumed: number }> => {
+        const previous: unknown = Reflect.get(Logger, 'staticInstanceRef')
+        const seen = { calls: 0, consumed: 0 }
+        const method = (): { then: () => void } => {
+          seen.calls += 1
+          return {
+            then: (): void => {
+              seen.consumed += 1
+            }
+          }
+        }
+        const service = { debug: method, log: method, warn: method, error: method }
+        try {
+          Logger.overrideLogger(service)
+          const observability = useAsLogger
+            ? new CacheObservability({ logger: service })
+            : new CacheObservability()
+          observability.events.onEvent?.('ready', { role: 'main' })
+          await new Promise((resolve) => setImmediate(resolve))
+        } finally {
+          Reflect.set(Logger, 'staticInstanceRef', previous)
+        }
+        return seen
+      }
+
+      it('is called through the default Logger, which drops what it returns', async () => {
+        expect(await emitWithOverride(false)).toEqual({ calls: 1, consumed: 0 })
+      })
+
+      it('has what it returns consumed, so a rejection is absorbed, when passed as the logger', async () => {
+        expect(await emitWithOverride(true)).toEqual({ calls: 1, consumed: 1 })
+      })
+    })
+
     it('writes through a Nest logger named BymaxCache when none is given', () => {
       const contexts: unknown[] = []
       const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(function (this: Logger) {

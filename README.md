@@ -710,6 +710,10 @@ host's Pub/Sub handler threw, travels as the `err` field holding the error objec
 serializer and redaction apply to it. No channel, key, id or payload is logged, and a `role` other
 than `main` or `subscriber` is written as `unknown`.
 
+With the default logger, a `LoggerService` installed through `Logger.overrideLogger` must not reject:
+Nest's `Logger` drops what its methods return, so an `async` method that throws surfaces as an
+unhandled rejection. Pass that service as `logger` to `CacheObservability` and the library absorbs it.
+
 | Code                      | Level   | When                                                                                     | Fields                                                   |
 | ------------------------- | ------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | `CACHE_CONNECT`           | `debug` | A connection's socket opened                                                             | `role`                                                   |

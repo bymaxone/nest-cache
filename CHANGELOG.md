@@ -7,6 +7,10 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Documentation
+
+- The observability README says what the default Nest `Logger` cannot absorb: a `LoggerService` installed through `Logger.overrideLogger` must not reject, because Nest drops what its methods return. Pass the service as `logger` to have the library absorb it. `dist/` is unchanged.
+
 ## [1.2.27] - 2026-11-20
 
 ### Added
