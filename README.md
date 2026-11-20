@@ -707,17 +707,17 @@ host's Pub/Sub handler threw, travels as the `err` field holding the error objec
 serializer and redaction apply to it. No channel, key, id or payload is logged, and a `role` other
 than `main` or `subscriber` is written as `unknown`.
 
-| Code                      | Level   | When                                                                                     | Fields                                                                         |
-| ------------------------- | ------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `CACHE_CONNECT`           | `debug` | A connection's socket opened                                                             | `role`                                                                         |
-| `CACHE_READY`             | `log`   | A connection is ready                                                                    | `role`                                                                         |
-| `CACHE_CLOSE`             | `warn`  | A connection closed                                                                      | `role`                                                                         |
-| `CACHE_RECONNECTING`      | `warn`  | A connection is reconnecting                                                             | `role`, `delay` (ms)                                                           |
-| `CACHE_END`               | `warn`  | A connection ended and will not reconnect                                                | `role`                                                                         |
-| `CACHE_CONNECTION_ERROR`  | `error` | The driver raised an error on a connection                                               | `role`, `err`                                                                  |
-| `CACHE_FORCED_DISCONNECT` | `warn`  | A connection did not quit within `shutdownTimeoutMs` and was cut                         | `role`                                                                         |
-| `CACHE_HANDLER_ERROR`     | `error` | A Pub/Sub handler failed, or its message could not be decoded (the failure is swallowed) | `role`, `err` (when the handler threw something other than a `CacheException`) |
-| `CACHE_PUBSUB_DROPPED`    | `warn`  | Messages were dropped because every handler slot and the queue were taken                | `role`, `dropped`                                                              |
+| Code                      | Level   | When                                                                                     | Fields                                                   |
+| ------------------------- | ------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `CACHE_CONNECT`           | `debug` | A connection's socket opened                                                             | `role`                                                   |
+| `CACHE_READY`             | `log`   | A connection is ready                                                                    | `role`                                                   |
+| `CACHE_CLOSE`             | `warn`  | A connection closed                                                                      | `role`                                                   |
+| `CACHE_RECONNECTING`      | `warn`  | A connection is reconnecting                                                             | `role`, `delay` (ms)                                     |
+| `CACHE_END`               | `warn`  | A connection ended and will not reconnect                                                | `role`                                                   |
+| `CACHE_CONNECTION_ERROR`  | `error` | The driver raised an error on a connection                                               | `role`, `err`                                            |
+| `CACHE_FORCED_DISCONNECT` | `warn`  | A connection did not quit within `shutdownTimeoutMs` and was cut                         | `role`                                                   |
+| `CACHE_HANDLER_ERROR`     | `error` | A Pub/Sub handler failed, or its message could not be decoded (the failure is swallowed) | `role`, `err` (an `Error` other than a `CacheException`) |
+| `CACHE_PUBSUB_DROPPED`    | `warn`  | Messages were dropped because every handler slot and the queue were taken                | `role`, `dropped`                                        |
 
 ---
 
