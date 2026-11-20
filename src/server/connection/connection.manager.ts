@@ -30,6 +30,7 @@ import {
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
+import { callHook } from '../utils/call-hook'
 import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
@@ -354,18 +355,14 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
 
   /** Forwards a lifecycle event to `events.onEvent`, swallowing consumer throws. */
   private emit(event: CacheEventName, data: Record<string, unknown>): void {
-    try {
-      this.events?.onEvent?.(event, data)
-    } catch {
-      // Observability callbacks must never crash the connection manager.
-    }
+    callHook(() => this.events?.onEvent?.(event, data))
   }
 
   /** Wires lifecycle listeners that forward to `events.onEvent`, swallowing throws. */
   private registerListeners(client: AnyRedis, role: ClientRole): void {
     client.on('connect', () => this.emit('connect', { role }))
     client.on('ready', () => this.emit('ready', { role }))
-    client.on('error', (err: Error) => this.emit('error', { role, error: err.message }))
+    client.on('error', (err: Error) => this.emit('error', { role, error: err.message, err }))
     client.on('close', () => this.emit('close', { role }))
     client.on('reconnecting', (delay: number) => this.emit('reconnecting', { role, delay }))
     client.on('end', () => this.emit('end', { role }))

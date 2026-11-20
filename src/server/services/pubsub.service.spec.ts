@@ -97,7 +97,8 @@ describe('PubSubService', () => {
       role: 'subscriber',
       reason: 'handler_error',
       channel: 'ps:obs',
-      error: 'handler boom'
+      error: 'handler boom',
+      err: expect.any(Error)
     })
     await observed.onApplicationShutdown()
   })

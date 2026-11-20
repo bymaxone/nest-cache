@@ -144,7 +144,9 @@ describe('CacheService command timeout', () => {
     const pristine = __dirname.replace(/[\\/]\.stryker-tmp[\\/]sandbox-[^\\/]+/, '')
     const source = readFileSync(join(pristine, 'cache.service.ts'), 'utf8')
     // A call may be split over lines (`this.connection\n  .getClient()`), so the whole file is scanned.
-    const declarations = [...source.matchAll(/^ {2}(?:private |async )*(\w+)(?:<[^>]*>)?\(/gm)]
+    const declarations = [
+      ...source.matchAll(/^ {2}(?:private |protected |async )*(\w+)(?:<[^>]*>)?\(/gm)
+    ]
     const readers = new Set<string>()
     for (const read of source.matchAll(/connection\s*\.\s*getClient\s*\(\)/g)) {
       const enclosing = declarations.filter((d) => d.index < read.index).pop()

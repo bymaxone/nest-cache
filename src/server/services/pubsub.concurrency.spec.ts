@@ -209,8 +209,20 @@ describe('PubSubService handler bounds', () => {
 
     expect(seen).toEqual([0, 1, 2])
     expect(onEvent.mock.calls.map(([, data]) => data)).toEqual([
-      { role: 'subscriber', reason: 'handler_error', channel: 'cc:failing', error: 'first failed' },
-      { role: 'subscriber', reason: 'handler_error', channel: 'cc:failing', error: 'second failed' }
+      {
+        role: 'subscriber',
+        reason: 'handler_error',
+        channel: 'cc:failing',
+        error: 'first failed',
+        err: expect.any(Error)
+      },
+      {
+        role: 'subscriber',
+        reason: 'handler_error',
+        channel: 'cc:failing',
+        error: 'second failed',
+        err: expect.any(Error)
+      }
     ])
   })
 

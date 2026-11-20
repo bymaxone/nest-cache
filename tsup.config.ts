@@ -71,6 +71,35 @@ export default defineConfig([
     treeshake: true,
     sourcemap: false
   },
+  // Observability entry — operations, Pub/Sub backlog and drops on the application's registry, a
+  // readiness indicator and the library's log events.
+  //
+  // Same externals as the metrics entry, for the same reasons: `@bymax-one/nest-core` and
+  // `prom-client` are optional peers that only this entry and `./metrics` import, and
+  // `@bymax-one/nest-cache` stays external so there is one copy of the server types per install.
+  {
+    entry: { 'observability/index': 'src/observability/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({
+      js: format === 'esm' ? '.mjs' : '.cjs'
+    }),
+    external: [
+      /^@nestjs\//,
+      'reflect-metadata',
+      'ioredis',
+      '@bymax-one/nest-cache',
+      '@bymax-one/nest-core',
+      'prom-client'
+    ],
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
+  },
   // Shared entry — types + constants (zero deps)
   {
     entry: { 'shared/index': 'src/shared/index.ts' },

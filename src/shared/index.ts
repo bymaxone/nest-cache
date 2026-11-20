@@ -6,7 +6,12 @@
  */
 
 // Types
-export type { CacheConnectionStatus, CacheEventName } from './types/cache-event.types'
+export type {
+  CacheConnectionStatus,
+  CacheEventName,
+  CacheOperationName,
+  CacheOperationOutcome
+} from './types/cache-event.types'
 export type { CacheKeyPrefix, CacheNamespace } from './types/cache-config.types'
 export type { SerializableValue } from './types/serializable-value.types'
 

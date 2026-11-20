@@ -478,7 +478,11 @@ describe('ConnectionManager', () => {
 
       expect(onEvent).toHaveBeenCalledWith('connect', { role: 'main' })
       expect(onEvent).toHaveBeenCalledWith('ready', { role: 'main' })
-      expect(onEvent).toHaveBeenCalledWith('error', { role: 'main', error: 'x' })
+      expect(onEvent).toHaveBeenCalledWith('error', {
+        role: 'main',
+        error: 'x',
+        err: expect.any(Error)
+      })
       expect(onEvent).toHaveBeenCalledWith('close', { role: 'main' })
       expect(onEvent).toHaveBeenCalledWith('reconnecting', { role: 'main', delay: 42 })
       expect(onEvent).toHaveBeenCalledWith('end', { role: 'main' })

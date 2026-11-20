@@ -82,11 +82,23 @@ describe('PubSubService dispatch', () => {
     expect(onEvent.mock.calls).toEqual([
       [
         'error',
-        { role: 'subscriber', reason: 'handler_error', channel: 'dp:shared', error: 'first failed' }
+        {
+          role: 'subscriber',
+          reason: 'handler_error',
+          channel: 'dp:shared',
+          error: 'first failed',
+          err: expect.any(Error)
+        }
       ],
       [
         'error',
-        { role: 'subscriber', reason: 'handler_error', channel: 'dp:shared', error: 'first failed' }
+        {
+          role: 'subscriber',
+          reason: 'handler_error',
+          channel: 'dp:shared',
+          error: 'first failed',
+          err: expect.any(Error)
+        }
       ]
     ])
     await observed.onApplicationShutdown()

@@ -31,6 +31,7 @@ import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import type { IPubSubHandler, IPubSubPatternHandler } from '../interfaces/pubsub-handler.interface'
 import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
+import { callHook } from '../utils/call-hook'
 import { closeClient } from '../utils/close-client'
 import { describeError } from '../utils/describe-error'
 import { guardClient } from '../utils/guard-client'
@@ -131,7 +132,11 @@ export class PubSubService implements OnApplicationShutdown {
     this.gate =
       options.pubsubMaxConcurrentHandlers === undefined
         ? null
-        : new HandlerGate(options.pubsubMaxConcurrentHandlers, options.pubsubMaxQueuedMessages)
+        : new HandlerGate(
+            options.pubsubMaxConcurrentHandlers,
+            options.pubsubMaxQueuedMessages,
+            (queued) => this.emitQueued(queued)
+          )
   }
 
   /**
@@ -486,15 +491,22 @@ export class PubSubService implements OnApplicationShutdown {
    * @param detail - The channel, and how many drops it sums up when there is more than one.
    */
   private emitDrop(detail: { channel: string; dropped?: number }): void {
-    try {
+    callHook(() =>
       this.events?.onEvent?.('error', {
         role: 'subscriber',
         reason: 'handler_queue_full',
         ...detail
       })
-    } catch {
-      // Observability must never crash the subscriber connection.
-    }
+    )
+  }
+
+  /**
+   * Tells `events.onQueue` how many messages wait for a handler slot, swallowing any throw from it.
+   *
+   * @param queued - How many messages wait now.
+   */
+  private emitQueued(queued: number): void {
+    callHook(() => this.events?.onQueue?.(queued))
   }
 
   /**
@@ -507,16 +519,17 @@ export class PubSubService implements OnApplicationShutdown {
    * @param error - The caught handler / deserialization failure.
    */
   private emitHandlerError(channel: string, error: unknown): void {
-    try {
+    callHook(() =>
       this.events?.onEvent?.('error', {
         role: 'subscriber',
         reason: 'handler_error',
         channel,
-        error: describeError(error)
+        error: describeError(error),
+        // The raw object only for a throw of the host's own handler. A failure the library wrapped
+        // keeps its text and nothing else: its `cause` can quote the payload.
+        ...(error instanceof CacheException ? {} : { err: error })
       })
-    } catch {
-      // Observability must never crash the subscriber connection.
-    }
+    )
   }
 
   /**
@@ -525,14 +538,12 @@ export class PubSubService implements OnApplicationShutdown {
    * does not sit next to a signalled one. Swallows any throw from `onEvent`.
    */
   private emitForcedDisconnect(): void {
-    try {
+    callHook(() =>
       this.events?.onEvent?.('error', {
         role: 'subscriber',
         reason: 'forced_disconnect',
         shutdownTimeoutMs: this.shutdownTimeoutMs
       })
-    } catch {
-      // Observability must never crash the shutdown.
-    }
+    )
   }
 }
