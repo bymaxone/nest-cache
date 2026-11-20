@@ -20,7 +20,16 @@ const MIN_PURPOSE_LENGTH = 20
 const LAYER_MARKER = /(?:\bLayer:|@layer)\s+([A-Za-z-]+)/i
 
 /** The layers a spec may declare: the subpaths of the package the shared test helpers and the repository-level checks of the built package and its docs. `tests` is the family's spelling of `test`. */
-export const LAYERS = ['server', 'admin', 'metrics', 'shared', 'test', 'tests', 'repository']
+export const LAYERS = [
+  'server',
+  'admin',
+  'metrics',
+  'observability',
+  'shared',
+  'test',
+  'tests',
+  'repository'
+]
 
 /**
  * Why `source` has no valid header, or `null` when it has one.

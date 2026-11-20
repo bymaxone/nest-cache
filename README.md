@@ -85,26 +85,27 @@ so you control exact versions and the supply-chain surface stays minimal.
 
 ## 📦 Subpath Exports
 
-One package, four entry points — import only what your app needs:
+One package, five entry points — import only what your app needs:
 
-| Subpath     | Import                          | Purpose                                                                                                  |                                     Dependencies                                     |
-| ----------- | ------------------------------- | -------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------: |
-| **Server**  | `@bymax-one/nest-cache`         | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException` |                        NestJS 11, ioredis 6, reflect-metadata                        |
-| **Admin**   | `@bymax-one/nest-cache/admin`   | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal     |                        NestJS 11, ioredis 6, the server entry                        |
-| **Metrics** | `@bymax-one/nest-cache/metrics` | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core` | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
-| **Shared**  | `@bymax-one/nest-cache/shared`  | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                  |                                         None                                         |
+| Subpath           | Import                                | Purpose                                                                                                                                             |                                     Dependencies                                     |
+| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------: |
+| **Server**        | `@bymax-one/nest-cache`               | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException`                                            |                        NestJS 11, ioredis 6, reflect-metadata                        |
+| **Admin**         | `@bymax-one/nest-cache/admin`         | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal                                                |                        NestJS 11, ioredis 6, the server entry                        |
+| **Metrics**       | `@bymax-one/nest-cache/metrics`       | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core`                                            | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
+| **Observability** | `@bymax-one/nest-cache/observability` | Operation, Pub/Sub backlog and drop metrics, a readiness indicator and the library's log events, through `@bymax-one/nest-core` and the Nest logger | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
+| **Shared**        | `@bymax-one/nest-cache/shared`        | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                                                             |                                         None                                         |
 
 ```
 shared (zero deps)
      ↑
   server  ←  admin
      ↑
-          metrics
+          metrics, observability
 ```
 
 `/admin` is a **privileged** surface and is kept out of the main entry on purpose: importing it is a greppable, reviewable act, a consumer who never wires it cannot resolve a reveal service from DI by accident, and it never lands in the main bundle.
 
-`/metrics` is the only entry that loads `@bymax-one/nest-core` or `prom-client`, both optional peers: `.`, `/admin` and `/shared` never import either.
+`/metrics` and `/observability` are the only entries that load `@bymax-one/nest-core` or `prom-client`, both optional peers: `.`, `/admin` and `/shared` never import either.
 
 The `/shared` subpath is safe to import in isomorphic code, test helpers, CLI scripts, or shared packages that must not pull in NestJS or ioredis.
 
@@ -629,6 +630,97 @@ export class ObservabilityModule {}
   `new CacheConnectionTally({ roles: ['auth'] })` and pass `tally.eventsAs('auth')` as its `events`.
 - Events recorded before the registry exists are published too: the tally records from the first
   event, and each scrape reads it.
+
+---
+
+## 📈 Operations, health and logs (`/observability`)
+
+`/observability` records what the cache does (every command and how it ended, the Pub/Sub backlog and
+its drops), answers the readiness endpoint, and writes the library's operational log events as
+objects through the Nest logger. It needs `@bymax-one/nest-core` `^1.1.0` and `prom-client` `^15`, both
+optional peers; nothing in it runs until you wire it.
+
+```typescript
+import { BymaxCacheModule } from '@bymax-one/nest-cache'
+import {
+  CACHE_OBSERVABILITY,
+  CacheHealthIndicator,
+  CacheObservability,
+  CacheOperationMetrics,
+  combineCacheEvents
+} from '@bymax-one/nest-cache/observability'
+
+const observability = new CacheObservability()
+
+@Module({
+  imports: [
+    BymaxCacheModule.forRoot({ connection: { host: 'localhost' }, events: observability.events })
+  ],
+  providers: [
+    { provide: CACHE_OBSERVABILITY, useValue: observability },
+    CacheOperationMetrics,
+    CacheHealthIndicator
+  ]
+})
+export class ObservabilityModule {}
+```
+
+The module takes one `events`; to use this with the [connection metrics](#-connection-metrics-metrics)
+or your own callbacks, pass `combineCacheEvents(tally.events, observability.events, yours)`. Every
+bag is called, in order, and one that throws or rejects does not hide the event from the others.
+
+### Metrics
+
+| Metric                             | Type    | Labels                 | Meaning                                                                                          |
+| ---------------------------------- | ------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `bymax_cache_operations_total`     | counter | `operation`, `outcome` | Commands since start, by command and how each ended                                              |
+| `bymax_cache_pubsub_queued`        | gauge   | none                   | Pub/Sub messages waiting for a handler slot now; `0` when `pubsubMaxConcurrentHandlers` is unset |
+| `bymax_cache_pubsub_dropped_total` | counter | none                   | Pub/Sub messages dropped because every handler slot and the queue were taken                     |
+
+- **`operation` is one of 31 command names**: `get`, `getRaw`, `set`, `setRaw`, `setNx`, `del`,
+  `delMany`, `exists`, `incr`, `decr`, `expire`, `ttl`, `persist`, `mget`, `mset`, `hget`, `hset`,
+  `hgetall`, `hdel`, `sadd`, `srem`, `smembers`, `sismember`, `scard`, `keys`, `scan`,
+  `flushNamespace`, `eval`, `isHealthy`, `ping` and `info`. `pipeline()` and `getClient()` hand out the raw client and run no
+  command of their own, so a command sent through them is not counted.
+- **`outcome` is `hit`, `miss`, `ok` or `error`.** A read that finds something (`get`, `getRaw`,
+  `mget` with at least one value, `hget`, `hgetall`, `smembers`) or answers true (`exists`,
+  `sismember`) is a `hit`, and one that finds nothing is a `miss`; every other command that
+  completes is `ok`; a command that rejects is `error`, and the caller still gets the rejection.
+  `isHealthy` reports `error` when the server does not answer, though it resolves `false`.
+  A `scan` is reported once, when the iteration ends or fails.
+- **Labels come from closed sets.** A key, an id, a tenant or an error message is never a label,
+  and a name or an outcome outside the two sets is not counted.
+- A bad `events` callback of yours never changes what a command returns: a throw, or a rejected
+  promise from an `async` callback, is absorbed.
+
+### Health
+
+`CacheHealthIndicator` is a readiness indicator named `cache`. It sends one `PING` through
+`isHealthy()` (no write, no key read) and returns `{ status: 'up' }` or `{ status: 'down' }` with no
+details, so a probe cannot leak anything. The command timeout bounds it, and the aggregator in
+`@bymax-one/nest-core` applies its own indicator timeout on top. It is marked for discovery, so
+`health.autoDiscover` picks it up, or register it under `BYMAX_HEALTH_INDICATORS`.
+
+### Log events
+
+Each event is an object message, `logger.warn({ event: 'CACHE_CLOSE', message: '…', role: 'main' })`,
+through a Nest `Logger` named `BymaxCache`; pass `new CacheObservability({ logger })` to send them elsewhere.
+`message` is the library's own text. An error is never put into it: the driver's error, or the one a
+host's Pub/Sub handler threw, travels as the `err` field holding the error object, so the logger's
+serializer and redaction apply to it. No channel, key, id or payload is logged, and a `role` other
+than `main` or `subscriber` is written as `unknown`.
+
+| Code                      | Level   | When                                                                                     | Fields                                  |
+| ------------------------- | ------- | ---------------------------------------------------------------------------------------- | --------------------------------------- |
+| `CACHE_CONNECT`           | `debug` | A connection's socket opened                                                             | `role`                                  |
+| `CACHE_READY`             | `log`   | A connection is ready                                                                    | `role`                                  |
+| `CACHE_CLOSE`             | `warn`  | A connection closed                                                                      | `role`                                  |
+| `CACHE_RECONNECTING`      | `warn`  | A connection is reconnecting                                                             | `role`, `delay` (ms)                    |
+| `CACHE_END`               | `warn`  | A connection ended and will not reconnect                                                | `role`                                  |
+| `CACHE_CONNECTION_ERROR`  | `error` | The driver raised an error on a connection                                               | `role`, `err`                           |
+| `CACHE_FORCED_DISCONNECT` | `warn`  | A connection did not quit within `shutdownTimeoutMs` and was cut                         | `role`                                  |
+| `CACHE_HANDLER_ERROR`     | `error` | A Pub/Sub handler failed, or its message could not be decoded (the failure is swallowed) | `role`, `err` (a host's own throw only) |
+| `CACHE_PUBSUB_DROPPED`    | `warn`  | Messages were dropped because every handler slot and the queue were taken                | `role`, `dropped`                       |
 
 ---
 

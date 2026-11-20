@@ -86,6 +86,8 @@ export { CACHE_EVENT_NAMES } from '../shared'
 export type {
   CacheConnectionStatus,
   CacheEventName,
+  CacheOperationName,
+  CacheOperationOutcome,
   CacheKeyPrefix,
   CacheNamespace,
   SerializableValue

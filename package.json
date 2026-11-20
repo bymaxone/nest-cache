@@ -51,6 +51,16 @@
         "default": "./dist/metrics/index.cjs"
       }
     },
+    "./observability": {
+      "import": {
+        "types": "./dist/observability/index.d.ts",
+        "default": "./dist/observability/index.mjs"
+      },
+      "require": {
+        "types": "./dist/observability/index.d.cts",
+        "default": "./dist/observability/index.cjs"
+      }
+    },
     "./shared": {
       "import": {
         "types": "./dist/shared/index.d.ts",
@@ -76,6 +86,9 @@
       ],
       "metrics": [
         "./dist/metrics/index.d.cts"
+      ],
+      "observability": [
+        "./dist/observability/index.d.cts"
       ]
     }
   },

@@ -75,10 +75,20 @@ const ROOT = pkg.root
 // is a deleted key and the cut that never splits a surrogate pair. It also covers the helper that refuses a scope or a
 // threshold by option name and received type, which restates the server's describing rule because the
 // admin entry reaches the server only through its public surface.
+// The server budget (14 137 B, measured 14 107) covers the operation tracking: the 31 command names
+// reported to `events.onOperation` with a hit/miss/ok/error outcome, the Pub/Sub backlog callback,
+// and the one caller that absorbs a throwing or rejecting host hook at every observability site.
+// The observability entry (2 247 B, measured 2 217) is the optional subpath that publishes them; the
+// main entry imports neither `@bymax-one/nest-core` nor `prom-client`.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 13_466 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 14_137 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_931 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
+  {
+    name: 'observability (operations, health, logs)',
+    path: 'dist/observability/index.mjs',
+    brotli: 2_247
+  },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }
 ]
 

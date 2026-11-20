@@ -52,7 +52,11 @@ const EXPECTED_DIST_FILES = [
   'dist/metrics/index.mjs',
   'dist/metrics/index.cjs',
   'dist/metrics/index.d.ts',
-  'dist/metrics/index.d.cts'
+  'dist/metrics/index.d.cts',
+  'dist/observability/index.mjs',
+  'dist/observability/index.cjs',
+  'dist/observability/index.d.ts',
+  'dist/observability/index.d.cts'
 ]
 
 const EXPECTED_SERVER_EXPORTS = [
@@ -150,9 +154,9 @@ for (const name of EXPECTED_SHARED_EXPORTS) {
   }
 }
 
-// ── 4c. Optional peers stay out of every entry but `./metrics` ───────────────
+// ── 4c. Optional peers stay out of every entry but `./metrics` and `./observability` ──
 
-section('4c. Optional peers load only through ./metrics')
+section('4c. Optional peers load only through ./metrics and ./observability')
 const OPTIONAL_PEERS = ['@bymax-one/nest-core', 'prom-client']
 // A resolve hook records every specifier the loader is asked for, in ESM and CJS alike, so the
 // check holds for the entry's whole import graph rather than for its top-level imports.
@@ -164,7 +168,7 @@ const [mode, file] = process.argv.slice(1)
 if (mode === 'esm') await import(file); else (await import('node:module')).createRequire(import.meta.url)(file)
 process.stdout.write(JSON.stringify([...seen]))
 `
-for (const entry of ['server', 'admin', 'shared', 'metrics']) {
+for (const entry of ['server', 'admin', 'shared', 'metrics', 'observability']) {
   for (const [mode, ext] of [
     ['esm', 'mjs'],
     ['cjs', 'cjs']
@@ -181,7 +185,7 @@ for (const entry of ['server', 'admin', 'shared', 'metrics']) {
     const loaded = OPTIONAL_PEERS.filter((peer) =>
       JSON.parse(run.stdout).some((id) => id === peer || id.startsWith(`${peer}/`))
     )
-    const expected = entry === 'metrics' ? OPTIONAL_PEERS : []
+    const expected = entry === 'metrics' || entry === 'observability' ? OPTIONAL_PEERS : []
     if (JSON.stringify(loaded) === JSON.stringify(expected)) {
       pass(
         `${entry} (${mode}) loads ${loaded.length === 0 ? 'neither optional peer' : 'both optional peers'}`

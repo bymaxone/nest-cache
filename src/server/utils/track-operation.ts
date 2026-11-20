@@ -1,0 +1,59 @@
+import type {
+  CacheOperationName,
+  CacheOperationOutcome
+} from '../../shared/types/cache-event.types'
+import type { ICacheEvents } from '../interfaces/cache-events.interface'
+import { callHook } from './call-hook'
+
+/** The outcome of a command that completed and has no absence to report. */
+export const completed = (): CacheOperationOutcome => 'ok'
+
+/** `hit` when a read found something, `miss` when it found nothing. */
+export const found = (hit: boolean): CacheOperationOutcome => (hit ? 'hit' : 'miss')
+
+/**
+ * Hands an operation's outcome to `events.onOperation`, absorbing anything it throws or rejects
+ * with: a faulty observer must never fail the command it observes.
+ *
+ * @param events - The host's callbacks.
+ * @param operation - The command's name.
+ * @param outcome - How it ended.
+ */
+export function reportOperation(
+  events: ICacheEvents | undefined,
+  operation: CacheOperationName,
+  outcome: CacheOperationOutcome
+): void {
+  callHook(() => events?.onOperation?.(operation, outcome))
+}
+
+/**
+ * Runs one command and reports how it ended to `events.onOperation`, when that is set.
+ *
+ * @typeParam T - What the command resolves to.
+ * @param events - The host's callbacks.
+ * @param operation - The command's name.
+ * @param run - Runs the command.
+ * @param classify - Names the outcome of a completed command; `ok` when omitted.
+ * @returns What the command resolved to.
+ * @throws Whatever the command threw, after reporting `error`.
+ */
+export async function trackOperation<T>(
+  events: ICacheEvents | undefined,
+  operation: CacheOperationName,
+  run: () => Promise<T>,
+  classify: (result: T) => CacheOperationOutcome = completed
+): Promise<T> {
+  if (events?.onOperation === undefined) {
+    return run()
+  }
+  let result: T
+  try {
+    result = await run()
+  } catch (error) {
+    reportOperation(events, operation, 'error')
+    throw error
+  }
+  reportOperation(events, operation, classify(result))
+  return result
+}

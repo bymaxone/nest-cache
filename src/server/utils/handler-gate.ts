@@ -20,10 +20,12 @@ export class HandlerGate {
   /**
    * @param slots - The most executions in flight at once.
    * @param room - The most executions that may wait; `undefined` leaves the wait unbounded.
+   * @param onChange - Told how many executions wait, after each push, each take and each clear.
    */
   constructor(
     private readonly slots: number,
-    private readonly room: number | undefined
+    private readonly room: number | undefined,
+    private readonly onChange?: (waiting: number) => void
   ) {}
 
   /**
@@ -42,12 +44,14 @@ export class HandlerGate {
       return false
     }
     this.#waiting.push({ run, isActive })
+    this.onChange?.(this.#waiting.length)
     return true
   }
 
   /** Forgets every waiting execution; those already running finish. */
   clear(): void {
     this.#waiting.length = 0
+    this.onChange?.(0)
   }
 
   #start(run: () => Promise<unknown>): void {
@@ -66,6 +70,7 @@ export class HandlerGate {
       if (next === undefined) {
         return
       }
+      this.onChange?.(this.#waiting.length)
       if (next.isActive()) {
         this.#start(next.run)
       }
