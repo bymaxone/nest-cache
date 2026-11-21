@@ -29,6 +29,7 @@ import { parseRedisUrl } from '../utils/parse-redis-url'
 import { isUnset } from './is-unset'
 import { takeOwnRefusal, refusal } from './own-refusals'
 import { refuseOption, refuseValue } from './refuse-option'
+import { requireText } from './require-text'
 import type { ResolvedOptions } from './resolved-options'
 import { snapshotBlocks } from './snapshot-blocks'
 import { KNOWN_TLS_PROFILES } from './tls-profiles'
@@ -234,15 +235,26 @@ function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
 }
 
 /**
- * Refuses a tls profile the driver does not know. The driver resolves a profile by name and leaves a
- * connection without the pinned authority for any other value, so an unknown name, a number or an
- * object is refused rather than accepted silently.
+ * Refuses a `tls` of a kind the driver cannot use (a number, an array, a function), and a tls profile
+ * it does not resolve. The driver resolves a profile by name and leaves a connection without the pinned
+ * authority for any other value, so an unknown name, a number or an object in `profile` is refused
+ * rather than accepted silently. `true` and `false` are accepted: `true` makes the driver speak tls
+ * with its defaults.
  *
  * @param option - The option's name, echoed in the error.
- * @param tls - The `tls` value: an object whose `profile` is checked, or the profile name itself.
- * @throws {CacheException} `INVALID_OPTIONS` naming the option when the profile is not a known name.
+ * @param tls - The `tls` value: an object whose `profile` is checked, the profile name itself, or a flag.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option when the kind is unusable or the profile
+ *   is not a known name.
  */
 function validateTlsProfile(option: string, tls: unknown): void {
+  if (
+    tls !== undefined &&
+    typeof tls !== 'boolean' &&
+    typeof tls !== 'string' &&
+    (typeof tls !== 'object' || Array.isArray(tls))
+  ) {
+    refuseOption(option, 'must be an object, a profile name or a boolean', tls)
+  }
   let profile: unknown
   if (typeof tls === 'string') {
     profile = tls
@@ -281,10 +293,7 @@ function validateScripts(scripts: unknown): void {
       refuseOption(where, 'must be an object', definition)
     }
     for (const field of ['name', 'lua'] as const) {
-      const value: unknown = Reflect.get(definition, field)
-      if (typeof value !== 'string' || value === '') {
-        refuseOption(`${where}.${field}`, 'must be a non-empty string', value)
-      }
+      requireText(`${where}.${field}`, Reflect.get(definition, field))
     }
   })
 }
@@ -362,6 +371,10 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   validateTlsProfile(
     'cluster.options.redisOptions.tls',
     options.cluster?.options?.redisOptions?.tls
+  )
+  validateTlsProfile(
+    'cluster.options.redisOptions.sentinelTLS',
+    options.cluster?.options?.redisOptions?.sentinelTLS
   )
   validateScripts(options.scripts)
   if (mode === 'standalone') {
