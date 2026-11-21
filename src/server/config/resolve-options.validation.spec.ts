@@ -19,12 +19,18 @@ const withTls = (tls: unknown): unknown =>
 const withScripts = (scripts: unknown): unknown =>
   resolveOptions({ connection: { host: 'h' }, scripts } as unknown as BymaxCacheModuleOptions)
 
-/** The refusal a call is expected to throw, naming `option`. */
-const refusing = (option: string): Error =>
+/** The refusal a call is expected to throw: the exact reason, and any further fixed details. */
+const refusing = (reason: string, more: Record<string, unknown> = {}): Error =>
   expect.objectContaining({
     code: 'cache.invalid_options',
-    details: expect.objectContaining({ reason: expect.stringContaining(option) })
+    details: expect.objectContaining({ reason, ...more })
   }) as Error
+
+/** What a refused tls profile reports: the option, the problem and the accepted names. */
+const unknownProfile = (option: string): Error =>
+  refusing(`${option} is not a known tls profile`, {
+    allowed: 'RedisCloudFixed or RedisCloudFlexible'
+  })
 
 describe('the known tls profiles', () => {
   // Rule: the list this library validates against is the list the driver resolves.
@@ -48,8 +54,9 @@ describe('tls.profile', () => {
   // Scenario: the profile is a number, an unknown name, or an object whose toString throws.
   // Rule: it is refused as INVALID_OPTIONS naming the option, and the host's toString never runs.
   it.each([
-    ['a number', { profile: 5 }],
-    ['an unknown name', { profile: 'RedisCloudTypo' }],
+    ['a number', { profile: 5 }, 'connection.tls.profile'],
+    ['an unknown name', { profile: 'RedisCloudTypo' }, 'connection.tls.profile'],
+    ['null', { profile: null }, 'connection.tls.profile'],
     [
       'an object whose toString throws',
       {
@@ -58,11 +65,13 @@ describe('tls.profile', () => {
             throw new Error('host text secret=hunter2')
           }
         }
-      }
+      },
+      'connection.tls.profile'
     ],
-    ['an unknown name as the whole value', 'nope']
-  ])('refuses %s', (_label, tls) => {
-    expect(() => withTls(tls)).toThrow(refusing('connection.tls'))
+    ['an unknown name as the whole value', 'nope', 'connection.tls'],
+    ['an empty name as the whole value', '', 'connection.tls']
+  ])('refuses %s', (_label, tls, option) => {
+    expect(() => withTls(tls)).toThrow(unknownProfile(option))
   })
 
   // Scenario: the cluster node options carry an unknown profile.
@@ -75,7 +84,9 @@ describe('tls.profile', () => {
       }
     } as unknown as BymaxCacheModuleOptions
 
-    expect(() => resolveOptions(options)).toThrow(refusing('cluster.options.redisOptions.tls'))
+    expect(() => resolveOptions(options)).toThrow(
+      unknownProfile('cluster.options.redisOptions.tls.profile')
+    )
   })
 })
 
@@ -105,16 +116,32 @@ describe('script definitions', () => {
   // Scenario: a definition that is not an object, or whose name or source is not a non-empty string.
   // Rule: it is refused as INVALID_OPTIONS naming the entry and the field, never at boot.
   it.each([
-    ['an entry that is not an object', [5], 'scripts[0]'],
-    ['a null entry', [null], 'scripts[0]'],
-    ['a name that is missing', [{ lua: 'return 1' }], 'scripts[0].name'],
-    ['an empty name', [{ name: '', lua: 'return 1' }], 'scripts[0].name'],
-    ['a name that is not a string', [{ name: 7, lua: 'return 1' }], 'scripts[0].name'],
-    ['a source that is missing', [{ name: 'a' }], 'scripts[0].lua'],
-    ['a source that is a number', [{ name: 'a', lua: 12345 }], 'scripts[0].lua'],
-    ['an empty source', [{ name: 'a', lua: '' }], 'scripts[0].lua'],
-    ['the second entry broken', [{ name: 'a', lua: 'return 1' }, { name: 'b' }], 'scripts[1].lua']
-  ])('refuses %s', (_label, scripts, option) => {
-    expect(() => withScripts(scripts)).toThrow(refusing(option))
+    ['an entry that is not an object', [5], 'scripts[0] must be an object'],
+    ['a null entry', [null], 'scripts[0] must be an object'],
+    ['a name that is missing', [{ lua: 'return 1' }], 'scripts[0].name must be a non-empty string'],
+    [
+      'an empty name',
+      [{ name: '', lua: 'return 1' }],
+      'scripts[0].name must be a non-empty string'
+    ],
+    [
+      'a name that is not a string',
+      [{ name: 7, lua: 'return 1' }],
+      'scripts[0].name must be a non-empty string'
+    ],
+    ['a source that is missing', [{ name: 'a' }], 'scripts[0].lua must be a non-empty string'],
+    [
+      'a source that is a number',
+      [{ name: 'a', lua: 12345 }],
+      'scripts[0].lua must be a non-empty string'
+    ],
+    ['an empty source', [{ name: 'a', lua: '' }], 'scripts[0].lua must be a non-empty string'],
+    [
+      'the second entry broken',
+      [{ name: 'a', lua: 'return 1' }, { name: 'b' }],
+      'scripts[1].lua must be a non-empty string'
+    ]
+  ])('refuses %s', (_label, scripts, reason) => {
+    expect(() => withScripts(scripts)).toThrow(refusing(reason))
   })
 })
