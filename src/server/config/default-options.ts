@@ -249,7 +249,6 @@ function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
 function validateTlsProfile(option: string, tls: unknown): void {
   if (
     tls !== undefined &&
-    tls !== null &&
     typeof tls !== 'boolean' &&
     typeof tls !== 'string' &&
     (typeof tls !== 'object' || Array.isArray(tls))
