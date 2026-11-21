@@ -284,4 +284,24 @@ describe('options read once, under a getter that answers differently on each rea
     expect(redisOptions(client)).toMatchObject({ password: 'data', sentinelPassword: 'sp' })
     client.disconnect()
   })
+
+  // Scenario: a cluster supplied with no `options` at all.
+  // Rule: the absent block is kept absent and the client is still built with the fail-fast defaults.
+  it('builds a cluster client from a cluster block without options', () => {
+    const client = clientOf({ mode: 'cluster', cluster: { nodes: NODES } })
+
+    expect(nodeOptions(client)['connectTimeout']).toBe(10_000)
+    client.disconnect()
+  })
+
+  // Scenario: the cluster options carry keys the typed lists do not name (a newer driver's option).
+  // Rule: they are read once as own keys and still reach the driver.
+  it('keeps an option the key lists do not name', () => {
+    const options = { lazyConnect: true, futureClusterKnob: 7, redisOptions: { futureNodeKnob: 8 } }
+    const client = clientOf({ mode: 'cluster', cluster: { nodes: NODES, options } })
+
+    expect((client.options as unknown as Record<string, unknown>)['futureClusterKnob']).toBe(7)
+    expect(nodeOptions(client)['futureNodeKnob']).toBe(8)
+    client.disconnect()
+  })
 })
