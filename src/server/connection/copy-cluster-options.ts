@@ -100,6 +100,20 @@ export const REDIS_OPTION_KEYS: Record<keyof ClusterRedisOptions, true> = {
 // Stryker restore BooleanLiteral
 
 /**
+ * Sets `key` on `target` as an own, enumerable, writable, configurable property. `defineProperty`, not
+ * an assignment: an own `__proto__` key (a config parsed from JSON has one) would otherwise run the
+ * inherited setter and give the copy that object as its prototype.
+ */
+function put(target: object, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true
+  })
+}
+
+/**
  * Copies a group: the documented keys by property access, unset ones dropped, plus every own
  * enumerable key the list does not name, as given. The union keeps an option a newer ioredis added, or
  * one the installed declarations lag behind, from being lost, where a list alone would drop it.
@@ -120,23 +134,15 @@ function copySet<T extends object>(
   // list entry or an own key of the host's group, never a string the library builds.
   // defineProperty, not an assignment: an own `__proto__` key (a config parsed from JSON has one) would
   // otherwise run the inherited setter and give the copy that object as its prototype.
-  const put = (key: string, value: unknown): void => {
-    Object.defineProperty(copy, key, {
-      value,
-      enumerable: true,
-      writable: true,
-      configurable: true
-    })
-  }
   for (const key of Object.keys(keys)) {
     const value: unknown = Reflect.get(source, key)
     if (value !== undefined && value !== null) {
-      put(key, value)
+      put(copy, key, value)
     }
   }
   for (const key of Object.keys(source)) {
     if (!Object.hasOwn(keys, key)) {
-      put(key, Reflect.get(source, key))
+      put(copy, key, Reflect.get(source, key))
     }
   }
   return copy
@@ -156,20 +162,12 @@ export function readSet<T extends object>(
   keys: Readonly<Record<keyof T, true>>
 ): Partial<T> {
   const copy: Partial<T> = {}
-  const put = (key: string, value: unknown): void => {
-    Object.defineProperty(copy, key, {
-      value,
-      enumerable: true,
-      writable: true,
-      configurable: true
-    })
-  }
   for (const key of Object.keys(keys)) {
-    put(key, Reflect.get(source, key))
+    put(copy, key, Reflect.get(source, key))
   }
   for (const key of Object.keys(source)) {
     if (!Object.hasOwn(keys, key)) {
-      put(key, Reflect.get(source, key))
+      put(copy, key, Reflect.get(source, key))
     }
   }
   return copy

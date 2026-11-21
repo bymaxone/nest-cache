@@ -13,6 +13,7 @@ import type { Cluster } from 'ioredis'
 
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { createConnectionManager } from '../connection/create-connection-manager'
+import { resolveOptions } from './default-options'
 
 /** A plain object whose `key` answers `good` once and `decoy` (default `undefined`) ever after. */
 function flipping<T extends object>(target: T, key: string, good: unknown, decoy?: unknown): T {
@@ -303,5 +304,17 @@ describe('options read once, under a getter that answers differently on each rea
     expect((client.options as unknown as Record<string, unknown>)['futureClusterKnob']).toBe(7)
     expect(nodeOptions(client)['futureNodeKnob']).toBe(8)
     client.disconnect()
+  })
+
+  // Scenario: the block of the chosen mode is `null`, which is an object to `typeof` but has no keys.
+  // Rule: it is kept as it is and refused as a missing block, never read as if it were one.
+  it.each([
+    ['connection', {}, 'cache.connection_failed'],
+    ['sentinel', { mode: 'sentinel' }, 'cache.sentinel_misconfigured'],
+    ['cluster', { mode: 'cluster' }, 'cache.cluster_misconfigured']
+  ])('a null %s block is refused as missing', (block, base, code) => {
+    const options = { ...base, [block]: null } as BymaxCacheModuleOptions
+
+    expect(() => resolveOptions(options)).toThrow(expect.objectContaining({ code }))
   })
 })
