@@ -6,6 +6,7 @@
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS } from '../connection/copy-cluster-options'
+import { STANDALONE_KEYS, TLS_KEYS } from './snapshot-blocks'
 import { refuseOption } from './refuse-option'
 
 function thrownBy(fn: () => never): CacheException {
@@ -64,7 +65,11 @@ describe('refuseOption', () => {
   })
 })
 
-/** The driver options that are not credentials. A driver option added later is not in this list. */
+/**
+ * The options that are not credentials, from the driver, the `tls` object and the standalone block. An
+ * option added later is in none of the lists, so the spec below fails until it is classified. The key
+ * material options are here because their refusals print a count, never the value.
+ */
 const NOT_CREDENTIALS = [
   'Connector',
   'autoPipeliningIgnoredCommands',
@@ -127,26 +132,107 @@ const NOT_CREDENTIALS = [
   'stringNumbers',
   'tls',
   'updateSentinels',
-  'useSRVRecords'
+  'useSRVRecords',
+  'ALPNCallback',
+  'ALPNProtocols',
+  'SNICallback',
+  'allowPartialTrustChain',
+  'ca',
+  'cert',
+  'certificateCompression',
+  'checkServerIdentity',
+  'ciphers',
+  'clientCertEngine',
+  'crl',
+  'dhparam',
+  'ecdhCurve',
+  'enableTrace',
+  'honorCipherOrder',
+  'host',
+  'key',
+  'lookup',
+  'maxVersion',
+  'minDHSize',
+  'minVersion',
+  'path',
+  'pfx',
+  'port',
+  'privateKeyEngine',
+  'privateKeyIdentifier',
+  'profile',
+  'pskCallback',
+  'rejectUnauthorized',
+  'requestCert',
+  'requestOCSP',
+  'secureContext',
+  'secureOptions',
+  'secureProtocol',
+  'servername',
+  'session',
+  'sessionIdContext',
+  'sessionTimeout',
+  'sigalgs',
+  'socket',
+  'ticketKeys',
+  'timeout',
+  'lazyConnect',
+  'connectTimeout',
+  'commandTimeout',
+  'maxRetriesPerRequest',
+  'enableReadyCheck',
+  'enableOfflineQueue',
+  'retryStrategy',
+  'reconnectOnError',
+  'keepAlive',
+  'noDelay',
+  'family',
+  'db',
+  'host',
+  'port',
+  'tls'
+]
+
+/** The options that hold a credential: a number given to one is reported as the type only. */
+const CREDENTIALS = [
+  'passphrase',
+  'password',
+  'sentinelPassword',
+  'sentinelUsername',
+  'url',
+  'username'
 ]
 
 describe('the options that hold a credential', () => {
-  const driver = [
-    ...new Set([...Object.keys(CLUSTER_OPTION_KEYS), ...Object.keys(REDIS_OPTION_KEYS)])
-  ]
-  const credentials = driver.filter((name) => !NOT_CREDENTIALS.includes(name))
-
-  // Scenario: every driver option is either a known non-credential or reported as a credential.
-  // Rule: an option the driver adds that is neither fails here until it is classified, so a credential
-  // named in a way the check does not recognise is never printed by accident.
-  it('are exactly the driver options that are not on the list of non-credentials', () => {
-    expect(credentials.sort()).toEqual([
-      'password',
-      'sentinelPassword',
-      'sentinelUsername',
-      'username'
+  const names = [
+    ...new Set([
+      ...Object.keys(CLUSTER_OPTION_KEYS),
+      ...Object.keys(REDIS_OPTION_KEYS),
+      ...Object.keys(TLS_KEYS),
+      ...Object.keys(STANDALONE_KEYS)
     ])
+  ]
+  const reported = (name: string): unknown =>
+    thrownBy(() => refuseOption(name, 'r', 12345)).details?.['received']
+
+  // Scenario: every option of the driver, the tls object and the standalone block is classified.
+  // Rule: an option added later that is in neither list fails here until it is classified, so a
+  // credential named in a way the check does not recognise is never printed by accident.
+  it('leave no option unclassified', () => {
+    expect(
+      names.filter((name) => !NOT_CREDENTIALS.includes(name) && !CREDENTIALS.includes(name))
+    ).toEqual([])
   })
+
+  it.each(CREDENTIALS)('report a number given as %s as a number', (name) => {
+    expect(reported(name)).toBe('a number')
+  })
+
+  it.each(names.filter((name) => NOT_CREDENTIALS.includes(name)))(
+    'print a number given as %s',
+    (name) => {
+      expect(reported(name)).toBe(12345)
+    }
+  )
 
   it.each([
     'password',

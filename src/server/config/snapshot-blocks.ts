@@ -7,6 +7,7 @@
  * answer: each property is read here, once, by name from a typed list, into a plain copy.
  */
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls'
+import { types } from 'node:util'
 
 import type { ClusterOptions, SentinelAddress } from 'ioredis'
 
@@ -22,7 +23,7 @@ import { refuseOption } from './refuse-option'
 
 // Stryker disable BooleanLiteral: only the keys of the records below are read, so flipping a `true` value changes nothing
 /** Every key of the standalone block, as a complete record: a key added to the interface fails here. */
-const STANDALONE_KEYS: Readonly<Record<keyof BymaxCacheStandaloneConnection, true>> = {
+export const STANDALONE_KEYS: Readonly<Record<keyof BymaxCacheStandaloneConnection, true>> = {
   url: true,
   host: true,
   port: true,
@@ -59,7 +60,7 @@ const SENTINEL_KEYS: Readonly<Record<keyof BymaxCacheSentinelConnection, true>> 
  * read by name, so a class instance, a get-only proxy or a non-enumerable field loses none of them;
  * the own enumerable keys beyond these are copied as well.
  */
-const TLS_KEYS: Readonly<Record<keyof TlsConnectionOptions | 'profile', true>> = {
+export const TLS_KEYS: Readonly<Record<keyof TlsConnectionOptions | 'profile', true>> = {
   ALPNCallback: true,
   ALPNProtocols: true,
   SNICallback: true,
@@ -146,8 +147,22 @@ function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknow
     : value
 }
 
-/** The tls options that hold key material: a string, a `Buffer`, or a list of them. */
-const KEY_MATERIAL = ['ca', 'cert', 'key', 'pfx', 'crl'] as const
+/**
+ * The tls options that hold bytes the driver reads again on every reconnect: a string, a `Buffer`, or a
+ * list of them. `ticketKeys` decides who can resume a session, `session` and `dhparam` are read the same
+ * way, and `ALPNProtocols` is a list of names or a buffer.
+ */
+const KEY_MATERIAL = [
+  'ca',
+  'cert',
+  'key',
+  'pfx',
+  'crl',
+  'ticketKeys',
+  'session',
+  'dhparam',
+  'ALPNProtocols'
+] as const
 
 /**
  * Copies bytes the host could write to later: any view of an `ArrayBuffer` (a `Buffer`, a `Uint8Array`, a
@@ -165,22 +180,26 @@ const ENTRY_BYTES = { key: 'pem', pfx: 'buf' } as const
 
 /**
  * Copies an object entry of `tls.key` or `tls.pfx` by name: its bytes through {@link copyBytes} and its
- * passphrase, which must be a string. An entry that is not a plain object (a `KeyObject`) is kept as it
- * is; a plain object with another key is refused, so nothing the driver would read goes uncopied.
+ * passphrase, which must be a string. A `KeyObject` is kept as it is, and so are bytes (copied through
+ * {@link copyBytes}) and anything that is not an object; every other object, whatever its prototype, is
+ * read by name and copied, and one with another own key is refused, so nothing the driver would read
+ * goes uncopied.
  *
  * @param entry - The entry as the host wrote it.
  * @param option - The list's name, echoed with the entry's position.
  * @param field - The field that holds the bytes: `pem` for a key, `buf` for a pfx.
  * @param index - The entry's position.
- * @returns A plain copy, or the entry itself when it is not a plain object.
+ * @returns A plain copy, or the entry itself (copied when it is bytes) when it is a `KeyObject`, bytes or
+ *   not an object.
  * @throws {CacheException} `INVALID_OPTIONS` naming the entry by position.
  */
 function copyKeyEntry(entry: unknown, option: string, field: string, index: number): unknown {
-  const prototype: unknown = isObject(entry) ? Reflect.getPrototypeOf(entry) : undefined
   if (
     !isObject(entry) ||
     Array.isArray(entry) ||
-    (prototype !== Object.prototype && prototype !== null)
+    ArrayBuffer.isView(entry) ||
+    entry instanceof ArrayBuffer ||
+    types.isKeyObject(entry)
   ) {
     return copyBytes(entry)
   }
@@ -219,7 +238,7 @@ function copyMaterial(material: unknown, key: (typeof KEY_MATERIAL)[number]): un
  * element of it is copied, because the driver merges the object again on every reconnect and a list or
  * a `Buffer` the host changes later would change the trust roots or the identity it connects with. An
  * object entry of `key` or `pfx` (`{ pem, passphrase }`, `{ buf, passphrase }`) is copied by name too,
- * through `copyKeyEntry`; only an entry that is not a plain object, such as a `KeyObject`, and a
+ * through `copyKeyEntry`; only a `KeyObject` and a
  * `secureContext` stay by reference.
  *
  * @param tls - The `tls` value as the host wrote it.

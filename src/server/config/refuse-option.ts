@@ -8,8 +8,11 @@ import { CACHE_ERROR_CODES, type CacheErrorCode } from '../errors/cache-error-co
 import { describeReceived } from './describe-received'
 import { refusal } from './own-refusals'
 
-/** The options that hold a credential, by name: their refusals never print a number. */
-const CREDENTIAL = /pass|user|secret|token|cred|auth/i
+/**
+ * The options that hold a credential, by name: their refusals never print a number. `url` is one because
+ * a connection URL carries a user name and a password; `rejectUnauthorized` is not one.
+ */
+const CREDENTIAL = /pass|user|secret|token|cred|auth(?!orized)|url/i
 
 /**
  * Throws `code` for an option value, reporting its type and never its content.

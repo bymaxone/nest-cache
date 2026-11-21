@@ -7,6 +7,8 @@
  * identity the client presents. Each such entry is copied by name, and a form the library cannot hold
  * to a rule is refused as INVALID_OPTIONS when the options are resolved.
  */
+import { createSecretKey } from 'node:crypto'
+
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { resolveOptions } from './default-options'
 
@@ -102,11 +104,73 @@ describe.each([
     expect(held[0]).toEqual({ [bytes]: 'first', passphrase: 'p' })
   })
 
-  it('keeps an entry that is not a plain object, such as a key object, as it is', () => {
-    class KeyObjectLike {}
-    const entry = new KeyObjectLike()
+  // Scenario: the entry is a class instance or an object with a prototype, its fields served by getters.
+  // Rule: only a real KeyObject stays by reference; every other object is read by name and copied, so
+  // a getter that answers differently on a later reconnect never reaches the driver.
+  it.each([
+    [
+      'a class instance',
+      (live: () => string): object =>
+        new (class {
+          get [bytes](): string {
+            return live()
+          }
+          get passphrase(): string {
+            return 'p'
+          }
+        })()
+    ],
+    [
+      'an object made over a prototype',
+      (live: () => string): object =>
+        Object.create(
+          Object.defineProperties(
+            {},
+            { [bytes]: { get: live }, passphrase: { get: () => 'p' } }
+          ) as object
+        ) as object
+    ]
+  ])('copies %s whose fields are getters', (_label, make) => {
+    let answer = 'first'
+    const entry = make(() => answer)
+    const held = heldTls({ [key]: [entry] })[key] as Array<Record<string, unknown>>
+    answer = 'later'
+
+    expect(held[0]).not.toBe(entry)
+    expect(held[0]).toEqual({ [bytes]: 'first', passphrase: 'p' })
+  })
+
+  it('keeps a key object as it is', () => {
+    const entry = createSecretKey(Buffer.from('secret'))
 
     expect((heldTls({ [key]: [entry] })[key] as unknown[])[0]).toBe(entry)
+  })
+})
+
+// Scenario: the tls option holds session material the driver reads again on every reconnect.
+// Rule: every byte option is copied, so a change of the host's buffer afterwards changes nothing.
+describe.each(['ticketKeys', 'session', 'dhparam', 'ALPNProtocols'])('tls.%s', (name) => {
+  it('is copied when it is a buffer', () => {
+    const material = Buffer.from('material')
+    const held = heldTls({ [name]: material })[name] as Buffer
+    material.fill(0)
+
+    expect(held).not.toBe(material)
+    expect(Buffer.from(held).toString()).toBe('material')
+  })
+
+  it('is kept when it is a string', () => {
+    expect(heldTls({ [name]: 'text' })[name]).toBe('text')
+  })
+})
+
+describe('tls.ALPNProtocols as a list', () => {
+  it('is copied by position', () => {
+    const list = ['h2', 'http/1.1']
+    const held = heldTls({ ALPNProtocols: list })['ALPNProtocols'] as string[]
+    list[0] = 'x'
+
+    expect(held).toEqual(['h2', 'http/1.1'])
   })
 })
 
@@ -165,7 +229,11 @@ describe('a script text made of invisible characters', () => {
   it.each([
     ['a zero-width space', '​'],
     ['a zero-width joiner among blanks', ' ‍ ⁠﻿ '],
-    ['a word joiner', '⁠']
+    ['a word joiner', '⁠'],
+    ['a mongolian vowel separator', '᠎'],
+    ['a soft hyphen', '­'],
+    ['the direction marks', '‎‏'],
+    ['a hangul filler', 'ㅤ']
   ])('refuses %s as a name or a source', (_label, blank) => {
     expect(() =>
       resolve({ connection: { host: 'h' }, scripts: [{ name: blank, lua: 'return 1' }] })
