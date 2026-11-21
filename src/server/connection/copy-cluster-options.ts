@@ -143,6 +143,39 @@ function copySet<T extends object>(
 }
 
 /**
+ * Reads a group once: every documented key by property access, set or not, plus every own enumerable
+ * key the list does not name. Unlike {@link copyClusterOptions} it keeps `null` and `undefined`, so a
+ * check that must tell "unset" from "null" can still do so on the copy.
+ *
+ * @param source - The group as the host wrote it; may be a class instance.
+ * @param keys - The documented keys, as a complete record of the group's type.
+ * @returns A plain object holding what each key answered on this one read.
+ */
+export function readSet<T extends object>(
+  source: T,
+  keys: Readonly<Record<keyof T, true>>
+): Partial<T> {
+  const copy: Partial<T> = {}
+  const put = (key: string, value: unknown): void => {
+    Object.defineProperty(copy, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
+  }
+  for (const key of Object.keys(keys)) {
+    put(key, Reflect.get(source, key))
+  }
+  for (const key of Object.keys(source)) {
+    if (!Object.hasOwn(keys, key)) {
+      put(key, Reflect.get(source, key))
+    }
+  }
+  return copy
+}
+
+/**
  * The `cluster.options` the host supplied, with its `redisOptions`, copied by property access.
  *
  * @param options - The host's `cluster.options`; may be a class instance.

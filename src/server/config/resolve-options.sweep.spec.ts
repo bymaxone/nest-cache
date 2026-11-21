@@ -312,22 +312,18 @@ describe('registration under a throwing host object', () => {
           expect(thrown).toBeUndefined()
           return
         }
-        if (thrown === HOST) {
-          // The one escape left is a trap the driver itself reached, in an object handed to it as it is.
-          expect({
-            nth,
-            trap: run.trap,
-            inDriver: run.stack.includes('/node_modules/ioredis/')
-          }).toEqual({
-            nth,
-            trap: run.trap,
-            inDriver: true
-          })
-          continue
-        }
         expect(thrown).toBeInstanceOf(CacheException)
-        expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-        expect((thrown as CacheException).cause).toBe(HOST)
+        const refusal = thrown as CacheException
+        // Per cell: a trap the library reads ends as `INVALID_OPTIONS`; one the driver reaches while it
+        // constructs, in an object handed to it as it is, ends as `CONNECTION_FAILED`. Neither lets the
+        // host's own error out raw, and a cell that changes category fails here.
+        const inDriver = run.stack.includes('/node_modules/ioredis/')
+        expect({ nth, trap: run.trap, code: refusal.code }).toEqual({
+          nth,
+          trap: run.trap,
+          code: inDriver ? CACHE_ERROR_CODES.CONNECTION_FAILED : CACHE_ERROR_CODES.INVALID_OPTIONS
+        })
+        expect(refusal.cause).toBe(HOST)
       }
       throw new Error(`the call still reached traps after ${LIMIT}`)
     }

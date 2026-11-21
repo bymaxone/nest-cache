@@ -76,16 +76,17 @@ const ROOT = pkg.root
 // threshold by option name and received type, which restates the server's describing rule because the
 // admin entry reaches the server only through its public surface.
 // It also covers the guard that withholds the status screen's endpoint when the connection block cannot be read.
-// The server budget (14 766 B, measured 14 736) covers the operation tracking: the 31 command names
+// The server budget (15 100 B, measured 15 073) covers the operation tracking: the 31 command names
 // reported to `events.onOperation` with a hit/miss/ok/error outcome, the Pub/Sub backlog callback,
 // and the one caller that absorbs a throwing or rejecting host hook at every observability site, logs the
 // first failure of each hook once, and hands each hook a frozen copy of the event data, and keeps that log line's one allowance when Nest's
-// logging is off. It also covers the option-read guard, which passes only the library's own refusals through.
+// logging is off. It also covers the option-read guard, which passes only the library's own refusals through,
+// and the single read of every option block: the key records of the three blocks and the copy built from them.
 // The observability entry (2 400 B, measured 2 373) is the optional subpath that publishes them, and
 // the fan-out of `combineCacheEvents` that raises its first failure to the module; the
 // main entry imports neither `@bymax-one/nest-core` nor `prom-client`.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 14_766 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 15_100 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_977 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   {
