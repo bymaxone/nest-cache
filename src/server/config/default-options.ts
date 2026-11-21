@@ -31,6 +31,7 @@ import { takeOwnRefusal, refusal } from './own-refusals'
 import { refuseOption, refuseValue } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 import { snapshotBlocks } from './snapshot-blocks'
+import { KNOWN_TLS_PROFILES } from './tls-profiles'
 
 /**
  * Characters Redis reads as glob metacharacters inside a `SCAN` / `KEYS` match
@@ -233,6 +234,62 @@ function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
 }
 
 /**
+ * Refuses a tls profile the driver does not know. The driver resolves a profile by name and leaves a
+ * connection without the pinned authority for any other value, so an unknown name, a number or an
+ * object is refused rather than accepted silently.
+ *
+ * @param option - The option's name, echoed in the error.
+ * @param tls - The `tls` value: an object whose `profile` is checked, or the profile name itself.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option when the profile is not a known name.
+ */
+function validateTlsProfile(option: string, tls: unknown): void {
+  let profile: unknown
+  if (typeof tls === 'string') {
+    profile = tls
+  } else if (typeof tls === 'object' && tls !== null) {
+    profile = Reflect.get(tls, 'profile')
+  }
+  if (
+    profile !== undefined &&
+    !(typeof profile === 'string' && KNOWN_TLS_PROFILES.includes(profile))
+  ) {
+    refuseOption(
+      typeof tls === 'string' ? option : `${option}.profile`,
+      'is not a known tls profile',
+      profile,
+      { allowed: KNOWN_TLS_PROFILES.join(' or ') }
+    )
+  }
+}
+
+/**
+ * Refuses a script definition that is not an object with a name and a source, each a non-empty string.
+ *
+ * @param scripts - The `scripts` option as copied by the snapshot.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the entry and the field.
+ */
+function validateScripts(scripts: unknown): void {
+  if (scripts === undefined || scripts === null) {
+    return
+  }
+  if (!Array.isArray(scripts)) {
+    refuseOption('scripts', 'must be an array', scripts)
+  }
+  scripts.forEach((definition: unknown, index: number) => {
+    const where = `scripts[${index}]`
+    if (typeof definition !== 'object' || definition === null) {
+      refuseOption(where, 'must be an object', definition)
+    }
+    for (const field of ['name', 'lua'] as const) {
+      const value: unknown = Reflect.get(definition, field)
+      if (typeof value !== 'string' || value === '') {
+        refuseOption(`${where}.${field}`, 'must be a non-empty string', value)
+      }
+    }
+  })
+}
+
+/**
  * Validates the connect and command timers of one option group.
  *
  * @param group - The group's path, prefixed to each option name in the error.
@@ -301,6 +358,12 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   }
   validateNoNullSecrets(options)
   validateConnectionUrl(options.connection?.url)
+  validateTlsProfile('connection.tls', options.connection?.tls)
+  validateTlsProfile(
+    'cluster.options.redisOptions.tls',
+    options.cluster?.options?.redisOptions?.tls
+  )
+  validateScripts(options.scripts)
   if (mode === 'standalone') {
     validateStandaloneConnection(options)
   }
