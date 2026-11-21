@@ -45,9 +45,9 @@ describe('CacheService with a list over the argument limit', () => {
     await connection.onApplicationShutdown()
   })
 
-  // Scenario: the README states the size of a part and the size of an array that is written at once.
-  // Rule: the constant is the number the README writes, so a change to it fails here until the page follows.
-  it('splits an array in parts of the 10 000 arguments the README states', () => {
+  // Scenario: the chunk-size constant is read.
+  // Rule: it is 10 000, the number the README states; a change fails here until the page follows.
+  it('holds the chunk size at 10 000', () => {
     expect(MAX_COMMAND_ARGUMENTS).toBe(10_000)
   })
 
