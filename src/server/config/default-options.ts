@@ -30,6 +30,7 @@ import { isUnset } from './is-unset'
 import { takeOwnRefusal, refusal } from './own-refusals'
 import { refuseOption, refuseValue } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
+import { snapshotBlocks } from './snapshot-blocks'
 
 /**
  * Characters Redis reads as glob metacharacters inside a `SCAN` / `KEYS` match
@@ -525,11 +526,14 @@ const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
  * point (`forRoot`, `forRootAsync`, `createConnectionManager`) runs before it builds
  * anything from them.
  *
- * Each top-level option is read once, under one guard, into a plain copy that both steps then read,
- * so what is validated is what is applied. A read that throws, a getter or a proxy trap of the
- * host's, ends as `INVALID_OPTIONS` (`reason: 'option could not be read'`) with the host's error on
- * `cause` and none of its text in `details`. The blocks inside (`connection`, `cluster`, ...) are
- * the host's own objects and are read live by the two steps, under the same guard.
+ * Each top-level option, and each property of the `connection`, `sentinel` and `cluster` blocks and
+ * of `cluster.options` and its `redisOptions`, is read once, under one guard, into a plain copy that
+ * both steps and every builder then read, so what is validated is what is applied. A read that
+ * throws, a getter or a proxy trap of the host's, ends as `INVALID_OPTIONS`
+ * (`reason: 'option could not be read'`) with the host's error on `cause` and none of its text in
+ * `details`. The `tls` object, the `sentinels` and `cluster.nodes` lists and the `natMap` objects the
+ * driver reads on every connect are copied once the same way; a `Buffer` or `secureContext` in `tls`
+ * is kept by reference.
  *
  * @param options - The raw consumer options.
  * @returns A shallow-frozen {@link ResolvedOptions} carrying every defaulted field.
@@ -538,9 +542,11 @@ const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
  */
 export function resolveOptions(options: BymaxCacheModuleOptions): Readonly<ResolvedOptions> {
   return readingOptions(() => {
-    const snapshot = Object.fromEntries(
-      Object.keys(OPTION_KEYS).map((key) => [key, Reflect.get(options, key)])
-    ) as BymaxCacheModuleOptions
+    const snapshot = snapshotBlocks(
+      Object.fromEntries(
+        Object.keys(OPTION_KEYS).map((key) => [key, Reflect.get(options, key)])
+      ) as BymaxCacheModuleOptions
+    )
     validateOptions(snapshot)
     return applyDefaults(snapshot)
   })

@@ -293,7 +293,7 @@ describe('registration under a throwing host object', () => {
     ['cluster', lazyCluster],
     ['sentinel', lazySentinel]
   ])(
-    'ends every trap of a %s option set that the library reads in a coded error, and lets only a trap the driver reaches through',
+    'ends every trap of a %s option set in INVALID_OPTIONS with the host error as cause',
     async (_mode, make) => {
       for (let nth = 1; nth <= LIMIT; nth++) {
         const run: Run = { ops: 0, trap: '', stack: '' }
@@ -312,22 +312,17 @@ describe('registration under a throwing host object', () => {
           expect(thrown).toBeUndefined()
           return
         }
-        if (thrown === HOST) {
-          // The one escape left is a trap the driver itself reached, in an object handed to it as it is.
-          expect({
-            nth,
-            trap: run.trap,
-            inDriver: run.stack.includes('/node_modules/ioredis/')
-          }).toEqual({
-            nth,
-            trap: run.trap,
-            inDriver: true
-          })
-          continue
-        }
         expect(thrown).toBeInstanceOf(CacheException)
-        expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-        expect((thrown as CacheException).cause).toBe(HOST)
+        const refusal = thrown as CacheException
+        // Every cell ends in the library's own refusal: each object the driver reads is copied when
+        // the options are resolved, so no trap is ever reached inside the driver, and a cell that
+        // changes category fails here.
+        expect({ nth, trap: run.trap, code: refusal.code }).toEqual({
+          nth,
+          trap: run.trap,
+          code: CACHE_ERROR_CODES.INVALID_OPTIONS
+        })
+        expect(refusal.cause).toBe(HOST)
       }
       throw new Error(`the call still reached traps after ${LIMIT}`)
     }

@@ -7,6 +7,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- Every property of the `connection`, `sentinel` and `cluster` blocks, of `cluster.options` and of its `redisOptions` is read once, by name, when the options are resolved, and validation and the client builders read that copy. A getter of the host's that answered differently on each read used to drop a security option without an error: `tls`, `password`, `username` or `url` of a standalone setup (a dropped `url` meant `localhost` with no tls), `sentinel.password` falling back to `connection.password`, `sentinelPassword` and `natMap`, and the cluster `tls`, `password` and `username`. The cluster connect timeout is read once too, so the boot wait and the driver agree.
+- The objects the driver reads again on every connect and reconnect are copied once as well: the `tls` object, the `sentinels` and `cluster.nodes` lists with their entries (the length once, each entry once, by name), and a `natMap` with its entries, in a standalone, sentinel or cluster setup. A getter of the host's on `tls.ca`, `tls.rejectUnauthorized`, a sentinel or node `host` or a `natMap` entry could change the TLS or authentication outcome after validation; it now answers once. A `Buffer` or a `secureContext` inside `tls` is kept by reference. A getter or a trap of the host's in any of them ends as `INVALID_OPTIONS` (`reason: 'option could not be read'`) with the error on `cause`, where one in `sentinels` reached the host raw and one in `tls`, `cluster.nodes` or a sentinel entry ended as `CONNECTION_FAILED` at boot.
+
+  **Apply to a consumer:** nothing changes for options that read normally. A host that matched the raw error of a throwing `sentinels` getter, or the `CONNECTION_FAILED` of a throwing `tls`, `cluster.nodes` or sentinel entry getter, on the exception from `forRoot` or from boot, reads the `INVALID_OPTIONS` exception and its `error.cause` instead. No declaration changes.
+
 ## [1.2.31] - 2026-11-21
 
 ### Fixed
