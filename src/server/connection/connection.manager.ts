@@ -16,6 +16,7 @@ import type { ClusterOptions, RedisOptions } from 'ioredis'
 
 import type { CacheEventName } from '../../shared/types/cache-event.types'
 import { BYMAX_CACHE_EVENTS, BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
+import { readingOptions } from '../config/default-options'
 import { isUnset } from '../config/is-unset'
 import type { ResolvedOptions } from '../config/resolved-options'
 import {
@@ -116,7 +117,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
     @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
   ) {
-    this.#redisOptionsResolved = this.buildRedisOptions(options)
+    this.#redisOptionsResolved = readingOptions(() => this.buildRedisOptions(options))
   }
 
   /**
@@ -130,10 +131,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    */
   async onModuleInit(): Promise<void> {
     const client = this.ensureClient()
-    const lazy =
+    const lazy = readingOptions(() =>
       this.options.mode === 'cluster'
         ? this.options.cluster?.options?.lazyConnect
         : this.options.connection?.lazyConnect
+    )
     if (!lazy) {
       await this.waitUntilReady(client)
     }
@@ -259,7 +261,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       if (!sentinel) {
         throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode: 'sentinel' })
       }
-      return new Redis(this.sentinelOptions(sentinel, overrides))
+      return new Redis(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
     }
     if (this.options.mode === 'cluster') {
       const cluster = this.options.cluster
@@ -269,23 +271,26 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       // Copied by property access from a typed key list, unset keys dropped: the spreads below can then
       // neither lose a value a class instance keeps behind a getter nor let an explicit `undefined`
       // replace a default with "no bound".
-      const supplied = copyClusterOptions(cluster.options)
-      return new Cluster(cluster.nodes, {
-        // Fail-fast defaults, as the other modes get: without them a cluster that goes
-        // down after boot queues every command for as long as it stays down.
-        enableOfflineQueue: false,
-        ...supplied,
-        ...(overrides?.enableOfflineQueue !== undefined && {
-          enableOfflineQueue: overrides.enableOfflineQueue
-        }),
-        redisOptions: {
-          connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-          commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
-          maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
-          disconnectTimeout: DISCONNECT_TIMEOUT_MS,
-          ...supplied.redisOptions
-        }
-      } as OwnedClusterOptions)
+      const supplied = readingOptions(() => copyClusterOptions(cluster.options))
+      return new Cluster(
+        readingOptions(() => cluster.nodes),
+        {
+          // Fail-fast defaults, as the other modes get: without them a cluster that goes
+          // down after boot queues every command for as long as it stays down.
+          enableOfflineQueue: false,
+          ...supplied,
+          ...(overrides?.enableOfflineQueue !== undefined && {
+            enableOfflineQueue: overrides.enableOfflineQueue
+          }),
+          redisOptions: {
+            connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
+            commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
+            maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
+            disconnectTimeout: DISCONNECT_TIMEOUT_MS,
+            ...supplied.redisOptions
+          }
+        } as OwnedClusterOptions
+      )
     }
     return new Redis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
   }
@@ -369,6 +374,22 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
+   * Reads the boot deadline from the option block the mode takes its timers from: `cluster.options.redisOptions`
+   * for a cluster, `connection` for every other mode.
+   *
+   * @returns The connect timeout in milliseconds, or the default when none is set.
+   */
+  private connectDeadline(): number {
+    return readingOptions(() => {
+      const timers =
+        this.options.mode === 'cluster'
+          ? this.options.cluster?.options?.redisOptions
+          : this.options.connection
+      return timers?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
+    })
+  }
+
+  /**
    * Resolves once the client is ready.
    *
    * Rejects with `CONNECTION_FAILED` on a connection error, when the client ends (no more
@@ -380,11 +401,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       return
     }
     // A cluster takes its timers from `cluster.options.redisOptions`, every other mode from `connection`.
-    const timers =
-      this.options.mode === 'cluster'
-        ? this.options.cluster?.options?.redisOptions
-        : this.options.connection
-    const deadline = timers?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
+    const deadline = this.connectDeadline()
     try {
       await new Promise<void>((resolve, reject) => {
         const settle = (outcome: () => void): void => {

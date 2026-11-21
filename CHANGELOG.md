@@ -7,6 +7,16 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- An option that could not be read ended as the host's own error. A getter or a proxy trap in the options handed to `forRoot`, `forRootAsync` or `createConnectionManager` that throws now ends as `CacheException` `cache.invalid_options` (`details.reason`: `option could not be read`) with the thrown error on `cause` and none of its text in `details`. Each top-level option is read once, into a plain copy that validation and defaulting then share, so what is validated is what is applied. The same holds for the reads the connection manager makes when it builds the client and when it boots, and for the script manager's lazy flag; the status screen of `./admin` answers with no endpoint named when the connection block cannot be read. A trap that fires inside the driver, in an object handed to it as it is, still reaches the host as its own error.
+
+  **Apply to a consumer:** a host that matched the error its own getter throws, on the exception that `forRoot` raised, reads `error.cause` instead; a refusal the library raises for a value it could read keeps its code.
+
+### Documentation
+
+- The README says that the allowance of the hook-failure line is kept only for `logger: false` and Nest's own console logger and its subclasses, and that a nested write by one bag is visible to the next bag and to the host's own object.
+
 ## [1.2.29] - 2026-11-20
 
 ### Added

@@ -14,6 +14,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import type { OnApplicationBootstrap } from '@nestjs/common'
 
 import { BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
+import { readingOptions } from '../config/default-options'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
@@ -92,7 +93,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
    * @returns Resolves once all eager scripts are loaded.
    */
   async onApplicationBootstrap(): Promise<void> {
-    if (this.options.connection?.lazyConnect) {
+    if (readingOptions(() => this.options.connection?.lazyConnect)) {
       return
     }
     await Promise.all([...this.scripts.keys()].map((name) => this.load(name)))

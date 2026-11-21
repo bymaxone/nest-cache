@@ -496,15 +496,77 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
 }
 
 /**
+ * Every top-level option, as a complete record: an option added to the interface fails the type
+ * check here until it is listed, so the snapshot cannot miss one. Only the keys are read.
+ */
+// Stryker disable BooleanLiteral: only the keys of the record are read, so flipping a `true` value changes nothing
+const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
+  mode: true,
+  connection: true,
+  sentinel: true,
+  cluster: true,
+  namespace: true,
+  keySeparator: true,
+  keyEscaping: true,
+  serializer: true,
+  events: true,
+  shutdownTimeoutMs: true,
+  pubsubMaxConcurrentHandlers: true,
+  pubsubMaxQueuedMessages: true,
+  allowFlushInProduction: true,
+  isGlobal: true,
+  scripts: true
+}
+// Stryker restore BooleanLiteral
+
+/**
  * Validates the consumer options and applies the defaults: the one sequence every entry
  * point (`forRoot`, `forRootAsync`, `createConnectionManager`) runs before it builds
  * anything from them.
  *
+ * Each top-level option is read once, under one guard, into a plain copy that both steps then read,
+ * so what is validated is what is applied. A read that throws, a getter or a proxy trap of the
+ * host's, ends as `INVALID_OPTIONS` (`reason: 'option could not be read'`) with the host's error on
+ * `cause` and none of its text in `details`. The blocks inside (`connection`, `cluster`, ...) are
+ * the host's own objects and are read live by the two steps, under the same guard.
+ *
  * @param options - The raw consumer options.
  * @returns A shallow-frozen {@link ResolvedOptions} carrying every defaulted field.
- * @throws {CacheException} Whatever {@link validateOptions} throws for a violation.
+ * @throws {CacheException} Whatever {@link validateOptions} throws for a violation, and
+ *   `INVALID_OPTIONS` for an option that could not be read.
  */
 export function resolveOptions(options: BymaxCacheModuleOptions): Readonly<ResolvedOptions> {
-  validateOptions(options)
-  return applyDefaults(options)
+  return readingOptions(() => {
+    const snapshot = Object.fromEntries(
+      Object.keys(OPTION_KEYS).map((key) => [key, Reflect.get(options, key)])
+    ) as BymaxCacheModuleOptions
+    validateOptions(snapshot)
+    return applyDefaults(snapshot)
+  })
+}
+
+/**
+ * Runs a read of the host's option objects so that a getter or a proxy trap of theirs that throws
+ * ends as `INVALID_OPTIONS` (`reason: 'option could not be read'`) with the thrown error on
+ * `cause`, and a {@link CacheException} the library raises passes through with its own code.
+ *
+ * @typeParam T - What the read returns.
+ * @param read - The read.
+ * @returns What the read returns.
+ * @throws {CacheException} `INVALID_OPTIONS` when the read throws something that is not one.
+ */
+export function readingOptions<T>(read: () => T): T {
+  try {
+    return read()
+  } catch (error) {
+    if (error instanceof CacheException) {
+      throw error
+    }
+    throw new CacheException(
+      CACHE_ERROR_CODES.INVALID_OPTIONS,
+      { reason: 'option could not be read' },
+      undefined,
+      error
+    )
+  }
 }
