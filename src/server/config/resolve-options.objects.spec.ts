@@ -46,16 +46,23 @@ describe.each([
     expect(heldEntry['passphrase']).toBe('first')
   })
 
-  it('is read once, by name, from a get-only proxy over an empty target', () => {
+  it('is read once per field, by name, from a get-only proxy over an empty target', () => {
+    const reads: string[] = []
     const entry = new Proxy(
       {},
-      { get: (_t, name) => ({ [bytes]: 'pem-text', passphrase: 'p' })[String(name)] }
+      {
+        get: (_t, name) => {
+          reads.push(String(name))
+          return ({ [bytes]: 'pem-text', passphrase: 'p' } as Record<string, unknown>)[String(name)]
+        }
+      }
     )
 
-    expect((heldTls({ [key]: [entry] })[key] as Array<Record<string, unknown>>)[0]).toEqual({
-      [bytes]: 'pem-text',
-      passphrase: 'p'
-    })
+    const held = heldTls({ [key]: [entry] })[key] as Array<Record<string, unknown>>
+
+    expect(held[0]).toEqual({ [bytes]: 'pem-text', passphrase: 'p' })
+    expect(reads.filter((name) => name === bytes)).toHaveLength(1)
+    expect(reads.filter((name) => name === 'passphrase')).toHaveLength(1)
   })
 
   // Scenario: an entry carries a key the driver does not read, or a passphrase that is not a string.
