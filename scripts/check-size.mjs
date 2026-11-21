@@ -63,7 +63,7 @@ const ROOT = pkg.root
 // `mset` runs in and the reporting of its failures) and the refusal of an `eval` with more keys and
 // arguments than a call can carry.
 //
-// The admin budget (5 931 B) is far smaller than the server's because the admin entry does NOT
+// The admin budget (5 977 B, measured 5 947) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
 // the package rather than inlining a second copy of `CacheService` and the DI tokens. That is a
 // correctness requirement, not a size trick: duplicated class objects would make
@@ -75,6 +75,7 @@ const ROOT = pkg.root
 // is a deleted key and the cut that never splits a surrogate pair. It also covers the helper that refuses a scope or a
 // threshold by option name and received type, which restates the server's describing rule because the
 // admin entry reaches the server only through its public surface.
+// It also covers the guard that withholds the status screen's endpoint when the connection block cannot be read.
 // The server budget (14 666 B, measured 14 642) covers the operation tracking: the 31 command names
 // reported to `events.onOperation` with a hit/miss/ok/error outcome, the Pub/Sub backlog callback,
 // and the one caller that absorbs a throwing or rejecting host hook at every observability site, logs the
@@ -85,7 +86,7 @@ const ROOT = pkg.root
 // main entry imports neither `@bymax-one/nest-core` nor `prom-client`.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 14_666 },
-  { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_931 },
+  { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_977 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   {
     name: 'observability (operations, health, logs)',
