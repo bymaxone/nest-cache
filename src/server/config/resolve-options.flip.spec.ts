@@ -481,4 +481,58 @@ describe('options read once, under a getter that answers differently on each rea
     expect(Object.keys(redisOptions(client)['tls'] as object).sort()).toEqual(['ca', 'timeout'])
     client.disconnect()
   })
+
+  // Scenario: an entry of a list or a map the driver walks is a get-only proxy over an empty target,
+  // or a class whose host and port sit behind prototype getters.
+  // Rule: host and port are read by name, so the driver is never handed an entry with no endpoint.
+  const endpoint = (): unknown =>
+    new (class {
+      get host(): string {
+        return 'entry-host'
+      }
+      get port(): number {
+        return 7777
+      }
+    })()
+  const proxied = (): unknown =>
+    new Proxy({}, { get: (_t, key) => ({ host: 'entry-host', port: 7777 })[String(key)] })
+
+  it.each([
+    ['class getters', endpoint],
+    ['a get-only proxy', proxied]
+  ])('keeps the host and port of a sentinel entry given as %s', (_label, make) => {
+    const client = clientOf({
+      mode: 'sentinel',
+      connection: { lazyConnect: true },
+      sentinel: { sentinels: [make()], name: 'master' }
+    })
+
+    expect(redisOptions(client)['sentinels']).toEqual([{ host: 'entry-host', port: 7777 }])
+    client.disconnect()
+  })
+
+  it.each([
+    ['class getters', endpoint],
+    ['a get-only proxy', proxied]
+  ])('keeps the host and port of a cluster node given as %s', (_label, make) => {
+    const client = clientOf({
+      mode: 'cluster',
+      cluster: { nodes: [make()], options: { lazyConnect: true } }
+    })
+    const nodes = (client as unknown as { startupNodes: unknown[] }).startupNodes
+
+    expect(nodes).toEqual([{ host: 'entry-host', port: 7777 }])
+    client.disconnect()
+  })
+
+  it('keeps the host and port of a natMap entry given as a get-only proxy', () => {
+    const client = clientOf({
+      mode: 'sentinel',
+      connection: { lazyConnect: true },
+      sentinel: { sentinels: SENTINELS, name: 'master', natMap: { 'a:1': proxied() } }
+    })
+
+    expect(redisOptions(client)['natMap']).toEqual({ 'a:1': { host: 'entry-host', port: 7777 } })
+    client.disconnect()
+  })
 })

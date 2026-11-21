@@ -8,7 +8,7 @@
  */
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls'
 
-import type { ClusterOptions } from 'ioredis'
+import type { ClusterOptions, SentinelAddress } from 'ioredis'
 
 import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS, readSet } from '../connection/copy-cluster-options'
 import type {
@@ -72,6 +72,11 @@ const TLS_KEYS = {
   crl: true
 } satisfies Partial<Record<keyof TlsConnectionOptions, true>>
 
+/** What an entry of `sentinels`, `cluster.nodes` or a `natMap` names, read by name. */
+const ENTRY_KEYS = { host: true, port: true, family: true } satisfies Partial<
+  Record<keyof SentinelAddress, true>
+>
+
 /** Every key of the cluster block, as a complete record. */
 const CLUSTER_KEYS: Readonly<Record<keyof BymaxCacheClusterConnection, true>> = {
   nodes: true,
@@ -85,31 +90,27 @@ function isObject(value: unknown): value is object {
 }
 
 /**
- * Copies an object's own enumerable properties, each read once, so a getter of the host's answers a
- * single time. A value that is not an object (a string address, a function, `null`) is kept as is.
+ * Copies an object once: the keys in `keys` by name, then its own enumerable keys. A key that answered
+ * `undefined` is left out, so the driver sees the default it would see for an absent one. A value that
+ * is not an object (a string address, a function, `null`) is kept as is.
  *
  * @param value - The value as the host wrote it.
+ * @param keys - The keys to read by name.
  * @returns A plain copy, or the value itself when it is not an object.
  */
-function readOwn(value: unknown): unknown {
-  return isObject(value) ? readSet(value, {}) : value
+function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknown {
+  return isObject(value)
+    ? Object.fromEntries(
+        Object.entries(readSet(value, keys)).filter(([, copied]) => copied !== undefined)
+      )
+    : value
 }
 
-/**
- * Copies a `tls` object once: the security options by name, then the own enumerable keys. A key that
- * answered `undefined` is left out, so the driver sees the default it would see for an absent one.
- * `Buffer`s and a `secureContext` stay by reference.
- *
- * @param tls - The value as the host wrote it.
- * @returns A plain copy, or the value itself when it is not an object.
- */
-function readTls(tls: unknown): unknown {
-  return isObject(tls)
-    ? Object.fromEntries(
-        Object.entries(readSet(tls, TLS_KEYS)).filter(([, value]) => value !== undefined)
-      )
-    : tls
-}
+/** Copies a `tls` object once: its security options by name. `Buffer`s and a `secureContext` stay by reference. */
+const readTls = (tls: unknown): unknown => readPlain(tls, TLS_KEYS)
+
+/** Copies a sentinel address, a cluster node or a `natMap` target once: host, port and family by name. */
+const readEntry = (entry: unknown): unknown => readPlain(entry, ENTRY_KEYS)
 
 /**
  * Copies a list the driver walks on every connect (`sentinels`, `nodes`): the length once and each
@@ -123,7 +124,7 @@ function copyEntries(list: unknown): unknown {
     return list
   }
   const length: number = list.length
-  return Array.from({ length }, (_, index) => readOwn(list[index]))
+  return Array.from({ length }, (_, index) => readEntry(list[index]))
 }
 
 /**
@@ -134,7 +135,7 @@ function copyEntries(list: unknown): unknown {
  */
 function copyNatMap(map: unknown): unknown {
   return isObject(map)
-    ? Object.fromEntries(Object.entries(readSet(map, {})).map(([key, to]) => [key, readOwn(to)]))
+    ? Object.fromEntries(Object.entries(readSet(map, {})).map(([key, to]) => [key, readEntry(to)]))
     : map
 }
 
