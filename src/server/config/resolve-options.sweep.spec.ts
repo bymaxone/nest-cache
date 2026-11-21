@@ -94,6 +94,16 @@ const sentinel = (): Record<string, unknown> => ({
   sentinel: { sentinels: [{ host: 's', port: 26379 }], name: 'master' }
 })
 
+/** What a call throws, or undefined. */
+const captured = (call: () => unknown): unknown => {
+  try {
+    call()
+  } catch (error) {
+    return error
+  }
+  return undefined
+}
+
 describe('resolveOptions under a throwing host object', () => {
   it.each([
     ['standalone', standalone],
@@ -138,6 +148,47 @@ describe('resolveOptions under a throwing host object', () => {
     expect(() => resolveOptions({ connection: { host: 'h' }, namespace: 'a*b' })).toThrow(
       expect.objectContaining({ code: CACHE_ERROR_CODES.INVALID_NAMESPACE })
     )
+  })
+
+  // Scenario: the host's getter throws a proxy whose prototype trap itself throws.
+  // Rule: the thrown value is never inspected, so the trap does not run and the error is still coded.
+  it('ends a thrown proxy with a throwing prototype trap as a coded error carrying it', () => {
+    const thrown = new Proxy(new Error('proxied'), {
+      getPrototypeOf(): never {
+        throw new Error('prototype trap')
+      }
+    })
+    const options = Object.defineProperty({ connection: { host: 'h' } }, 'namespace', {
+      enumerable: true,
+      get: (): never => {
+        throw thrown
+      }
+    })
+
+    const failure = captured(() => resolveOptions(options))
+
+    expect(failure).toMatchObject({ code: CACHE_ERROR_CODES.INVALID_OPTIONS })
+    expect((failure as CacheException).cause).toBe(thrown)
+  })
+
+  // Scenario: the host's getter throws a CacheException of its own.
+  // Rule: it is the host's error, not a refusal of the library's, so it is wrapped with its cause.
+  it('wraps a CacheException that the host throws instead of passing it through', () => {
+    const hostException = new CacheException(CACHE_ERROR_CODES.INVALID_KEY, { reason: 'host text' })
+    const options = Object.defineProperty({ connection: { host: 'h' } }, 'namespace', {
+      enumerable: true,
+      get: (): never => {
+        throw hostException
+      }
+    })
+
+    const failure = captured(() => resolveOptions(options))
+
+    expect(failure).toMatchObject({
+      code: CACHE_ERROR_CODES.INVALID_OPTIONS,
+      details: { reason: 'option could not be read' }
+    })
+    expect((failure as CacheException).cause).toBe(hostException)
   })
 
   // Rule: the options are read once, so what is validated is what is applied.

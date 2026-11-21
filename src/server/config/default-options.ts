@@ -27,6 +27,7 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { isUnset } from './is-unset'
+import { isOwnRefusal, refusal } from './own-refusals'
 import { refuseOption, refuseValue } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 
@@ -91,7 +92,7 @@ function validateConnectionUrl(url: string | undefined): void {
   try {
     parseRedisUrl(url)
   } catch {
-    throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
+    throw refusal(CACHE_ERROR_CODES.CONNECTION_FAILED, {
       reason: 'invalid connection.url'
     })
   }
@@ -107,7 +108,7 @@ function validateConnectionUrl(url: string | undefined): void {
 function validateStandaloneConnection(options: BymaxCacheModuleOptions): void {
   const connection = options.connection
   if (!connection || (!connection.url && !connection.host)) {
-    throw new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
+    throw refusal(CACHE_ERROR_CODES.CONNECTION_FAILED, {
       reason: 'missing connection.url or connection.host'
     })
   }
@@ -288,12 +289,12 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
 
   if (mode === 'sentinel') {
     if (!options.sentinel || !options.sentinel.sentinels?.length || !options.sentinel.name) {
-      throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode })
+      throw refusal(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode })
     }
   }
   if (mode === 'cluster') {
     if (!options.cluster || !options.cluster.nodes?.length) {
-      throw new CacheException(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode })
+      throw refusal(CACHE_ERROR_CODES.CLUSTER_MISCONFIGURED, { mode })
     }
     validateClusterOptions(options)
   }
@@ -333,7 +334,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
 function validateHandlerBounds(options: BymaxCacheModuleOptions): void {
   const { pubsubMaxConcurrentHandlers: slots, pubsubMaxQueuedMessages: queued } = options
   if (isUnset(slots) && !isUnset(queued)) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
+    throw refusal(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: 'pubsubMaxQueuedMessages needs pubsubMaxConcurrentHandlers'
     })
   }
@@ -559,7 +560,7 @@ export function readingOptions<T>(read: () => T): T {
   try {
     return read()
   } catch (error) {
-    if (error instanceof CacheException) {
+    if (isOwnRefusal(error)) {
       throw error
     }
     throw new CacheException(
