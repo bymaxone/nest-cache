@@ -271,7 +271,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       if (!sentinel) {
         throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode: 'sentinel' })
       }
-      return this.openRedis(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
+      return new Redis(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
     }
     if (this.options.mode === 'cluster') {
       const cluster = this.options.cluster
@@ -302,30 +302,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         } as OwnedClusterOptions
       )
     }
-    return this.openRedis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
-  }
-
-  /**
-   * Constructs a `Redis` client. The driver reads some of what the host handed it as it is (the `tls`
-   * object, the `sentinels` array) while it constructs, so a getter or a trap of the host's can throw
-   * here: that ends as `CONNECTION_FAILED` with the thrown value on `cause`, never as the host's own
-   * error escaping the library.
-   *
-   * @param options - The options handed to `ioredis`.
-   * @returns The client.
-   * @throws CacheException `CONNECTION_FAILED` (`details.reason` `'client_construction_failed'`).
-   */
-  private openRedis(options: OwnedRedisOptions): Redis {
-    try {
-      return new Redis(options)
-    } catch (error) {
-      throw new CacheException(
-        CACHE_ERROR_CODES.CONNECTION_FAILED,
-        { reason: 'client_construction_failed' },
-        HttpStatus.SERVICE_UNAVAILABLE,
-        error
-      )
-    }
+    return new Redis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
   }
 
   /**

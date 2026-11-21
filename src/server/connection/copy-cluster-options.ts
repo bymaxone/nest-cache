@@ -159,7 +159,7 @@ function copySet<T extends object>(
  */
 export function readSet<T extends object>(
   source: T,
-  keys: Readonly<Record<keyof T, true>>
+  keys: Readonly<Partial<Record<keyof T, true>>>
 ): Partial<T> {
   const copy: Partial<T> = {}
   for (const key of Object.keys(keys)) {

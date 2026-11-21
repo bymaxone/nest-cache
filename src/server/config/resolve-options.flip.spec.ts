@@ -202,8 +202,9 @@ describe('options read once, under a getter that answers differently on each rea
     client.disconnect()
   })
 
-  // Scenario: the `tls` object has a getter that throws, which the driver reads while it constructs.
-  // Rule: the host's error never escapes raw: it ends as `CONNECTION_FAILED` with the error as cause.
+  // Scenario: the `tls` object has a getter that throws, which the driver would read on every connect.
+  // Rule: the object is copied when the options are resolved, so the host's error ends as
+  // `INVALID_OPTIONS` with the error as cause, never raw and never inside the driver.
   it.each([
     ['standalone', { connection: { host: 'h', lazyConnect: true } }],
     [
@@ -235,8 +236,8 @@ describe('options read once, under a getter that answers differently on each rea
     })()
 
     expect(thrown).toMatchObject({
-      code: 'cache.connection_failed',
-      details: { reason: 'client_construction_failed' },
+      code: 'cache.invalid_options',
+      details: { reason: 'option could not be read' },
       cause: host
     })
   })
@@ -316,5 +317,168 @@ describe('options read once, under a getter that answers differently on each rea
     const options = { ...base, [block]: null } as BymaxCacheModuleOptions
 
     expect(() => resolveOptions(options)).toThrow(expect.objectContaining({ code }))
+  })
+
+  // Scenario: an object the driver reads live on every connect holds a getter that answers once.
+  // Rule: what the client holds, read again as the driver reads it on a reconnect, is what was validated.
+  it.each([
+    ['tls.rejectUnauthorized', true, false],
+    ['tls.servername', 'first', 'later']
+  ])('standalone %s is stable across later driver reads', (path, good, decoy) => {
+    const key = path.split('.')[1] as string
+    const tls = flipping({}, key, good, decoy)
+    const client = clientOf({ connection: { host: 'h', lazyConnect: true, tls } })
+    const held = redisOptions(client)['tls'] as Record<string, unknown>
+
+    expect([held[key], held[key], held[key]]).toEqual([good, good, good])
+    client.disconnect()
+  })
+
+  it('a stateful tls.ca keeps the first buffer', () => {
+    const ca = Buffer.from('first-ca')
+    const tls = flipping({}, 'ca', ca, Buffer.from('later-ca'))
+    const client = clientOf({ connection: { host: 'h', lazyConnect: true, tls } })
+    const held = redisOptions(client)['tls'] as { ca: unknown }
+
+    expect(held.ca).toBe(ca)
+    expect(held.ca).toBe(ca)
+    client.disconnect()
+  })
+
+  // Scenario: a sentinel entry, a cluster node and a nat map entry hold a getter that answers once.
+  // Rule: the entry the driver holds answers the same on every read.
+  it('a stateful sentinels[0].host is stable', () => {
+    const entry = flipping({ port: 26379 }, 'host', 'first', 'later')
+    const client = clientOf({
+      mode: 'sentinel',
+      connection: { lazyConnect: true },
+      sentinel: { sentinels: [entry], name: 'master' }
+    })
+    const held = redisOptions(client)['sentinels'] as Array<{ host: string }>
+
+    expect([held[0]?.host, held[0]?.host]).toEqual(['first', 'first'])
+    client.disconnect()
+  })
+
+  it('a stateful nodes[0].host is stable', () => {
+    const node = flipping({ port: 7000 }, 'host', 'first', 'later')
+    const client = clientOf({
+      mode: 'cluster',
+      cluster: { nodes: [node], options: { lazyConnect: true } }
+    })
+    const held = (client as unknown as { startupNodes: Array<{ host: string }> }).startupNodes
+
+    expect([held[0]?.host, held[0]?.host]).toEqual(['first', 'first'])
+    client.disconnect()
+  })
+
+  it.each([
+    [
+      'sentinel',
+      (natMap: unknown) => ({
+        mode: 'sentinel',
+        connection: { lazyConnect: true },
+        sentinel: { sentinels: SENTINELS, name: 'master', natMap }
+      }),
+      (client: Redis | Cluster) => redisOptions(client)['natMap']
+    ],
+    [
+      'cluster',
+      (natMap: unknown) => ({
+        mode: 'cluster',
+        cluster: { nodes: NODES, options: { lazyConnect: true, natMap } }
+      }),
+      (client: Redis | Cluster) => (client.options as unknown as { natMap: unknown }).natMap
+    ]
+  ])('a stateful %s natMap entry is stable', (_mode, make, held) => {
+    const entry = flipping({ port: 1 }, 'host', 'first', 'later')
+    const client = clientOf(make({ 'a:1': entry }) as Record<string, unknown>)
+    const map = held(client) as Record<string, { host: string }>
+
+    expect([map['a:1']?.host, map['a:1']?.host]).toEqual(['first', 'first'])
+    client.disconnect()
+  })
+
+  // Scenario: the `length` of the sentinels array answers 1 once and 0 afterwards.
+  // Rule: the length is read once, so the entry stays and the driver is not given an empty list.
+  it('a stateful sentinels length is read once', () => {
+    let reads = 0
+    const sentinels = new Proxy([{ host: 's', port: 26379 }], {
+      get: (target, key, receiver): unknown =>
+        key === 'length' ? (reads++ === 0 ? 1 : 0) : Reflect.get(target, key, receiver)
+    })
+    const client = clientOf({
+      mode: 'sentinel',
+      connection: { lazyConnect: true },
+      sentinel: { sentinels, name: 'master' }
+    })
+    const held = redisOptions(client)['sentinels'] as unknown[]
+
+    expect(held).toHaveLength(1)
+    client.disconnect()
+  })
+
+  // Scenario: a block carries a Symbol.toStringTag that is not "Object".
+  // Rule: a block is read by name whatever it calls itself, so no option is skipped.
+  it('reads a block that sets Symbol.toStringTag', () => {
+    const connection = { host: 'h', lazyConnect: true, password: 'tagged' }
+    Object.defineProperty(connection, Symbol.toStringTag, { value: 'Config' })
+    const client = clientOf({ connection })
+
+    expect(redisOptions(client)['password']).toBe('tagged')
+    client.disconnect()
+  })
+
+  // Scenario: tls is a get-only proxy over an empty target, and a class whose fields sit behind
+  // prototype getters. Neither has own enumerable keys.
+  // Rule: the security options are read by name, so none of them is silently dropped.
+  it.each([
+    [
+      'a get-only proxy over an empty target',
+      (): unknown =>
+        new Proxy(
+          {},
+          { get: (_t, key) => ({ ca: 'the-ca', rejectUnauthorized: true })[String(key)] }
+        )
+    ],
+    [
+      'a class with prototype getters',
+      (): unknown =>
+        new (class {
+          get ca(): string {
+            return 'the-ca'
+          }
+          get rejectUnauthorized(): boolean {
+            return true
+          }
+        })()
+    ]
+  ])('keeps ca and rejectUnauthorized of tls given as %s', (_label, make) => {
+    const client = clientOf({ connection: { host: 'h', lazyConnect: true, tls: make() } })
+
+    expect(redisOptions(client)['tls']).toEqual({ ca: 'the-ca', rejectUnauthorized: true })
+    client.disconnect()
+  })
+
+  it('keeps the tls of a cluster node read by name', () => {
+    const tls = new Proxy({}, { get: (_t, key) => (key === 'ca' ? 'node-ca' : undefined) })
+    const client = clientOf({
+      mode: 'cluster',
+      cluster: { nodes: NODES, options: { lazyConnect: true, redisOptions: { tls } } }
+    })
+
+    expect(nodeOptions(client)['tls']).toEqual({ ca: 'node-ca' })
+    client.disconnect()
+  })
+
+  // Scenario: tls names only some options and carries a key outside the security list.
+  // Rule: the copy holds exactly those keys, with no key that answered nothing.
+  it('copies the other own keys of tls and no empty ones', () => {
+    const client = clientOf({
+      connection: { host: 'h', lazyConnect: true, tls: { ca: 'c', timeout: 7 } }
+    })
+
+    expect(Object.keys(redisOptions(client)['tls'] as object).sort()).toEqual(['ca', 'timeout'])
+    client.disconnect()
   })
 })
