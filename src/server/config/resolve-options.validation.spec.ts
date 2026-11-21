@@ -80,6 +80,23 @@ describe('tls.profile', () => {
 })
 
 describe('script definitions', () => {
+  // Scenario: the scripts value is unset, or is not a list at all.
+  // Rule: unset is accepted as before; anything else that is not an array is refused naming `scripts`.
+  it.each([
+    ['undefined', undefined],
+    ['null', null]
+  ])('accepts scripts that are %s', (_label, scripts) => {
+    expect(() => withScripts(scripts)).not.toThrow()
+  })
+
+  it.each([
+    ['a number', 5],
+    ['a string', 'return 1'],
+    ['an object', { name: 'a', lua: 'return 1' }]
+  ])('refuses scripts given as %s', (_label, scripts) => {
+    expect(() => withScripts(scripts)).toThrow(refusing('scripts must be an array'))
+  })
+
   // Scenario: a well-formed list.
   it('accepts definitions with a name and a source', () => {
     expect(() => withScripts([{ name: 'a', lua: 'return 1' }])).not.toThrow()
