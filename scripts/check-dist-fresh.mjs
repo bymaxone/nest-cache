@@ -45,17 +45,13 @@ export function filesUnder(dir) {
  * A tree with no output is a missing build; a tree with no source has nothing to be older than.
  */
 export function judge(sources, outputs, root = '.') {
-  if (outputs.length === 0)
-    return { ok: false, message: 'There is no build output: run `pnpm build` first.' }
+  if (outputs.length === 0) return { ok: false, message: 'There is no build output: run `pnpm build` first.' }
   const oldest = outputs.reduce((a, b) => (b.mtimeMs < a.mtimeMs ? b : a))
-  const newest = sources.reduce((a, b) => (b.mtimeMs > a.mtimeMs ? b : a), {
-    path: '',
-    mtimeMs: -Infinity
-  })
+  const newest = sources.reduce((a, b) => (b.mtimeMs > a.mtimeMs ? b : a), { path: '', mtimeMs: -Infinity })
   if (newest.mtimeMs > oldest.mtimeMs) {
     return {
       ok: false,
-      message: `${relative(root, oldest.path)} is older than ${relative(root, newest.path)}: the build is stale, run \`pnpm build\` first.`
+      message: `${relative(root, oldest.path)} is older than ${relative(root, newest.path)}: the build is stale, run \`pnpm build\` first.`,
     }
   }
   return { ok: true, message: 'The build is newer than its sources.' }
@@ -87,11 +83,7 @@ export function run(argv, root, env) {
   }
   const tarball = env.PACKAGE_TARBALL
   if (tarball !== undefined && tarball !== '') {
-    return {
-      status: 0,
-      message:
-        'PACKAGE_TARBALL is set: the tarball is measured, not dist/, so there is nothing to compare.'
-    }
+    return { status: 0, message: 'PACKAGE_TARBALL is set: the tarball is measured, not dist/, so there is nothing to compare.' }
   }
   const sources = options.src
     .flatMap((dir) => filesUnder(join(root, dir)))
