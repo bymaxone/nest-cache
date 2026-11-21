@@ -164,15 +164,21 @@ const KEY_MATERIAL = [
   'ALPNProtocols'
 ] as const
 
+/** Whether a value is an `ArrayBuffer` or a `SharedArrayBuffer`, which a view reads and a copy must own. */
+function isBuffer(value: unknown): value is ArrayBuffer | SharedArrayBuffer {
+  return value instanceof ArrayBuffer || value instanceof SharedArrayBuffer
+}
+
 /**
  * Copies bytes the host could write to later: any view of an `ArrayBuffer` (a `Buffer`, a `Uint8Array`, a
- * `DataView`) and an `ArrayBuffer` itself become a `Buffer` of their own; anything else is kept.
+ * `DataView`), an `ArrayBuffer` and a `SharedArrayBuffer` (another thread can write to one) become a
+ * `Buffer` of their own; anything else is kept.
  */
 function copyBytes(value: unknown): unknown {
   if (ArrayBuffer.isView(value)) {
     return Buffer.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
   }
-  return value instanceof ArrayBuffer ? Buffer.from(new Uint8Array(value)) : value
+  return isBuffer(value) ? Buffer.from(new Uint8Array(value)) : value
 }
 
 /** The tls options whose entries may be objects, with the field that holds their bytes. */
@@ -183,7 +189,7 @@ const ENTRY_BYTES = { key: 'pem', pfx: 'buf' } as const
  * passphrase, which must be a string. A `KeyObject` is kept as it is, and so are bytes (copied through
  * {@link copyBytes}) and anything that is not an object; every other object, whatever its prototype, is
  * read by name and copied, and one with another own key is refused, so nothing the driver would read
- * goes uncopied.
+ * goes uncopied. An entry that holds no bytes is refused too, which a proxy over a `KeyObject` is.
  *
  * @param entry - The entry as the host wrote it.
  * @param option - The list's name, echoed with the entry's position.
@@ -198,7 +204,7 @@ function copyKeyEntry(entry: unknown, option: string, field: string, index: numb
     !isObject(entry) ||
     Array.isArray(entry) ||
     ArrayBuffer.isView(entry) ||
-    entry instanceof ArrayBuffer ||
+    isBuffer(entry) ||
     types.isKeyObject(entry)
   ) {
     return copyBytes(entry)
@@ -212,6 +218,9 @@ function copyKeyEntry(entry: unknown, option: string, field: string, index: numb
     refuseOption(`${where}.passphrase`, 'must be a string', passphrase)
   }
   const bytes: unknown = Reflect.get(entry, field)
+  if (bytes === undefined) {
+    refuseOption(where, `has no ${field}`, entry)
+  }
   return { [field]: copyBytes(bytes), ...(passphrase !== undefined && { passphrase }) }
 }
 

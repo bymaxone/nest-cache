@@ -140,6 +140,17 @@ describe.each([
     expect(held[0]).toEqual({ [bytes]: 'first', passphrase: 'p' })
   })
 
+  // Scenario: an entry has no bytes: only a passphrase, or a proxy over a key object (which no check can see through).
+  // Rule: it is refused at boot, naming the entry, rather than held as an entry with undefined bytes that
+  // the driver would refuse late.
+  it('refuses an entry that holds no bytes', () => {
+    const throughProxy = new Proxy(createSecretKey(Buffer.from('secret')), {})
+
+    for (const entry of [{ passphrase: 'p' }, {}, throughProxy]) {
+      expect(() => heldTls({ [key]: [entry] })).toThrow(refusing(`tls.${key}[0] has no ${bytes}`))
+    }
+  })
+
   it('keeps a key object as it is', () => {
     const entry = createSecretKey(Buffer.from('secret'))
 
@@ -163,6 +174,23 @@ describe.each(['ticketKeys', 'session', 'dhparam', 'ALPNProtocols'])('tls.%s', (
     expect(heldTls({ [name]: 'text' })[name]).toBe('text')
   })
 })
+
+// Scenario: the host hands a SharedArrayBuffer, which another thread can write to after boot.
+// Rule: it is copied into a Buffer of its own, like any other view of bytes.
+describe.each(['ca', 'cert', 'ticketKeys', 'key', 'pfx'])(
+  'a SharedArrayBuffer given as tls.%s',
+  (name) => {
+    it('is copied', () => {
+      const shared = new SharedArrayBuffer(4)
+      new Uint8Array(shared).set([1, 2, 3, 4])
+      const held = heldTls({ [name]: shared })[name] as Buffer
+      new Uint8Array(shared).fill(0)
+
+      expect(Buffer.isBuffer(held)).toBe(true)
+      expect([...held]).toEqual([1, 2, 3, 4])
+    })
+  }
+)
 
 describe('tls.ALPNProtocols as a list', () => {
   it('is copied by position', () => {

@@ -7,6 +7,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- A `tls.key` or `tls.pfx` object entry that holds no bytes (only a passphrase, an empty object, or a proxy over a `KeyObject`, which cannot be recognised through the proxy) is refused as `INVALID_OPTIONS` naming the entry (`tls.key[0] has no pem`) when the options are resolved. It was held with undefined bytes, so Node refused it at connect, late and without the library's code in the message.
+- A `SharedArrayBuffer`, given as key material or as session material, is copied into a `Buffer` of its own like an `ArrayBuffer`: another thread can write to one after boot.
+
+  **Apply to a consumer:** a host that passed a key or pfx object entry without its `pem` or `buf`, or a proxy over a `KeyObject`, now gets `cache.invalid_options` at registration instead of a connect failure. No declaration changes.
+
 ## [1.2.37] - 2026-11-21
 
 ### Fixed
