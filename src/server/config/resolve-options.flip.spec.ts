@@ -353,8 +353,8 @@ describe('options read once, under a getter that answers differently on each rea
     const client = clientOf({ connection: { host: 'h', lazyConnect: true, tls } })
     const held = redisOptions(client)['tls'] as { ca: unknown }
 
-    expect(held.ca).toBe(ca)
-    expect(held.ca).toBe(ca)
+    expect(held.ca).toEqual(ca)
+    expect(held.ca).toEqual(ca)
     client.disconnect()
   })
 

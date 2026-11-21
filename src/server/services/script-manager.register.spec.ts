@@ -39,6 +39,9 @@ describe('ScriptManagerService.register validates what it is given', () => {
     const registry = build()
 
     expect(() => registry.register(name as string, lua as string)).toThrow(refusing(reason))
+    expect([...(registry as unknown as { scripts: Map<string, unknown> }).scripts.keys()]).toEqual(
+      []
+    )
     expect(() => registry.register('a', 'return 1')).not.toThrow()
   })
 })

@@ -79,6 +79,13 @@ describe('the sentinel-side tls of a cluster node options', () => {
     expect(() => withNodeOptions({ sentinelTLS: { profile: 'RedisCloudFixed' } })).not.toThrow()
     expect(() => withNodeOptions({ sentinelTLS: { ca: 'c' } })).not.toThrow()
   })
+
+  it('refuses a sentinelTLS that is an array and accepts a profile name', () => {
+    expect(() => withNodeOptions({ sentinelTLS: [] })).toThrow(
+      refusing(`cluster.options.redisOptions.sentinelTLS ${KIND}`)
+    )
+    expect(() => withNodeOptions({ sentinelTLS: 'RedisCloudFixed' })).not.toThrow()
+  })
 })
 
 describe('the sentinel-side tls of the cluster node options is copied once', () => {

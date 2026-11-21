@@ -146,8 +146,42 @@ function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknow
     : value
 }
 
-/** Copies a `tls` object once: its security options by name. `Buffer`s and a `secureContext` stay by reference. */
-const readTls = (tls: unknown): unknown => readPlain(tls, TLS_KEYS)
+/** The tls options that hold key material: a string, a `Buffer`, or a list of them. */
+const KEY_MATERIAL = ['ca', 'cert', 'key', 'pfx', 'crl'] as const
+
+/** Copies a `Buffer`, so a later write by the host does not reach the copy; anything else is kept. */
+const copyBytes = (value: unknown): unknown => (Buffer.isBuffer(value) ? Buffer.from(value) : value)
+
+/**
+ * Copies a `tls` object once: its options by name, and the key material one level deeper. A list is
+ * read once (the length first, each index once, both bounded like the other lists) and every `Buffer`
+ * in it is copied, because the driver merges the object again on every reconnect and a list or a
+ * `Buffer` the host changes later would change the trust roots or the identity it connects with. A
+ * `secureContext` stays by reference.
+ *
+ * @param tls - The `tls` value as the host wrote it.
+ * @returns A plain copy, or the value itself when it is not an object or is an array.
+ * @throws {CacheException} `INVALID_OPTIONS` naming `tls.<option>` when a list is too long or its
+ *   length is not a count.
+ */
+function readTls(tls: unknown): unknown {
+  const copy = readPlain(tls, TLS_KEYS)
+  if (copy !== tls) {
+    for (const key of KEY_MATERIAL) {
+      const material: unknown = Reflect.get(copy as object, key)
+      if (material !== undefined) {
+        Reflect.set(
+          copy as object,
+          key,
+          Array.isArray(material)
+            ? copyList(material, `tls.${key}`, copyBytes)
+            : copyBytes(material)
+        )
+      }
+    }
+  }
+  return copy
+}
 
 /** Copies a sentinel address, a cluster node or a `natMap` target once: host, port and family by name. */
 const readEntry = (entry: unknown): unknown => readPlain(entry, ENTRY_KEYS)

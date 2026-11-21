@@ -608,8 +608,9 @@ const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
  * throws, a getter or a proxy trap of the host's, ends as `INVALID_OPTIONS`
  * (`reason: 'option could not be read'`) with the host's error on `cause` and none of its text in
  * `details`. The `tls` object, the `sentinels` and `cluster.nodes` lists, the `natMap` objects the
- * driver reads on every connect and the `scripts` list are copied once the same way; a `Buffer` or `secureContext` in `tls`
- * is kept by reference.
+ * driver reads on every connect and the `scripts` list are copied once the same way; the key material of
+ * a `tls` (`ca`, `cert`, `key`, `pfx`, `crl`) is copied as well, its lists read once and its `Buffer`s
+ * copied, and a `secureContext` is kept by reference.
  *
  * @param options - The raw consumer options.
  * @returns A shallow-frozen {@link ResolvedOptions} carrying every defaulted field.
