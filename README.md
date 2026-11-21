@@ -427,7 +427,7 @@ the end-to-end suite verifies against a three-master cluster.
 ## 📜 Lua Scripts
 
 Register scripts at module init, then execute them atomically by name. The manager caches the
-SHA1 and uses `EVALSHA`, transparently reloading on `NOSCRIPT`. Each definition needs a non-empty `name` and `lua`: anything else, a definition that is not an object, or a `scripts` value that is not an array, is refused as `cache.invalid_options` when the module is registered, naming the entry and the field:
+SHA1 and uses `EVALSHA`, transparently reloading on `NOSCRIPT`. Each definition needs a non-empty `name` and `lua`: anything else, a definition that is not an object, or a `scripts` value that is neither unset nor an array, is refused as `cache.invalid_options` when the module is registered, naming the entry and the field:
 
 ```typescript
 // In module options:

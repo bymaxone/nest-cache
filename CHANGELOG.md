@@ -10,7 +10,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Fixed
 
 - A `tls.profile` the driver does not resolve is refused as `INVALID_OPTIONS` (`reason: 'connection.tls.profile is not a known tls profile'`, `allowed: 'RedisCloudFixed or RedisCloudFlexible'`) when the options are resolved, in `connection.tls` and in `cluster.options.redisOptions.tls`, whether the profile is an option of the `tls` object or the whole `tls` value. A number or an unknown name used to leave the connection without the pinned authority, and an object whose `toString` throws escaped raw from the driver.
-- A script definition that is not an object with a non-empty string `name` and `lua`, and a `scripts` value that is not an array, are refused as `INVALID_OPTIONS` naming the entry and the field (`scripts[1].lua`) when the options are resolved. A `lua` that is a number used to surface as a raw Redis error at boot, and an entry with no name or that was not an object was accepted.
+- A script definition that is not an object with a non-empty string `name` and `lua`, and a `scripts` value that is neither unset nor an array, are refused as `INVALID_OPTIONS` naming the entry and the field (`scripts[1].lua`) when the options are resolved. A `lua` that is a number used to surface as a raw Redis error when the scripts were loaded, and an entry with no `name` was accepted.
 
   **Apply to a consumer:** a host that passed a `tls.profile` other than the two the driver knows, or a script definition without a string `name` and `lua`, now gets `cache.invalid_options` at registration instead of a connection without the pinned authority or a failure at boot. No declaration changes.
 
