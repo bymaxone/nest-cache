@@ -56,6 +56,41 @@ describe('the entries of sentinels and cluster.nodes', () => {
   })
 })
 
+describe('the shorthand entries are a node thing only', () => {
+  // Scenario: a sentinel entry is a host:port string or a port number, which a node may be.
+  // Rule: a sentinel is an address object, so both are refused.
+  it.each([
+    ['a string', 'h:26379'],
+    ['a number', 26379]
+  ])('refuses %s as a sentinel entry', (_label, entry) => {
+    expect(() => resolve(sentinel([entry]))).toThrow(
+      refusing('sentinel.sentinels[0] must be an address')
+    )
+  })
+})
+
+describe('the natMap of the cluster options', () => {
+  const bad = { 'a:1': [] }
+
+  it('refuses an entry that is not an object, in the options and in the node options', () => {
+    expect(() =>
+      resolve({
+        mode: 'cluster',
+        cluster: { nodes: [{ host: 'a', port: 7000 }], options: { natMap: bad } }
+      })
+    ).toThrow(refusing('cluster.options.natMap[0] must be an address'))
+    expect(() =>
+      resolve({
+        mode: 'cluster',
+        cluster: {
+          nodes: [{ host: 'a', port: 7000 }],
+          options: { redisOptions: { natMap: bad } }
+        }
+      })
+    ).toThrow(refusing('cluster.options.redisOptions.natMap[0] must be an address'))
+  })
+})
+
 describe('the entries of a natMap', () => {
   const map = (natMap: unknown): Record<string, unknown> => ({
     mode: 'sentinel',
