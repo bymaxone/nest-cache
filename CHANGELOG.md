@@ -7,6 +7,11 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Documentation
+
+- The README says where each figure of the production section comes from: the timings of the frozen and the stopped Redis, the burst of 12 000 messages and the 64 MB message were measured by hand in the QA gate of 1.2.25 and no spec pins them; the 125 000-argument threshold of the call stack was measured when the chunking was added in 1.2.27 (the 10 000 chunk size is pinned); and `pubsubMaxConcurrentHandlers: 256` with `pubsubMaxQueuedMessages: 10000` is a starting point chosen by judgement, not a measured optimum.
+- The shutdown-hooks note no longer says what the process does without `app.enableShutdownHooks()`, which is Nest's behaviour: it says that the library closes its connections, `shutdownTimeoutMs` included, only inside Nest's shutdown hook, which `app.close()` runs too.
+
 ## [1.2.30] - 2026-11-21
 
 ### Fixed

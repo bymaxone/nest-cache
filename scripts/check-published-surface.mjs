@@ -32,6 +32,8 @@ import { createRequire } from 'node:module'
 import { dirname, join, relative as relativePath, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { importGraphProblems } from './check-import-graph.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PKG = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 const README = readFileSync(join(ROOT, 'README.md'), 'utf8')
@@ -749,6 +751,8 @@ console.log(`Published-surface gate — ${PKG.name}@${PKG.version}`)
 await checkLinks()
 checkChangelog()
 checkSnippets()
+for (const problem of importGraphProblems(join(ROOT, 'dist'))) fail('import graph', problem)
+console.log('  import graph: the built entries load the packages the README says they do')
 
 if (failures.length > 0) {
   console.error(`\n✖ ${failures.length} problem(s):\n`)
