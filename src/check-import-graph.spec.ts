@@ -7,7 +7,7 @@
  * Layer: repository tooling, tests.
  */
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -64,7 +64,8 @@ describe('check-import-graph', () => {
     ['a static import of nest-core', "import { a } from '@bymax-one/nest-core/metrics'\n"],
     ['a bare import of prom-client', "import 'prom-client'\n"],
     ['a dynamic import of prom-client', "const m = await import('prom-client')\n"],
-    ['a require of nest-core', "const m = require('@bymax-one/nest-core')\n"]
+    ['a require of nest-core', "const m = require('@bymax-one/nest-core')\n"],
+    ['a bundler require shim of prom-client', "const m = __require('prom-client')\n"]
   ])('fails when the main entry has %s', (_name, text) => {
     const result = run(dist({ ...CLEAN, server: `${CLEAN['server']}${text}` }))
 
@@ -104,6 +105,20 @@ describe('check-import-graph', () => {
 
     expect(result.status).toBe(1)
     expect(result.output).toContain('shared')
+  })
+
+  // Scenario: the script is started through a symbolic link to it.
+  // Rule: the scan still runs and reports, rather than printing nothing and exiting 0.
+  it('reports a problem when started through a symbolic link', () => {
+    const link = join(mkdtempSync(join(tmpdir(), 'import-graph-link-')), 'check.mjs')
+    dirs.push(resolve(link, '..'))
+    symlinkSync(SCRIPT, link)
+    const root = dist({ ...CLEAN, shared: "import 'prom-client'\n" })
+
+    const result = spawnSync(process.execPath, [link, root], { encoding: 'utf8' })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('shared')
   })
 
   // A package whose name only starts like the peer is not the peer.

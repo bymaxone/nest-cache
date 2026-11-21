@@ -6,7 +6,7 @@
  *
  * Every entry is one self-contained bundle, so the packages it loads are exactly the specifiers in
  * that file, in the four spellings a bundler writes: `from '...'`, a bare `import '...'`, a dynamic
- * `import('...')` and `require('...')`. The rules:
+ * `import('...')`, `require('...')` and the bundler's `__require('...')` shim. The rules:
  *
  * - `.` (server), `/admin` and `/shared` never load `@bymax-one/nest-core` or `prom-client`;
  * - the main entry never loads `/admin`, by an import of its subpath or by its service inlined;
@@ -16,12 +16,12 @@
  *
  * Usage: node scripts/check-import-graph.mjs [distDir]   (default: ./dist)
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** The four ways a bundle names a package. */
-const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)(['"])([^'"\n]+)\1/g
+const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|(?:\b|_)require\s*\(\s*)(['"])([^'"\n]+)\1/g
 
 /** The optional peers only the metrics and observability entries may load. */
 const PEERS = ['@bymax-one/nest-core', 'prom-client']
@@ -80,7 +80,10 @@ export function importGraphProblems(distDir) {
   return problems
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   const problems = importGraphProblems(resolve(process.argv[2] ?? 'dist'))
   if (problems.length > 0) {
     process.stderr.write(`${problems.join('\n')}\n`)
