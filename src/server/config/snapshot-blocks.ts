@@ -218,7 +218,9 @@ function copyMaterial(material: unknown, key: (typeof KEY_MATERIAL)[number]): un
  * read once (the length first, each index once, both bounded like the other lists) and every `Buffer`
  * element of it is copied, because the driver merges the object again on every reconnect and a list or
  * a `Buffer` the host changes later would change the trust roots or the identity it connects with. An
- * object entry such as `{ pem, passphrase }` and a `secureContext` stay by reference.
+ * object entry of `key` or `pfx` (`{ pem, passphrase }`, `{ buf, passphrase }`) is copied by name too,
+ * through `copyKeyEntry`; only an entry that is not a plain object, such as a `KeyObject`, and a
+ * `secureContext` stay by reference.
  *
  * @param tls - The `tls` value as the host wrote it.
  * @returns A plain copy, or the value itself when it is not an object or is an array.
