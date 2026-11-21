@@ -8,6 +8,9 @@ import { CACHE_ERROR_CODES, type CacheErrorCode } from '../errors/cache-error-co
 import { describeReceived } from './describe-received'
 import { refusal } from './own-refusals'
 
+/** The options that hold a credential, by name: their refusals never print a number. */
+const CREDENTIAL = /password|username|passphrase/i
+
 /**
  * Throws `code` for an option value, reporting its type and never its content.
  *
@@ -28,7 +31,7 @@ export function refuseValue(
   throw refusal(code, {
     reason: `${option} ${problem}`,
     option,
-    received: describeReceived(value),
+    received: describeReceived(value, CREDENTIAL.test(option)),
     ...bounds
   })
 }

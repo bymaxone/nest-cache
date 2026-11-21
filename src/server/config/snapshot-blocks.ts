@@ -160,6 +160,59 @@ function copyBytes(value: unknown): unknown {
   return value instanceof ArrayBuffer ? Buffer.from(new Uint8Array(value)) : value
 }
 
+/** The tls options whose entries may be objects, with the field that holds their bytes. */
+const ENTRY_BYTES = { key: 'pem', pfx: 'buf' } as const
+
+/**
+ * Copies an object entry of `tls.key` or `tls.pfx` by name: its bytes through {@link copyBytes} and its
+ * passphrase, which must be a string. An entry that is not a plain object (a `KeyObject`) is kept as it
+ * is; a plain object with another key is refused, so nothing the driver would read goes uncopied.
+ *
+ * @param entry - The entry as the host wrote it.
+ * @param option - The list's name, echoed with the entry's position.
+ * @param field - The field that holds the bytes: `pem` for a key, `buf` for a pfx.
+ * @param index - The entry's position.
+ * @returns A plain copy, or the entry itself when it is not a plain object.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the entry by position.
+ */
+function copyKeyEntry(entry: unknown, option: string, field: string, index: number): unknown {
+  const prototype: unknown = isObject(entry) ? Reflect.getPrototypeOf(entry) : undefined
+  if (
+    !isObject(entry) ||
+    Array.isArray(entry) ||
+    (prototype !== Object.prototype && prototype !== null)
+  ) {
+    return copyBytes(entry)
+  }
+  const where = `${option}[${index}]`
+  if (Object.keys(entry).some((name) => name !== field && name !== 'passphrase')) {
+    refuseOption(where, `has a key that is not ${field} or passphrase`, entry)
+  }
+  const passphrase: unknown = Reflect.get(entry, 'passphrase')
+  if (passphrase !== undefined && typeof passphrase !== 'string') {
+    refuseOption(`${where}.passphrase`, 'must be a string', passphrase)
+  }
+  const bytes: unknown = Reflect.get(entry, field)
+  return { [field]: copyBytes(bytes), ...(passphrase !== undefined && { passphrase }) }
+}
+
+/**
+ * Copies one key material option: a list through {@link copyList}, an object entry of `key` or `pfx`
+ * through {@link copyKeyEntry}, anything else through {@link copyBytes}.
+ *
+ * @param material - The option's value as the host wrote it.
+ * @param key - The option's name.
+ * @returns The copy.
+ */
+function copyMaterial(material: unknown, key: (typeof KEY_MATERIAL)[number]): unknown {
+  const option = `tls.${key}`
+  const copyOne = (entry: unknown, index: number): unknown =>
+    key === 'key' || key === 'pfx'
+      ? copyKeyEntry(entry, option, ENTRY_BYTES[key], index)
+      : copyBytes(entry)
+  return Array.isArray(material) ? copyList(material, option, copyOne) : copyOne(material, 0)
+}
+
 /**
  * Copies a `tls` object once: its options by name, and the key material one level deeper. A list is
  * read once (the length first, each index once, both bounded like the other lists) and every `Buffer`
@@ -178,13 +231,7 @@ function readTls(tls: unknown): unknown {
     for (const key of KEY_MATERIAL) {
       const material: unknown = Reflect.get(copy as object, key)
       if (material !== undefined) {
-        Reflect.set(
-          copy as object,
-          key,
-          Array.isArray(material)
-            ? copyList(material, `tls.${key}`, copyBytes)
-            : copyBytes(material)
-        )
+        Reflect.set(copy as object, key, copyMaterial(material, key))
       }
     }
   }
@@ -206,7 +253,11 @@ const readEntry = (entry: unknown): unknown => readPlain(entry, ENTRY_KEYS)
  * @throws {CacheException} `INVALID_OPTIONS` when the length is not a count, or the list holds more
  *   than the cap.
  */
-function copyList(list: unknown, option: string, copy: (entry: unknown) => unknown): unknown {
+function copyList(
+  list: unknown,
+  option: string,
+  copy: (entry: unknown, index: number) => unknown
+): unknown {
   if (!Array.isArray(list)) {
     return list
   }
@@ -217,12 +268,12 @@ function copyList(list: unknown, option: string, copy: (entry: unknown) => unkno
   if (length > MAX_LIST_ENTRIES) {
     refuseOption(option, 'has too many entries', length, { max: MAX_LIST_ENTRIES })
   }
-  return Array.from({ length }, (_, index) => copy(list[index]))
+  return Array.from({ length }, (_, index) => copy(list[index], index))
 }
 
 /**
  * Copies a `natMap` once, each entry once, after its key count is checked against the cap. A function
- * map is kept as is.
+ * map and an array are kept as they are, the array for validation to refuse.
  *
  * @param map - The map as the host wrote it.
  * @param option - The map's name, echoed when it holds too many entries.
@@ -230,7 +281,7 @@ function copyList(list: unknown, option: string, copy: (entry: unknown) => unkno
  * @throws {CacheException} `INVALID_OPTIONS` when the map holds more than the cap.
  */
 function copyNatMap(map: unknown, option: string): unknown {
-  if (!isObject(map)) {
+  if (!isObject(map) || Array.isArray(map)) {
     return map
   }
   const names = Object.keys(map)

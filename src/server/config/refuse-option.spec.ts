@@ -42,4 +42,23 @@ describe('refuseOption', () => {
       received: 7
     })
   })
+
+  // Scenario: the refused option holds a credential, named by its option name, and a number was given.
+  // Rule: the type is reported, not the number; an option that holds a quantity still reports it.
+  it.each([
+    'connection.password',
+    'cluster.options.redisOptions.username',
+    'sentinel.sentinelPassword',
+    'tls.key[0].passphrase'
+  ])('reports a number given as %s as a number', (option) => {
+    expect(thrownBy(() => refuseOption(option, 'r', 12345)).details).toMatchObject({
+      received: 'a number'
+    })
+  })
+
+  it('reports a number given as an option that holds a quantity as itself', () => {
+    expect(thrownBy(() => refuseOption('connection.port', 'r', 70000)).details).toMatchObject({
+      received: 70000
+    })
+  })
 })

@@ -127,18 +127,22 @@ describe.each(SPELLINGS)('refusal details of %s', (name, build) => {
   })
 
   // Scenario: the option holds a finite number out of range.
-  // Rule: the number is printed as it is: it is a quantity, not a secret.
+  // Rule: the number is printed as it is: it is a quantity, not a secret. A credential is the exception:
+  // a numeric password is still a password, so a credential is reported as the type only.
+  const credential = /password|username/.test(name)
   it('prints a finite number out of range', () => {
     const error = refusal(build(-3.5))
 
-    expect(error?.details).toMatchObject({ received: -3.5 })
+    expect(error?.details).toMatchObject({ received: credential ? 'a number' : -3.5 })
     expect(error?.details).not.toHaveProperty('value')
   })
 
   // Scenario: the option holds NaN or an infinity.
-  // Rule: they are named as what they are, not collapsed into "a number".
+  // Rule: they are named as what they are, not collapsed into "a number"; a credential is the type only.
   it.each([NaN, Infinity, -Infinity])('names the non-finite number %p', (value) => {
-    expect(refusal(build(value))?.details).toMatchObject({ received: String(value) })
+    expect(refusal(build(value))?.details).toMatchObject({
+      received: credential ? 'a number' : String(value)
+    })
   })
 })
 
