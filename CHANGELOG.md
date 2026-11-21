@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.34] - 2026-11-21
+
 ### Fixed
 
 - A `tls.profile` the driver does not resolve is refused as `INVALID_OPTIONS` (`reason: 'connection.tls.profile is not a known tls profile'`, `allowed: 'RedisCloudFixed or RedisCloudFlexible'`) when the options are resolved, in `connection.tls` and in `cluster.options.redisOptions.tls`, whether the profile is an option of the `tls` object or the whole `tls` value. A number or an unknown name used to leave the connection without the pinned authority, and an object whose `toString` throws escaped raw from the driver.
@@ -1155,7 +1157,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.33...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.34...HEAD
+[1.2.34]: https://github.com/bymaxone/nest-cache/compare/v1.2.33...v1.2.34
 [1.2.33]: https://github.com/bymaxone/nest-cache/compare/v1.2.32...v1.2.33
 [1.2.32]: https://github.com/bymaxone/nest-cache/compare/v1.2.31...v1.2.32
 [1.2.31]: https://github.com/bymaxone/nest-cache/compare/v1.2.30...v1.2.31
