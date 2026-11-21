@@ -7,11 +7,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.30] - 2026-11-21
+
 ### Fixed
 
 - An option that could not be read ended as the host's own error. A getter or a proxy trap in the options handed to `forRoot`, `forRootAsync` or `createConnectionManager` that throws now ends as `CacheException` `cache.invalid_options` (`details.reason`: `option could not be read`) with the thrown error on `cause` and none of its text in `details`. Each top-level option is read once, into a plain copy that validation and defaulting then share, so what is validated is what is applied. The same holds for the reads the connection manager makes when it builds the client and when it boots, and for the script manager's lazy flag; the status screen of `./admin` answers with no endpoint named when the connection block cannot be read. A trap that fires inside the driver, in an object handed to it as it is, still reaches the host as its own error.
 
-  **Apply to a consumer:** a host that matched the error its own getter throws, on the exception that `forRoot` raised, reads `error.cause` instead; a refusal the library raises for a value it could read keeps its code.
+  **Apply to a consumer:** a host that matched the error its own getter throws, on the exception that `forRoot` raised, reads `error.cause` instead; a refusal the library raises for a value it could read keeps its code. The class `ConnectionManager` gains one private member, `connectDeadline`, so the text of its declaration changes while every public signature stays the same; subclassing it is not a supported extension point.
 
 ### Documentation
 
@@ -1113,7 +1115,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.29...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.30...HEAD
+[1.2.30]: https://github.com/bymaxone/nest-cache/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/bymaxone/nest-cache/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/bymaxone/nest-cache/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/bymaxone/nest-cache/compare/v1.2.26...v1.2.27
