@@ -5,7 +5,7 @@
  * @layer scripts
  *
  * Every entry is one self-contained bundle, so the packages it loads are exactly the specifiers in
- * that file, in the four spellings a bundler writes: `from '...'`, a bare `import '...'`, a dynamic
+ * that file, in the five spellings a bundler writes: `from '...'`, a bare `import '...'`, a dynamic
  * `import('...')`, `require('...')` and the bundler's `__require('...')` shim. The rules:
  *
  * - `.` (server), `/admin` and `/shared` never load `@bymax-one/nest-core` or `prom-client`;
@@ -20,7 +20,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** The four ways a bundle names a package. */
+/** The ways a bundle names a package. */
 const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|(?:\b|_)require\s*\(\s*)(['"])([^'"\n]+)\1/g
 
 /** The optional peers only the metrics and observability entries may load. */
