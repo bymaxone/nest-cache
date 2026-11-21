@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.29] - 2026-11-20
+
 ### Added
 
 - `CACHE_LOG_EVENTS.hookFailed`, the code `CACHE_HOOK_FAILED` that the main entry writes when a hook of `events` fails, in the catalog of `@bymax-one/nest-cache/observability`.
@@ -1101,7 +1103,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.28...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.29...HEAD
+[1.2.29]: https://github.com/bymaxone/nest-cache/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/bymaxone/nest-cache/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/bymaxone/nest-cache/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/bymaxone/nest-cache/compare/v1.2.25...v1.2.26
