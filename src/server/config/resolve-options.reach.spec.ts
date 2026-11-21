@@ -115,6 +115,17 @@ describe('lists the driver walks are capped before they are copied', () => {
     )
   })
 
+  // Scenario: the list is empty, which is a count of zero.
+  // Rule: an empty scripts list is a valid list: it resolves to an empty list, not a refusal.
+  it('accepts a scripts list of zero entries', () => {
+    const resolved = resolveOptions({
+      connection: { host: 'h' },
+      scripts: []
+    } as BymaxCacheModuleOptions)
+
+    expect(resolved.scripts).toEqual([])
+  })
+
   // Scenario: the list is exactly at the cap and one above it.
   it('accepts 1000 nodes and refuses 1001', () => {
     const nodes = (count: number): unknown[] =>
