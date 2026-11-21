@@ -17,14 +17,38 @@ const LOGGED = new Set<CacheHookName>()
 /** Where the failure of a hook is logged. */
 const LOGGER = new Logger('BymaxCache')
 
+/** The `event` code of the line written when a hook fails. */
+export const HOOK_FAILED_EVENT = 'CACHE_HOOK_FAILED'
+
+/**
+ * Whether Nest would write a `warn` line now. The static `Logger.staticInstanceRef` is protected, not
+ * part of Nest's contract, so it is read inside a guard and any doubt counts as writable: the cost of
+ * a wrong yes is the budget spent on a line nobody sees, the old behaviour. The public static
+ * `Logger.isLevelEnabled` alone cannot tell, so this reads both; measured on `@nestjs/common` 11.0.16,
+ * 11.2.11 and 12.6.0, where `overrideLogger(false)` leaves it false and the instance undefined.
+ *
+ * @returns False only when the application disabled Nest's logging (`logger: false`) or left `warn`
+ *   out of an explicit list of levels.
+ */
+function writable(): boolean {
+  try {
+    return (
+      Reflect.get(Logger, 'staticInstanceRef') !== undefined &&
+      (Reflect.get(Logger, 'logLevels') === undefined || Logger.isLevelEnabled('warn'))
+    )
+  } catch {
+    return true
+  }
+}
+
 /** Logs the first failure of a hook, absorbing a logger that fails in turn. */
 function failed(hook: CacheHookName): void {
-  if (LOGGED.has(hook)) {
+  if (LOGGED.has(hook) || !writable()) {
     return
   }
   LOGGED.add(hook)
   try {
-    LOGGER.warn({ event: 'CACHE_HOOK_FAILED', message: 'A host hook failed', hook })
+    LOGGER.warn({ event: HOOK_FAILED_EVENT, message: 'A host hook failed', hook })
   } catch {
     // A faulty logger must not fail what it observes.
   }

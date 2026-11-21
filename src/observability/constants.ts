@@ -76,8 +76,8 @@ export const CACHE_OPERATION_OUTCOMES: Readonly<Record<CacheOperationOutcome, tr
 /**
  * The code of every log event the library writes, as the `event` field of an object message.
  *
- * One code per connection or Pub/Sub event the library already reports; the README lists the level,
- * the moment and the fields of each.
+ * One code per connection or Pub/Sub event the library already reports, and one for the failure of a
+ * host hook; the README lists the level, the moment and the fields of each.
  */
 export const CACHE_LOG_EVENTS = {
   connect: 'CACHE_CONNECT',
@@ -88,5 +88,6 @@ export const CACHE_LOG_EVENTS = {
   connectionError: 'CACHE_CONNECTION_ERROR',
   forcedDisconnect: 'CACHE_FORCED_DISCONNECT',
   handlerError: 'CACHE_HANDLER_ERROR',
-  pubsubDropped: 'CACHE_PUBSUB_DROPPED'
+  pubsubDropped: 'CACHE_PUBSUB_DROPPED',
+  hookFailed: 'CACHE_HOOK_FAILED'
 } as const
