@@ -17,6 +17,8 @@ import type {
   BymaxCacheSentinelConnection,
   BymaxCacheStandaloneConnection
 } from '../interfaces/cache-module-options.interface'
+import type { IScriptDefinition } from '../interfaces/script-definition.interface'
+import { refuseOption } from './refuse-option'
 
 // Stryker disable BooleanLiteral: only the keys of the records below are read, so flipping a `true` value changes nothing
 /** Every key of the standalone block, as a complete record: a key added to the interface fails here. */
@@ -52,25 +54,62 @@ const SENTINEL_KEYS: Readonly<Record<keyof BymaxCacheSentinelConnection, true>> 
 }
 
 /**
- * The tls options that decide who is trusted and which identity is presented, read by name so that a
- * class instance, a get-only proxy or a non-enumerable field is not silently dropped. The own
- * enumerable keys beyond these are copied as well.
+ * Every documented option of `tls.ConnectionOptions`, plus the `profile` that `ioredis` reads, as a
+ * complete record: an option a newer Node adds fails the type check here until it is listed. Each is
+ * read by name, so a class instance, a get-only proxy or a non-enumerable field loses none of them;
+ * the own enumerable keys beyond these are copied as well.
  */
-const TLS_KEYS = {
+const TLS_KEYS: Readonly<Record<keyof TlsConnectionOptions | 'profile', true>> = {
+  ALPNCallback: true,
+  ALPNProtocols: true,
+  SNICallback: true,
+  allowPartialTrustChain: true,
   ca: true,
   cert: true,
-  key: true,
-  pfx: true,
-  passphrase: true,
-  rejectUnauthorized: true,
-  servername: true,
+  certificateCompression: true,
   checkServerIdentity: true,
-  minVersion: true,
-  maxVersion: true,
   ciphers: true,
+  clientCertEngine: true,
+  crl: true,
+  dhparam: true,
+  ecdhCurve: true,
+  enableTrace: true,
+  honorCipherOrder: true,
+  host: true,
+  key: true,
+  lookup: true,
+  maxVersion: true,
+  minDHSize: true,
+  minVersion: true,
+  passphrase: true,
+  path: true,
+  pfx: true,
+  port: true,
+  privateKeyEngine: true,
+  privateKeyIdentifier: true,
+  profile: true,
+  pskCallback: true,
+  rejectUnauthorized: true,
+  requestCert: true,
+  requestOCSP: true,
   secureContext: true,
-  crl: true
-} satisfies Partial<Record<keyof TlsConnectionOptions, true>>
+  secureOptions: true,
+  secureProtocol: true,
+  servername: true,
+  session: true,
+  sessionIdContext: true,
+  sessionTimeout: true,
+  sigalgs: true,
+  socket: true,
+  ticketKeys: true,
+  timeout: true
+}
+
+/** The most entries a list the driver walks, or the `scripts` list, may hold. */
+const MAX_LIST_ENTRIES = 1000
+
+/** Every key of a script definition, as a complete record. */
+const SCRIPT_KEYS: Readonly<Record<keyof IScriptDefinition, true>> = { name: true, lua: true }
 
 /** What an entry of `sentinels`, `cluster.nodes` or a `natMap` names, read by name. */
 const ENTRY_KEYS = { host: true, port: true, family: true } satisfies Partial<
@@ -113,18 +152,25 @@ const readTls = (tls: unknown): unknown => readPlain(tls, TLS_KEYS)
 const readEntry = (entry: unknown): unknown => readPlain(entry, ENTRY_KEYS)
 
 /**
- * Copies a list the driver walks on every connect (`sentinels`, `nodes`): the length once and each
- * entry once, by name. A value that is not an array is kept as is, for validation to refuse.
+ * Copies a list the driver or the registry walks (`sentinels`, `nodes`, `scripts`): the length once,
+ * checked against the cap before anything is allocated, and each entry once through `copy`. A value
+ * that is not an array is kept as is, for validation to refuse.
  *
  * @param list - The list as the host wrote it.
+ * @param option - The option's name, echoed when the list is too long.
+ * @param copy - Copies one entry.
  * @returns A plain array of copied entries.
+ * @throws {CacheException} `INVALID_OPTIONS` when the list holds more than the cap.
  */
-function copyEntries(list: unknown): unknown {
+function copyList(list: unknown, option: string, copy: (entry: unknown) => unknown): unknown {
   if (!Array.isArray(list)) {
     return list
   }
   const length: number = list.length
-  return Array.from({ length }, (_, index) => readEntry(list[index]))
+  if (length > MAX_LIST_ENTRIES) {
+    refuseOption(option, 'has too many entries', length, { max: MAX_LIST_ENTRIES })
+  }
+  return Array.from({ length }, (_, index) => copy(list[index]))
 }
 
 /**
@@ -177,18 +223,21 @@ export function snapshotBlocks(options: BymaxCacheModuleOptions): BymaxCacheModu
   const clusterBlock = isObject(cluster) ? readSet(cluster, CLUSTER_KEYS) : cluster
   return {
     ...options,
+    scripts: copyList(options.scripts, 'scripts', (definition) =>
+      readPlain(definition, SCRIPT_KEYS)
+    ),
     connection: isObject(standalone) ? { ...standalone, tls: readTls(standalone.tls) } : standalone,
     sentinel: isObject(sentinelBlock)
       ? {
           ...sentinelBlock,
-          sentinels: copyEntries(sentinelBlock.sentinels),
+          sentinels: copyList(sentinelBlock.sentinels, 'sentinel.sentinels', readEntry),
           natMap: copyNatMap(sentinelBlock.natMap)
         }
       : sentinelBlock,
     cluster: isObject(clusterBlock)
       ? {
           ...clusterBlock,
-          nodes: copyEntries(clusterBlock.nodes),
+          nodes: copyList(clusterBlock.nodes, 'cluster.nodes', readEntry),
           options: readClusterOptions(clusterBlock.options)
         }
       : clusterBlock
