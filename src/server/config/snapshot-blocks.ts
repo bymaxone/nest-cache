@@ -146,8 +146,50 @@ function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknow
     : value
 }
 
-/** Copies a `tls` object once: its security options by name. `Buffer`s and a `secureContext` stay by reference. */
-const readTls = (tls: unknown): unknown => readPlain(tls, TLS_KEYS)
+/** The tls options that hold key material: a string, a `Buffer`, or a list of them. */
+const KEY_MATERIAL = ['ca', 'cert', 'key', 'pfx', 'crl'] as const
+
+/**
+ * Copies bytes the host could write to later: any view of an `ArrayBuffer` (a `Buffer`, a `Uint8Array`, a
+ * `DataView`) and an `ArrayBuffer` itself become a `Buffer` of their own; anything else is kept.
+ */
+function copyBytes(value: unknown): unknown {
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
+  }
+  return value instanceof ArrayBuffer ? Buffer.from(new Uint8Array(value)) : value
+}
+
+/**
+ * Copies a `tls` object once: its options by name, and the key material one level deeper. A list is
+ * read once (the length first, each index once, both bounded like the other lists) and every `Buffer`
+ * element of it is copied, because the driver merges the object again on every reconnect and a list or
+ * a `Buffer` the host changes later would change the trust roots or the identity it connects with. An
+ * object entry such as `{ pem, passphrase }` and a `secureContext` stay by reference.
+ *
+ * @param tls - The `tls` value as the host wrote it.
+ * @returns A plain copy, or the value itself when it is not an object or is an array.
+ * @throws {CacheException} `INVALID_OPTIONS` naming `tls.<option>` when a list is too long or its
+ *   length is not a count.
+ */
+function readTls(tls: unknown): unknown {
+  const copy = readPlain(tls, TLS_KEYS)
+  if (copy !== tls) {
+    for (const key of KEY_MATERIAL) {
+      const material: unknown = Reflect.get(copy as object, key)
+      if (material !== undefined) {
+        Reflect.set(
+          copy as object,
+          key,
+          Array.isArray(material)
+            ? copyList(material, `tls.${key}`, copyBytes)
+            : copyBytes(material)
+        )
+      }
+    }
+  }
+  return copy
+}
 
 /** Copies a sentinel address, a cluster node or a `natMap` target once: host, port and family by name. */
 const readEntry = (entry: unknown): unknown => readPlain(entry, ENTRY_KEYS)
@@ -179,15 +221,23 @@ function copyList(list: unknown, option: string, copy: (entry: unknown) => unkno
 }
 
 /**
- * Copies a `natMap` once, each entry once. A function map is kept as is.
+ * Copies a `natMap` once, each entry once, after its key count is checked against the cap. A function
+ * map is kept as is.
  *
  * @param map - The map as the host wrote it.
+ * @param option - The map's name, echoed when it holds too many entries.
  * @returns A plain map of copied entries.
+ * @throws {CacheException} `INVALID_OPTIONS` when the map holds more than the cap.
  */
-function copyNatMap(map: unknown): unknown {
-  return isObject(map)
-    ? Object.fromEntries(Object.entries(readSet(map, {})).map(([key, to]) => [key, readEntry(to)]))
-    : map
+function copyNatMap(map: unknown, option: string): unknown {
+  if (!isObject(map)) {
+    return map
+  }
+  const names = Object.keys(map)
+  if (names.length > MAX_LIST_ENTRIES) {
+    refuseOption(option, 'has too many entries', names.length, { max: MAX_LIST_ENTRIES })
+  }
+  return Object.fromEntries(names.map((name) => [name, readEntry(Reflect.get(map, name))]))
 }
 
 /**
@@ -206,13 +256,13 @@ function readClusterOptions(options: unknown): unknown {
   const node = isObject(redisOptions) ? readSet(redisOptions, REDIS_OPTION_KEYS) : undefined
   return {
     ...copy,
-    natMap: copyNatMap(copy.natMap),
+    natMap: copyNatMap(copy.natMap, 'cluster.options.natMap'),
     ...(node !== undefined && {
       redisOptions: {
         ...node,
         tls: readTls(node.tls),
         sentinelTLS: readTls(node.sentinelTLS),
-        natMap: copyNatMap(node.natMap)
+        natMap: copyNatMap(node.natMap, 'cluster.options.redisOptions.natMap')
       }
     })
   }
@@ -242,7 +292,7 @@ export function snapshotBlocks(options: BymaxCacheModuleOptions): BymaxCacheModu
       ? {
           ...sentinelBlock,
           sentinels: copyList(sentinelBlock.sentinels, 'sentinel.sentinels', readEntry),
-          natMap: copyNatMap(sentinelBlock.natMap)
+          natMap: copyNatMap(sentinelBlock.natMap, 'sentinel.natMap')
         }
       : sentinelBlock,
     cluster: isObject(clusterBlock)

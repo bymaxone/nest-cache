@@ -225,7 +225,8 @@ function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
     ['sentinel.sentinelPassword', options.sentinel?.sentinelPassword],
     ['cluster.options.redisOptions.password', redisOptions?.password],
     ['cluster.options.redisOptions.username', redisOptions?.username],
-    ['cluster.options.redisOptions.tls', redisOptions?.tls]
+    ['cluster.options.redisOptions.tls', redisOptions?.tls],
+    ['cluster.options.redisOptions.sentinelTLS', redisOptions?.sentinelTLS]
   ] as const
   for (const [option, value] of fields) {
     if ((value as unknown) === null) {
@@ -271,6 +272,43 @@ function validateTlsProfile(option: string, tls: unknown): void {
       profile,
       { allowed: KNOWN_TLS_PROFILES.join(' or ') }
     )
+  }
+}
+
+/**
+ * Refuses an entry of `sentinels` or `cluster.nodes` that is not an address: an array, a function, a
+ * boolean or `null`. A node may also be a `host:port` string or a port number; a sentinel may not.
+ *
+ * @param option - The list's name, echoed with the entry's position.
+ * @param list - The list as copied by the snapshot; anything that is not an array is left to the caller.
+ * @param shorthand - Whether a string or a number is an address too.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the entry.
+ */
+function validateAddresses(option: string, list: unknown, shorthand: boolean): void {
+  if (Array.isArray(list)) {
+    list.forEach((entry: unknown, index: number) => {
+      const address = typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+      if (!address && !(shorthand && (typeof entry === 'string' || typeof entry === 'number'))) {
+        refuseOption(`${option}[${index}]`, 'must be an address', entry)
+      }
+    })
+  }
+}
+
+/**
+ * Refuses a `natMap` entry that is not an object. A function map is accepted as it is.
+ *
+ * @param option - The map's name, echoed with the entry's position.
+ * @param map - The map as copied by the snapshot.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the entry by position, never by key.
+ */
+function validateNatMap(option: string, map: unknown): void {
+  if (typeof map === 'object' && map !== null && !Array.isArray(map)) {
+    Object.values(map).forEach((entry: unknown, index: number) => {
+      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+        refuseOption(`${option}[${index}]`, 'must be an address', entry)
+      }
+    })
   }
 }
 
@@ -344,6 +382,35 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
 }
 
 /**
+ * Refuses the values the driver or the registry would take as they are and fail on later: a tls of an
+ * unusable kind or with an unknown profile, an entry of a list that is not an address, a `natMap` entry
+ * that is not an object, and a script definition that is not a name and a source.
+ *
+ * @param options - The raw consumer options.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option, the entry or the field.
+ */
+function validateShapes(options: BymaxCacheModuleOptions): void {
+  validateTlsProfile('connection.tls', options.connection?.tls)
+  validateTlsProfile(
+    'cluster.options.redisOptions.tls',
+    options.cluster?.options?.redisOptions?.tls
+  )
+  validateTlsProfile(
+    'cluster.options.redisOptions.sentinelTLS',
+    options.cluster?.options?.redisOptions?.sentinelTLS
+  )
+  validateAddresses('sentinel.sentinels', options.sentinel?.sentinels, false)
+  validateAddresses('cluster.nodes', options.cluster?.nodes, true)
+  validateNatMap('sentinel.natMap', options.sentinel?.natMap)
+  validateNatMap('cluster.options.natMap', options.cluster?.options?.natMap)
+  validateNatMap(
+    'cluster.options.redisOptions.natMap',
+    options.cluster?.options?.redisOptions?.natMap
+  )
+  validateScripts(options.scripts)
+}
+
+/**
  * Validates consumer options at module bootstrap, throwing actionable
  * {@link CacheException}s when an invariant is violated.
  *
@@ -367,16 +434,7 @@ export function validateOptions(options: BymaxCacheModuleOptions): void {
   }
   validateNoNullSecrets(options)
   validateConnectionUrl(options.connection?.url)
-  validateTlsProfile('connection.tls', options.connection?.tls)
-  validateTlsProfile(
-    'cluster.options.redisOptions.tls',
-    options.cluster?.options?.redisOptions?.tls
-  )
-  validateTlsProfile(
-    'cluster.options.redisOptions.sentinelTLS',
-    options.cluster?.options?.redisOptions?.sentinelTLS
-  )
-  validateScripts(options.scripts)
+  validateShapes(options)
   if (mode === 'standalone') {
     validateStandaloneConnection(options)
   }
@@ -608,8 +666,9 @@ const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
  * throws, a getter or a proxy trap of the host's, ends as `INVALID_OPTIONS`
  * (`reason: 'option could not be read'`) with the host's error on `cause` and none of its text in
  * `details`. The `tls` object, the `sentinels` and `cluster.nodes` lists, the `natMap` objects the
- * driver reads on every connect and the `scripts` list are copied once the same way; a `Buffer` or `secureContext` in `tls`
- * is kept by reference.
+ * driver reads on every connect and the `scripts` list are copied once the same way; the key material of
+ * a `tls` (`ca`, `cert`, `key`, `pfx`, `crl`) is copied as well, its lists read once and its `Buffer`s
+ * copied, and a `secureContext` is kept by reference.
  *
  * @param options - The raw consumer options.
  * @returns A shallow-frozen {@link ResolvedOptions} carrying every defaulted field.
