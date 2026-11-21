@@ -210,7 +210,8 @@ function readClusterOptions(options: unknown): unknown {
 
 /**
  * Replaces the `connection`, `sentinel` and `cluster` blocks with plain copies read once, down to
- * the `tls`, `sentinels`, `nodes` and `natMap` values that reach the driver as objects.
+ * the `tls`, `sentinels`, `nodes` and `natMap` values that reach the driver as objects, and the
+ * `scripts` list the registry is seeded from.
  *
  * @param options - The top-level options, already read once by name.
  * @returns The options with each present block replaced; an absent or non-object block is kept as is

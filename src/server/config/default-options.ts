@@ -531,8 +531,8 @@ const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
  * both steps and every builder then read, so what is validated is what is applied. A read that
  * throws, a getter or a proxy trap of the host's, ends as `INVALID_OPTIONS`
  * (`reason: 'option could not be read'`) with the host's error on `cause` and none of its text in
- * `details`. The `tls` object, the `sentinels` and `cluster.nodes` lists and the `natMap` objects the
- * driver reads on every connect are copied once the same way; a `Buffer` or `secureContext` in `tls`
+ * `details`. The `tls` object, the `sentinels` and `cluster.nodes` lists, the `natMap` objects the
+ * driver reads on every connect and the `scripts` list are copied once the same way; a `Buffer` or `secureContext` in `tls`
  * is kept by reference.
  *
  * @param options - The raw consumer options.
