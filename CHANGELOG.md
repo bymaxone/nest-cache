@@ -7,11 +7,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.33] - 2026-11-21
+
 ### Fixed
 
 - A `tls` object that is a class with prototype getters, a get-only proxy, or that holds an option as a non-enumerable or inherited property lost every option outside a short fixed list when it was copied: `ALPNProtocols`, `honorCipherOrder`, `secureProtocol`, `ecdhCurve`, `profile` and the rest went without an error. The copy now reads every documented option of `tls.ConnectionOptions`, and the `profile` that `ioredis` reads, by name; the own enumerable keys beyond them are still copied.
 - The `scripts` list and each definition in it are copied once when the options are resolved, so a list whose length or whose `lua` answers differently on a later read registers what was read first, not a script that was never read.
-- A `sentinel.sentinels`, `cluster.nodes` or `scripts` list that claims more than 1 000 entries is refused as `INVALID_OPTIONS` (`reason: '<option> has too many entries'`, `max: 1000`) before it is copied; a length of one hundred million used to abort the process with a heap error.
+- A `sentinel.sentinels`, `cluster.nodes` or `scripts` list that claims more than 1 000 entries is refused as `INVALID_OPTIONS` (`reason: '<option> has too many entries'`, `max: 1000`) before it is copied; a length of one hundred million used to abort the process with a heap error. A list that reports a length that is not a non-negative integer (`NaN`, a negative, a fraction, `Infinity`) is refused the same way (`reason: '<option> has an invalid length'`).
 
   **Apply to a consumer:** nothing changes for a list of at most 1 000 entries. A host that configures more than 1 000 sentinels, cluster seed nodes or scripts must lower the count. No declaration changes.
 
@@ -1146,7 +1148,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.32...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.33...HEAD
+[1.2.33]: https://github.com/bymaxone/nest-cache/compare/v1.2.32...v1.2.33
 [1.2.32]: https://github.com/bymaxone/nest-cache/compare/v1.2.31...v1.2.32
 [1.2.31]: https://github.com/bymaxone/nest-cache/compare/v1.2.30...v1.2.31
 [1.2.30]: https://github.com/bymaxone/nest-cache/compare/v1.2.29...v1.2.30
