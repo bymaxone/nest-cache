@@ -7,10 +7,12 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.35] - 2026-11-21
+
 ### Fixed
 
 - A `tls` that is a number, an array or a function is refused as `INVALID_OPTIONS` (`reason: 'connection.tls must be an object, a profile name or a boolean'`) when the options are resolved, in `connection.tls` and in `cluster.options.redisOptions.tls`; it used to fail at connect, far from the option. `true` and `false` stay accepted: `true` makes the driver speak tls with its defaults.
-- The `sentinelTLS` of the cluster node options is held to the same two checks as `tls`: a kind the driver cannot use and a profile it does not resolve are refused as `INVALID_OPTIONS`.
+- The `sentinelTLS` of the cluster node options is copied once by name like `tls`, and held to the same two checks: a kind the driver cannot use and a profile it does not resolve are refused as `INVALID_OPTIONS`.
 - `ScriptManagerService.register(name, lua)` refuses a `name` or a `lua` that is not a non-empty string as `INVALID_OPTIONS` (`register name must be a non-empty string`) before it registers, like an entry of `scripts`; a `lua` that was a number used to fail inside Redis at the first load.
 - The administration ACL end-to-end spec waits for the first line the monitor connection echoes before it boots the app, so a line from the app's first command cannot reach a connection that has not switched to monitor mode. A test-only change.
 
@@ -1166,7 +1168,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.34...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.35...HEAD
+[1.2.35]: https://github.com/bymaxone/nest-cache/compare/v1.2.34...v1.2.35
 [1.2.34]: https://github.com/bymaxone/nest-cache/compare/v1.2.33...v1.2.34
 [1.2.33]: https://github.com/bymaxone/nest-cache/compare/v1.2.32...v1.2.33
 [1.2.32]: https://github.com/bymaxone/nest-cache/compare/v1.2.31...v1.2.32
