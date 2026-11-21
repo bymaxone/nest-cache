@@ -298,6 +298,45 @@ describe('ScriptManagerService', () => {
     expect(script).toHaveBeenCalledWith('LOAD', 'return 1')
   })
 
+  // Scenario: the scripts array, or a definition in it, is a getter or a proxy of the host's that throws.
+  // Rule: building the registry ends as the coded option error carrying the host's error as cause.
+  it.each([
+    [
+      'the array',
+      (hostError: Error): unknown =>
+        new Proxy([{ name: 'cas', lua: 'return 1' }], {
+          get(): never {
+            throw hostError
+          }
+        })
+    ],
+    [
+      'a definition',
+      (hostError: Error): unknown => [
+        Object.defineProperty({ lua: 'return 1' }, 'name', {
+          get: (): never => {
+            throw hostError
+          },
+          enumerable: true
+        })
+      ]
+    ]
+  ])('rejects with a coded error when %s of scripts cannot be read', (_what, make) => {
+    const hostError = new Error('scripts down')
+    const options = applyDefaults({ connection: { host: 'h' } })
+    const hostile = { ...options, scripts: make(hostError) } as unknown as ResolvedOptions
+    const failure = ((): unknown => {
+      try {
+        return new ScriptManagerService(hostile, new ConnectionManager(options))
+      } catch (error) {
+        return error
+      }
+    })()
+
+    expect(failure).toMatchObject({ code: CACHE_ERROR_CODES.INVALID_OPTIONS })
+    expect((failure as CacheException).cause).toBe(hostError)
+  })
+
   // Scenario: a getter of the host's connection block throws while bootstrap reads the lazy flag.
   // Rule: bootstrap rejects with the coded option error that carries the host's error as cause.
   it('rejects with a coded error when the lazy flag cannot be read', async () => {

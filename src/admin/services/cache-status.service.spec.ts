@@ -264,6 +264,22 @@ describe('CacheStatusService.config', () => {
     expect(service.config().connection).toEqual({ host: null, port: null, isTls: false })
   })
 
+  // Scenario: a script definition of the host's has a name behind a getter that throws.
+  // Rule: the status screen still answers, with no script names, instead of failing with the host's error.
+  it('reports no script names when the definitions cannot be read', () => {
+    const scripts = [
+      Object.defineProperty({ lua: 'return 1' }, 'name', {
+        get: (): never => {
+          throw new Error('getter down')
+        },
+        enumerable: true
+      })
+    ]
+    const service = build({ ping: jest.fn(), info: jest.fn() }, { scripts } as never)
+
+    expect(service.config().scripts).toEqual([])
+  })
+
   // Scenario: a getter of the host's connection block throws while the endpoint is read.
   // Rule: the status screen still answers and names no endpoint, instead of failing with the host's error.
   it('withholds the endpoint when the connection block cannot be read', () => {

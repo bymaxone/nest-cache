@@ -100,6 +100,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   /** The driver options built from the connection config; they carry the password. */
   readonly #redisOptionsResolved: RedisOptions
 
+  /** How long the boot waits for the client to be ready, in milliseconds. */
+  readonly #connectDeadline: number
+
   /** Default backoff: grow 50 ms per attempt, capped at 2 s. */
   private readonly defaultRetryStrategy = (times: number): number =>
     Math.min(times * DEFAULT_RETRY_BASE_MS, DEFAULT_RETRY_MAX_MS)
@@ -118,6 +121,13 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
   ) {
     this.#redisOptionsResolved = readingOptions(() => this.buildRedisOptions(options))
+    // Read here, once, with the client options: a cluster takes its timers from
+    // `cluster.options.redisOptions`, every other mode from `connection`.
+    this.#connectDeadline = readingOptions(() =>
+      options.mode === 'cluster'
+        ? (options.cluster?.options?.redisOptions?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS)
+        : (this.#redisOptionsResolved.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS)
+    )
   }
 
   /**
@@ -374,22 +384,6 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
-   * Reads the boot deadline from the option block the mode takes its timers from: `cluster.options.redisOptions`
-   * for a cluster, `connection` for every other mode.
-   *
-   * @returns The connect timeout in milliseconds, or the default when none is set.
-   */
-  private connectDeadline(): number {
-    return readingOptions(() => {
-      const timers =
-        this.options.mode === 'cluster'
-          ? this.options.cluster?.options?.redisOptions
-          : this.options.connection
-      return timers?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
-    })
-  }
-
-  /**
    * Resolves once the client is ready.
    *
    * Rejects with `CONNECTION_FAILED` on a connection error, when the client ends (no more
@@ -401,7 +395,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       return
     }
     // A cluster takes its timers from `cluster.options.redisOptions`, every other mode from `connection`.
-    const deadline = this.connectDeadline()
+    const deadline = this.#connectDeadline
     try {
       await new Promise<void>((resolve, reject) => {
         const settle = (outcome: () => void): void => {

@@ -155,6 +155,21 @@ function readEndpoint(options: ResolvedOptions): CacheConfig['connection'] {
   }
 }
 
+/**
+ * Reads the names of the registered scripts, none when a getter or a proxy of the host's throws while
+ * its definitions are read: the status screen still answers.
+ *
+ * @param options - The resolved module options.
+ * @returns The script names.
+ */
+function readScriptNames(options: ResolvedOptions): string[] {
+  try {
+    return (options.scripts ?? []).map((script) => script.name)
+  } catch {
+    return []
+  }
+}
+
 /** Reports whether the cache is answering, what it is doing, and how it is wired. */
 @Injectable()
 export class CacheStatusService {
@@ -211,7 +226,7 @@ export class CacheStatusService {
       serializer: this.serializer.constructor.name,
       // Names only. A Lua body is deployment logic and has no business on an
       // operator-facing payload.
-      scripts: (this.options.scripts ?? []).map((script) => script.name),
+      scripts: readScriptNames(this.options),
       connection: readEndpoint(this.options)
     }
   }

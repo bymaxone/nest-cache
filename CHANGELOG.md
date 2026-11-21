@@ -7,8 +7,15 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Fixed
+
+- The `scripts` option (the array and each definition) is read under the same guard as the rest of the options, so a getter or a proxy of the host's in it ends as `INVALID_OPTIONS` with the thrown error on `cause`, and the status screen of `./admin` lists no script names when the definitions cannot be read. The connection manager reads the connect timeout once, when it is built, and the boot wait uses that value: before, it read the option a second time.
+
+  **Apply to a consumer:** nothing changes for a host whose options read normally. The class `ConnectionManager` loses a private member (`connectDeadline`) that 1.2.30 added, so the text of its declaration changes while every public signature stays the same; subclassing it is not a supported extension point.
+
 ### Documentation
 
+- The README narrows the limit of the option-read guard: of the objects handed to the driver as they are, only the `sentinels` array reaches the host raw, and a trap in `cluster.nodes`, a sentinel entry or `tls` ends as `cache.connection_failed` with no `cause`.
 - The README says where each figure of the production section comes from: the timings of the frozen and the stopped Redis, the burst of 12 000 messages and the 64 MB message were measured by hand in the QA gate of 1.2.25 and no spec pins them; the 125 000-argument threshold of the call stack was measured when the chunking was added in 1.2.27; and `pubsubMaxConcurrentHandlers: 256` with `pubsubMaxQueuedMessages: 10000` is a starting point chosen by judgement, not a measured optimum.
 - The shutdown-hooks note no longer says what the process does without `app.enableShutdownHooks()`, which is Nest's behaviour: it says that the library closes its connections, `shutdownTimeoutMs` included, only inside Nest's shutdown hook, which `app.close()` runs too.
 
