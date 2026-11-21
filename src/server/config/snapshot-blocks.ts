@@ -2,10 +2,9 @@
  * One read of every option block the host supplied.
  *
  * Layer: server. The blocks (`connection`, `sentinel`, `cluster`) are the host's own objects, and a
- * property of one can be a getter: a secret wiped after its first use, a lazy loader. Validation and
- * each builder used to read the same property again, so a later read that answered differently
- * dropped a credential, a tls setting or a url without an error. Every property is read here, once,
- * by name from a typed list, into a plain copy that validation and the builders then share.
+ * property of one can be a getter: a secret wiped after its first use, a lazy loader. Two reads of
+ * such a property can answer differently, so validation and every client builder must share one
+ * answer: each property is read here, once, by name from a typed list, into a plain copy.
  */
 import type { ClusterOptions } from 'ioredis'
 
