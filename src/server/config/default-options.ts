@@ -235,13 +235,16 @@ function validateNoNullSecrets(options: BymaxCacheModuleOptions): void {
 }
 
 /**
- * Refuses a `tls` of a kind the driver cannot use, and a tls profile it does not know. The driver resolves a profile by name and leaves a
- * connection without the pinned authority for any other value, so an unknown name, a number or an
- * object is refused rather than accepted silently.
+ * Refuses a `tls` of a kind the driver cannot use (a number, an array, a function), and a tls profile
+ * it does not resolve. The driver resolves a profile by name and leaves a connection without the pinned
+ * authority for any other value, so an unknown name, a number or an object in `profile` is refused
+ * rather than accepted silently. `true` and `false` are accepted: `true` makes the driver speak tls
+ * with its defaults.
  *
  * @param option - The option's name, echoed in the error.
- * @param tls - The `tls` value: an object whose `profile` is checked, or the profile name itself.
- * @throws {CacheException} `INVALID_OPTIONS` naming the option when the profile is not a known name.
+ * @param tls - The `tls` value: an object whose `profile` is checked, the profile name itself, or a flag.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option when the kind is unusable or the profile
+ *   is not a known name.
  */
 function validateTlsProfile(option: string, tls: unknown): void {
   if (
