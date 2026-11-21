@@ -208,7 +208,12 @@ function readClusterOptions(options: unknown): unknown {
     ...copy,
     natMap: copyNatMap(copy.natMap),
     ...(node !== undefined && {
-      redisOptions: { ...node, tls: readTls(node.tls), natMap: copyNatMap(node.natMap) }
+      redisOptions: {
+        ...node,
+        tls: readTls(node.tls),
+        sentinelTLS: readTls(node.sentinelTLS),
+        natMap: copyNatMap(node.natMap)
+      }
     })
   }
 }

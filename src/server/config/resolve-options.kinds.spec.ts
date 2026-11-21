@@ -80,3 +80,39 @@ describe('the sentinel-side tls of a cluster node options', () => {
     expect(() => withNodeOptions({ sentinelTLS: { ca: 'c' } })).not.toThrow()
   })
 })
+
+describe('the sentinel-side tls of the cluster node options is copied once', () => {
+  /** The sentinelTLS the options hand on, after they are resolved. */
+  const heldSentinelTls = (sentinelTLS: unknown): unknown => {
+    const resolved = withNodeOptions({ sentinelTLS }) as {
+      cluster?: { options?: { redisOptions?: { sentinelTLS?: unknown } } }
+    }
+    return resolved.cluster?.options?.redisOptions?.sentinelTLS
+  }
+
+  // Scenario: a getter on the sentinelTLS object answers once.
+  // Rule: what the driver holds, read again, is what was validated.
+  it('keeps the first answer of a stateful getter', () => {
+    let reads = 0
+    const sentinelTLS = {}
+    Object.defineProperty(sentinelTLS, 'servername', {
+      enumerable: true,
+      get: (): string => (reads++ === 0 ? 'first' : 'later')
+    })
+    const held = heldSentinelTls(sentinelTLS) as { servername: string }
+
+    expect([held.servername, held.servername]).toEqual(['first', 'first'])
+    expect(reads).toBe(1)
+  })
+
+  // Scenario: sentinelTLS is a class whose options sit behind prototype getters.
+  it('reads the security options of a class by name', () => {
+    class Tls {
+      get ca(): string {
+        return 'the-ca'
+      }
+    }
+
+    expect(heldSentinelTls(new Tls())).toEqual({ ca: 'the-ca' })
+  })
+})
