@@ -13,7 +13,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - A script given as an array, even with a `name` and a `lua` on it, and a `natMap` that is an array, a string or a number are refused as `INVALID_OPTIONS`. A script `name` or `lua` made only of blanks or invisible characters (zero-width space, joiner, word joiner, byte order mark) is refused like an empty one, in `scripts` and in `register`.
 - A refusal of an option that holds a credential (`password`, `username`, `sentinelPassword`, a `passphrase`) reports a number as the type only (`received: 'a number'`). It printed the number, so a numeric password given to the wrong option appeared in the error. A number in an option that holds a quantity is still printed as itself.
 
-  **Apply to a consumer:** a host that passed a script as an array, a `natMap` that is not an object or a function, a key or pfx entry with a key other than `pem`, `buf` and `passphrase` or a passphrase that is not a string, or a script text made only of invisible characters, now gets `cache.invalid_options` at registration. A host that read a number from `details.received` of a credential option reads `'a number'`. No declaration changes.
+  **Apply to a consumer:** a host that passed a script as an array, a `natMap` that is not an object or a function, a key entry with a key other than `pem` and `passphrase`, a pfx entry with a key other than `buf` and `passphrase`, or a passphrase that is not a string, or a script text made only of invisible characters, now gets `cache.invalid_options` when the options are resolved, or when `register` is called. A host that read a number from `details.received` of a credential option reads `'a number'`. No declaration changes.
 
 ## [1.2.36] - 2026-11-21
 
