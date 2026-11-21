@@ -155,9 +155,9 @@ const copyBytes = (value: unknown): unknown => (Buffer.isBuffer(value) ? Buffer.
 /**
  * Copies a `tls` object once: its options by name, and the key material one level deeper. A list is
  * read once (the length first, each index once, both bounded like the other lists) and every `Buffer`
- * in it is copied, because the driver merges the object again on every reconnect and a list or a
- * `Buffer` the host changes later would change the trust roots or the identity it connects with. A
- * `secureContext` stays by reference.
+ * element of it is copied, because the driver merges the object again on every reconnect and a list or
+ * a `Buffer` the host changes later would change the trust roots or the identity it connects with. An
+ * object entry such as `{ pem, passphrase }` and a `secureContext` stay by reference.
  *
  * @param tls - The `tls` value as the host wrote it.
  * @returns A plain copy, or the value itself when it is not an object or is an array.
