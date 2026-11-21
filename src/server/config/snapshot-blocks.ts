@@ -131,14 +131,15 @@ function isObject(value: unknown): value is object {
 /**
  * Copies an object once: the keys in `keys` by name, then its own enumerable keys. A key that answered
  * `undefined` is left out, so the driver sees the default it would see for an absent one. A value that
- * is not an object (a string address, a function, `null`) is kept as is.
+ * is not an object (a string address, a function, `null`) or is an array is kept as is, for validation to
+ * refuse.
  *
  * @param value - The value as the host wrote it.
  * @param keys - The keys to read by name.
- * @returns A plain copy, or the value itself when it is not an object.
+ * @returns A plain copy, or the value itself when it is not an object or is an array.
  */
 function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknown {
-  return isObject(value)
+  return isObject(value) && !Array.isArray(value)
     ? Object.fromEntries(
         Object.entries(readSet(value, keys)).filter(([, copied]) => copied !== undefined)
       )

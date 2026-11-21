@@ -15,6 +15,7 @@ import type { OnApplicationBootstrap } from '@nestjs/common'
 
 import { BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
 import { readingOptions } from '../config/default-options'
+import { requireText } from '../config/require-text'
 import type { ResolvedOptions } from '../config/resolved-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
@@ -107,8 +108,11 @@ export class ScriptManagerService implements OnApplicationBootstrap {
    *
    * @param name - Lookup name used to invoke the script.
    * @param lua - The Lua source. Never build this from untrusted input (CLAUDE.md §4).
+   * @throws {CacheException} `INVALID_OPTIONS` when `name` or `lua` is not a non-empty string.
    */
   register(name: string, lua: string): void {
+    requireText('register name', name)
+    requireText('register lua', lua)
     this.scripts.set(name, { lua })
   }
 

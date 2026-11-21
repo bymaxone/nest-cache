@@ -91,9 +91,14 @@ describe('cache admin issues no write (real Redis, a user that cannot write)', (
 
     monitor = new Redis(redis.url)
     const feed = await monitor.monitor()
+    // The first line MONITOR echoes proves the feed is in monitor mode: the app boots only after it, so a
+    // line from its first command can never reach a connection that has not switched yet.
+    const echoed = new Promise<void>((resolve) => feed.once('monitor', () => resolve()))
     feed.on('monitor', (_time: string, args: string[], source: string) => {
       seen.push({ source, name: (args[0] ?? '').toLowerCase() })
     })
+    await owner.ping()
+    await echoed
 
     const url = redis.url.replace('redis://', `redis://${USER}:${PASSWORD}@`)
     app = await bootAdminApp({ connection: { url }, namespace: NAMESPACE }, { scopes: SCOPES })
