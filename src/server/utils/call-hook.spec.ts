@@ -237,6 +237,26 @@ describe('callHook', () => {
       expect(lines).toHaveLength(1)
     })
 
+    // Scenario: levels without warn were set, then a console logger of Nest's was installed afresh.
+    // Rule: the installed logger answers for itself (a new one logs every level), not the stale levels.
+    it('asks the installed console logger, not the levels set before it', async () => {
+      const lines = await logged(async (fresh) => {
+        const nest = await import('@nestjs/common')
+        nest.Logger.overrideLogger(['error'])
+        nest.Logger.overrideLogger(new nest.ConsoleLogger())
+        fresh('onEvent', () => {
+          throw new Error('x')
+        })
+        class Quiet extends nest.ConsoleLogger {}
+        nest.Logger.overrideLogger(new Quiet('', { logLevels: ['error'] }))
+        fresh('onQueue', () => {
+          throw new Error('x')
+        })
+      })
+
+      expect(lines.map((line) => (line as { hook: string }).hook)).toEqual(['onEvent'])
+    })
+
     it('treats a logger it cannot inspect as writable', async () => {
       const lines = await logged(async (fresh) => {
         const nest = await import('@nestjs/common')

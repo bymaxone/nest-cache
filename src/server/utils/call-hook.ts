@@ -21,27 +21,26 @@ const LOGGER = new Logger('BymaxCache')
 export const HOOK_FAILED_EVENT = 'CACHE_HOOK_FAILED'
 
 /**
- * Whether Nest would write a `warn` line now. The static `Logger.staticInstanceRef` is protected, not
- * part of Nest's contract, so it is read inside a guard and any doubt counts as writable: the cost of
- * a wrong yes is the budget spent on a line nobody sees, the old behaviour. The public static
- * `Logger.isLevelEnabled` alone cannot tell, so this reads both; measured on `@nestjs/common` 11.0.16,
- * 11.2.11 and 12.6.0, where `overrideLogger(false)` leaves it false and the instance undefined.
+ * Whether Nest would write a `warn` line now. The static `Logger.staticInstanceRef` and the instance
+ * method `isLevelEnabled` of its `ConsoleLogger` are not part of Nest's contract, so both are read
+ * inside a guard and any doubt counts as writable: the cost of a wrong yes is the allowance spent on a
+ * line nobody sees, the old behaviour. The levels filter Nest's own `ConsoleLogger` only, and each
+ * instance answers for itself; a custom logger installed after them gets every call. Measured on
+ * `@nestjs/common` 11.0.16, 11.2.11 and 12.6.0, where `overrideLogger(false)` leaves the instance
+ * undefined and the public static `Logger.isLevelEnabled` is false until an array of levels is set.
  *
- * The levels filter Nest's own `ConsoleLogger` only: a custom logger installed after them gets every
- * call, so the levels are consulted only while the installed logger is a `ConsoleLogger`.
- *
- * @returns False only when the application disabled Nest's logging (`logger: false`) or left `warn`
- *   out of an explicit list of levels its own logger filters by.
+ * @returns False only when the application disabled Nest's logging (`logger: false`) or its
+ *   `ConsoleLogger` has `warn` out of its levels.
  */
 function writable(): boolean {
   try {
     const installed: unknown = Reflect.get(Logger, 'staticInstanceRef')
-    return (
-      installed !== undefined &&
-      (!(installed instanceof ConsoleLogger) ||
-        Reflect.get(Logger, 'logLevels') === undefined ||
-        Logger.isLevelEnabled('warn'))
-    )
+    if (installed === undefined) {
+      return false
+    }
+    const enabled: unknown =
+      installed instanceof ConsoleLogger && Reflect.get(installed, 'isLevelEnabled')
+    return typeof enabled !== 'function' || Boolean(enabled.call(installed, 'warn'))
   } catch {
     return true
   }

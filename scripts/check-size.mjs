@@ -75,7 +75,7 @@ const ROOT = pkg.root
 // is a deleted key and the cut that never splits a surrogate pair. It also covers the helper that refuses a scope or a
 // threshold by option name and received type, which restates the server's describing rule because the
 // admin entry reaches the server only through its public surface.
-// The server budget (14 473 B, measured 14 443) covers the operation tracking: the 31 command names
+// The server budget (14 473 B, measured 14 436) covers the operation tracking: the 31 command names
 // reported to `events.onOperation` with a hit/miss/ok/error outcome, the Pub/Sub backlog callback,
 // and the one caller that absorbs a throwing or rejecting host hook at every observability site, logs the
 // first failure of each hook once, and hands each hook a frozen copy of the event data, and keeps that log line's one allowance when Nest's
