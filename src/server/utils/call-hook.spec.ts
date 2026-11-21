@@ -221,7 +221,7 @@ describe('callHook', () => {
     })
 
     // Scenario: the installed logger is a ConsoleLogger of another copy of @nestjs/common, so instanceof is false.
-    // Rule: it counts as writable, as before this check existed; the line is never skipped on a guess.
+    // Rule: it counts as writable; the line is never skipped on a guess.
     it('writes when the installed ConsoleLogger comes from another copy of Nest', async () => {
       const lines = await logged(async (fresh) => {
         const nest = await import('@nestjs/common')

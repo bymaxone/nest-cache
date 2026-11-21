@@ -24,7 +24,7 @@ export const HOOK_FAILED_EVENT = 'CACHE_HOOK_FAILED'
  * Whether Nest would write a `warn` line now. The static `Logger.staticInstanceRef` and the instance
  * method `isLevelEnabled` of its `ConsoleLogger` are not part of Nest's contract, so both are read
  * inside a guard and any doubt counts as writable: the cost of a wrong yes is the allowance spent on a
- * line nobody sees, the old behaviour. The levels filter Nest's own `ConsoleLogger` only, and each
+ * line nobody sees. The levels filter Nest's own `ConsoleLogger` only, and each
  * instance answers for itself; a custom logger installed after them gets every call. Measured on
  * `@nestjs/common` 11.0.16, 11.2.11 and 12.6.0, where `overrideLogger(false)` leaves the instance
  * undefined and the public static `Logger.isLevelEnabled` is false until an array of levels is set.
