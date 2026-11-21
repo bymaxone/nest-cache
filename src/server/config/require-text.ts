@@ -1,5 +1,5 @@
 /**
- * The one check of a name or a Lua source: a non-empty string.
+ * The one check of a name or a Lua source: a string with something in it besides blanks.
  *
  * Layer: server. Shared by the `scripts` option and the runtime `register`, so both hold a script to the
  * same rule and report it the same way.
@@ -14,7 +14,7 @@ import { refuseOption } from './refuse-option'
  * @throws {CacheException} `INVALID_OPTIONS` naming `option`; only the type of the value is reported.
  */
 export function requireText(option: string, value: unknown): void {
-  if (typeof value !== 'string' || value === '') {
+  if (typeof value !== 'string' || value.trim() === '') {
     refuseOption(option, 'must be a non-empty string', value)
   }
 }

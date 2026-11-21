@@ -34,6 +34,8 @@ describe('ScriptManagerService.register validates what it is given', () => {
     ['an empty name', '', 'return 1', 'register name must be a non-empty string'],
     ['a name that is not a string', 7, 'return 1', 'register name must be a non-empty string'],
     ['an empty source', 'a', '', 'register lua must be a non-empty string'],
+    ['a name of blanks', '  ', 'return 1', 'register name must be a non-empty string'],
+    ['a source of blanks', 'a', ' \n ', 'register lua must be a non-empty string'],
     ['a source that is a number', 'a', 12345, 'register lua must be a non-empty string']
   ])('refuses %s', (_label, name, lua, reason) => {
     const registry = build()
