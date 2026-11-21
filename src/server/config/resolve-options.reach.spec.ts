@@ -107,7 +107,10 @@ describe('lists the driver walks are capped before they are copied', () => {
     expect(() => resolveOptions(options as unknown as BymaxCacheModuleOptions)).toThrow(
       expect.objectContaining({
         code: 'cache.invalid_options',
-        details: expect.objectContaining({ reason: expect.stringContaining(option) })
+        details: expect.objectContaining({
+          reason: `${option} has too many entries`,
+          max: 1000
+        })
       })
     )
   })
