@@ -98,7 +98,10 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   #bootError: unknown = null
 
   /** The driver options built from the connection config; they carry the password. */
-  readonly #redisOptionsResolved: RedisOptions
+  readonly #redisOptionsResolved: RedisOptions & { connectTimeout: number }
+
+  /** How long the boot waits for the client to be ready, in milliseconds. */
+  readonly #connectDeadline: number
 
   /** Default backoff: grow 50 ms per attempt, capped at 2 s. */
   private readonly defaultRetryStrategy = (times: number): number =>
@@ -118,6 +121,13 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
   ) {
     this.#redisOptionsResolved = readingOptions(() => this.buildRedisOptions(options))
+    // Read here, once, with the client options: a cluster takes its timers from
+    // `cluster.options.redisOptions`, every other mode from `connection`.
+    this.#connectDeadline = readingOptions(() =>
+      options.mode === 'cluster'
+        ? (options.cluster?.options?.redisOptions?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS)
+        : this.#redisOptionsResolved.connectTimeout
+    )
   }
 
   /**
@@ -332,12 +342,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */
-  private buildRedisOptions(opts: ResolvedOptions): RedisOptions {
+  private buildRedisOptions(opts: ResolvedOptions): RedisOptions & { connectTimeout: number } {
     const c = opts.connection ?? {}
     const fromUrl = c.url ? parseRedisUrl(c.url) : {}
     return {
       lazyConnect: c.lazyConnect ?? false,
-      connectTimeout: c.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS,
       commandTimeout: c.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
       maxRetriesPerRequest: c.maxRetriesPerRequest ?? DEFAULT_MAX_RETRIES_PER_REQUEST,
       disconnectTimeout: DISCONNECT_TIMEOUT_MS,
@@ -354,7 +363,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       ...(!isUnset(c.db) && { db: c.db }),
       ...(!isUnset(c.username) && { username: c.username }),
       ...(!isUnset(c.tls) && { tls: c.tls }),
-      ...fromUrl
+      ...fromUrl,
+      // After the URL, which names no timer, so the type says what is true: a number, always.
+      connectTimeout: c.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
     }
   }
 
@@ -374,22 +385,6 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
-   * Reads the boot deadline from the option block the mode takes its timers from: `cluster.options.redisOptions`
-   * for a cluster, `connection` for every other mode.
-   *
-   * @returns The connect timeout in milliseconds, or the default when none is set.
-   */
-  private connectDeadline(): number {
-    return readingOptions(() => {
-      const timers =
-        this.options.mode === 'cluster'
-          ? this.options.cluster?.options?.redisOptions
-          : this.options.connection
-      return timers?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
-    })
-  }
-
-  /**
    * Resolves once the client is ready.
    *
    * Rejects with `CONNECTION_FAILED` on a connection error, when the client ends (no more
@@ -401,7 +396,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       return
     }
     // A cluster takes its timers from `cluster.options.redisOptions`, every other mode from `connection`.
-    const deadline = this.connectDeadline()
+    const deadline = this.#connectDeadline
     try {
       await new Promise<void>((resolve, reject) => {
         const settle = (outcome: () => void): void => {

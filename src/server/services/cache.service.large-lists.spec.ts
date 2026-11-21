@@ -45,6 +45,12 @@ describe('CacheService with a list over the argument limit', () => {
     await connection.onApplicationShutdown()
   })
 
+  // Scenario: the chunk-size constant is read.
+  // Rule: it is 10 000, the number the README states; a change fails here until the page follows.
+  it('holds the chunk size at 10 000', () => {
+    expect(MAX_COMMAND_ARGUMENTS).toBe(10_000)
+  })
+
   // Scenario: 200 000 entries written, read back and deleted.
   // Rule: each call does what a single call would, on a list the stack could not spread.
   it('writes, reads and deletes 200 000 entries', async () => {

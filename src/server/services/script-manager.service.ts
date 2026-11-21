@@ -74,9 +74,11 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
     @Inject(ConnectionManager) private readonly connection: ConnectionManager
   ) {
-    for (const definition of options.scripts ?? []) {
-      this.scripts.set(definition.name, { lua: definition.lua })
-    }
+    readingOptions(() => {
+      for (const definition of options.scripts ?? []) {
+        this.scripts.set(definition.name, { lua: definition.lua })
+      }
+    })
   }
 
   /**

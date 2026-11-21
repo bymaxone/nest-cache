@@ -20,12 +20,20 @@
     "reason": "Runs scripts/check-function-length.mjs or its key module on throwaway git repositories and fixtures and imports nothing from src/, so it judges no mutant."
   },
   {
+    "file": "src/check-import-graph.spec.ts",
+    "reason": "Runs scripts/check-import-graph.mjs as a child process on throwaway dist directories and imports nothing from src/, so it judges no mutant."
+  },
+  {
     "file": "src/mutate-const-tables.spec.ts",
     "reason": "Runs scripts/mutate-const-tables.mjs as a child process on fixture directories and imports nothing from src/, so it judges no mutant."
   },
   {
     "file": "src/readme-exports.spec.ts",
     "reason": "Reads README.md and the entry files as text and imports nothing from src/, so no instrumented code is reachable from it and it judges no mutant."
+  },
+  {
+    "file": "src/readme-peer-ranges.spec.ts",
+    "reason": "Reads README.md and package.json as text and imports nothing from src/, so no instrumented code is reachable from it and it judges no mutant."
   },
   {
     "file": "src/server/utils/close-client.exit.spec.ts",

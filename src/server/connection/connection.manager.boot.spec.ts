@@ -64,6 +64,25 @@ const makeManager = (
 }
 
 describe('ConnectionManager boot wait', () => {
+  // Scenario: the host's connectTimeout sits behind a getter that counts its reads.
+  // Rule: the option is read once, when the manager is built, and the boot wait uses that value.
+  it('reads connectTimeout once for the client options and the boot deadline', async () => {
+    let reads = 0
+    const connection = Object.defineProperty({ host: 'h' }, 'connectTimeout', {
+      get: (): number => {
+        reads += 1
+        return 5_000
+      },
+      enumerable: true
+    })
+    const manager = makeManager({ connection })
+    const init = manager.onModuleInit()
+    redisInstances[0]?.emit('ready')
+    await init
+
+    expect(reads).toBe(1)
+  })
+
   // A failed boot must not leave a client that keeps reconnecting: the readiness wait gives up
   // and disconnects it, whichever way the wait fails.
   it('disconnects the client when it errors before ready', async () => {
