@@ -535,4 +535,19 @@ describe('options read once, under a getter that answers differently on each rea
     expect(redisOptions(client)['natMap']).toEqual({ 'a:1': { host: 'entry-host', port: 7777 } })
     client.disconnect()
   })
+
+  // Scenario: the list of sentinels or of cluster nodes is not an array.
+  // Rule: it is kept as it is, so validation refuses the mode as misconfigured.
+  it.each([
+    [
+      'sentinel',
+      { mode: 'sentinel', sentinel: { sentinels: 5, name: 'master' } },
+      'cache.sentinel_misconfigured'
+    ],
+    ['cluster', { mode: 'cluster', cluster: { nodes: 5 } }, 'cache.cluster_misconfigured']
+  ])('a %s list that is not an array is refused as misconfigured', (_mode, options, code) => {
+    expect(() => resolveOptions(options as unknown as BymaxCacheModuleOptions)).toThrow(
+      expect.objectContaining({ code })
+    )
+  })
 })
