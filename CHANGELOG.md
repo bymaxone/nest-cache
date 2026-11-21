@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.32] - 2026-11-21
+
 ### Fixed
 
 - Every property of the `connection`, `sentinel` and `cluster` blocks, of `cluster.options` and of its `redisOptions` is read once, by name, when the options are resolved, and validation and the client builders read that copy. A getter of the host's that answered differently on each read used to drop a security option without an error: `tls`, `password`, `username` or `url` of a standalone setup (a dropped `url` meant `localhost` with no tls), `sentinel.password` falling back to `connection.password`, `sentinelPassword` and `natMap`, and the cluster `tls`, `password` and `username`. The cluster connect timeout is read once too, so the boot wait and the driver agree.
@@ -1136,7 +1138,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.31...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.32...HEAD
+[1.2.32]: https://github.com/bymaxone/nest-cache/compare/v1.2.31...v1.2.32
 [1.2.31]: https://github.com/bymaxone/nest-cache/compare/v1.2.30...v1.2.31
 [1.2.30]: https://github.com/bymaxone/nest-cache/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/bymaxone/nest-cache/compare/v1.2.28...v1.2.29
