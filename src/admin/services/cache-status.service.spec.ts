@@ -264,6 +264,19 @@ describe('CacheStatusService.config', () => {
     expect(service.config().connection).toEqual({ host: null, port: null, isTls: false })
   })
 
+  // Scenario: a getter of the host's connection block throws while the endpoint is read.
+  // Rule: the status screen still answers and names no endpoint, instead of failing with the host's error.
+  it('withholds the endpoint when the connection block cannot be read', () => {
+    const connection = Object.defineProperty({ host: 'h' }, 'port', {
+      get: (): never => {
+        throw new Error('getter down')
+      }
+    })
+    const service = build({ ping: jest.fn(), info: jest.fn() }, { connection })
+
+    expect(service.config().connection).toEqual({ host: null, port: null, isTls: false })
+  })
+
   // A non-standalone deployment that ALSO carries a connection block must still
   // report nulls. Without a connection block the mode guard is indistinguishable
   // from no guard at all — both fall through to the same empty answer — so this

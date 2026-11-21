@@ -5,8 +5,8 @@
  * the details: a site cannot forget to describe it, because it never builds the details itself.
  */
 import { CACHE_ERROR_CODES, type CacheErrorCode } from '../errors/cache-error-codes'
-import { CacheException } from '../errors/cache.exception'
 import { describeReceived } from './describe-received'
+import { refusal } from './own-refusals'
 
 /**
  * Throws `code` for an option value, reporting its type and never its content.
@@ -25,7 +25,7 @@ export function refuseValue(
   value: unknown,
   bounds?: Readonly<Record<string, number | string>>
 ): never {
-  throw new CacheException(code, {
+  throw refusal(code, {
     reason: `${option} ${problem}`,
     option,
     received: describeReceived(value),

@@ -102,7 +102,7 @@ function readErrorCode(error: unknown): string | null {
  * @param options - The resolved module options.
  * @returns Host, port and whether the transport is encrypted.
  */
-function readEndpoint(options: ResolvedOptions): CacheConfig['connection'] {
+function describeEndpoint(options: ResolvedOptions): CacheConfig['connection'] {
   const withheld = { host: null, port: null, isTls: false }
   // Sentinel and cluster have no single endpoint to name; `mode` alongside says why.
   if (options.mode !== 'standalone') {
@@ -137,6 +137,21 @@ function readEndpoint(options: ResolvedOptions): CacheConfig['connection'] {
     host: connection.host ?? null,
     port: connection.port ?? null,
     isTls: connection.tls !== undefined
+  }
+}
+
+/**
+ * Reads the endpoint, withholding it when a getter or a proxy of the host's throws while the
+ * connection block is read: the status screen still answers, with no endpoint named.
+ *
+ * @param options - The resolved module options.
+ * @returns Host, port and whether the transport is encrypted.
+ */
+function readEndpoint(options: ResolvedOptions): CacheConfig['connection'] {
+  try {
+    return describeEndpoint(options)
+  } catch {
+    return { host: null, port: null, isTls: false }
   }
 }
 

@@ -298,6 +298,30 @@ describe('ScriptManagerService', () => {
     expect(script).toHaveBeenCalledWith('LOAD', 'return 1')
   })
 
+  // Scenario: a getter of the host's connection block throws while bootstrap reads the lazy flag.
+  // Rule: bootstrap rejects with the coded option error that carries the host's error as cause.
+  it('rejects with a coded error when the lazy flag cannot be read', async () => {
+    const hostError = new Error('getter down')
+    let reads = 0
+    // The connection manager reads the flag once while it is built; the next read is bootstrap's.
+    const throwing = build({
+      connection: Object.defineProperty({ host: 'h' }, 'lazyConnect', {
+        get: (): boolean => {
+          reads += 1
+          if (reads > 1) {
+            throw hostError
+          }
+          return false
+        }
+      })
+    })
+
+    const failure = await throwing.onApplicationBootstrap().catch((error: unknown) => error)
+
+    expect(failure).toMatchObject({ code: CACHE_ERROR_CODES.INVALID_OPTIONS })
+    expect((failure as CacheException).cause).toBe(hostError)
+  })
+
   // With lazyConnect, bootstrap must defer loading entirely (no SCRIPT LOAD).
   it('skips eager loading when lazyConnect is set', async () => {
     const lazy = build({ connection: { host: 'h', lazyConnect: true } })
