@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+# The top level grants read access to the contents only; the job adds what the reusable workflow reads.
+permissions:
+  contents: read
+
 jobs:
   attribution:
     permissions:
