@@ -27,7 +27,7 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
 import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { isUnset } from './is-unset'
-import { isOwnRefusal, refusal } from './own-refusals'
+import { takeOwnRefusal, refusal } from './own-refusals'
 import { refuseOption, refuseValue } from './refuse-option'
 import type { ResolvedOptions } from './resolved-options'
 
@@ -560,7 +560,7 @@ export function readingOptions<T>(read: () => T): T {
   try {
     return read()
   } catch (error) {
-    if (isOwnRefusal(error)) {
+    if (takeOwnRefusal(error)) {
       throw error
     }
     throw new CacheException(

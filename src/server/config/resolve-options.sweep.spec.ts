@@ -191,6 +191,56 @@ describe('resolveOptions under a throwing host object', () => {
     expect((failure as CacheException).cause).toBe(hostException)
   })
 
+  // Scenario: the host caught a refusal of the library's from an earlier registration and throws that
+  // same object from a getter later.
+  // Rule: a mark is good for one pass through the guard, so the replay is the host's and is wrapped.
+  it('wraps a refusal of the library that the host replays from a getter', () => {
+    const earlier = captured(() => resolveOptions({ connection: { host: 'h' }, namespace: 'a*b' }))
+    expect(earlier).toMatchObject({ code: CACHE_ERROR_CODES.INVALID_NAMESPACE })
+    const options = Object.defineProperty({ connection: { host: 'h' } }, 'namespace', {
+      enumerable: true,
+      get: (): never => {
+        throw earlier
+      }
+    })
+
+    const failure = captured(() => resolveOptions(options))
+
+    expect(failure).toMatchObject({
+      code: CACHE_ERROR_CODES.INVALID_OPTIONS,
+      details: { reason: 'option could not be read' }
+    })
+    expect((failure as CacheException).cause).toBe(earlier)
+  })
+
+  // Scenario: the credentials sit behind getters that are not enumerable.
+  // Rule: they are read by name, so the driver still gets them; a copy by enumeration would drop them.
+  it('hands the driver a password and a tls block that sit behind non-enumerable getters', async () => {
+    const tls = { servername: 'redis.internal' }
+    const connection = {
+      host: '127.0.0.1',
+      port: 6399,
+      lazyConnect: true,
+      enableOfflineQueue: false
+    }
+    Object.defineProperty(connection, 'password', { get: () => 'hunter2', enumerable: false })
+    Object.defineProperty(connection, 'tls', { get: () => tls, enumerable: false })
+    const namespaced = Object.defineProperty({ connection }, 'namespace', {
+      get: () => 'hidden-ns',
+      enumerable: false
+    })
+
+    const resolved = resolveOptions(namespaced as never)
+    const manager = new ConnectionManager(resolved)
+    const client = manager.getClient()
+    try {
+      expect(resolved.namespace).toBe('hidden-ns')
+      expect(client.options).toMatchObject({ password: 'hunter2', tls })
+    } finally {
+      client.disconnect()
+    }
+  })
+
   // Rule: the options are read once, so what is validated is what is applied.
   it('reads each top-level option once and applies what it validated', () => {
     const reads: string[] = []

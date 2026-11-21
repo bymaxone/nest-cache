@@ -26,11 +26,12 @@ export function refusal(code: CacheErrorCode, details: Record<string, unknown>):
 }
 
 /**
- * Whether a thrown value is a refusal the library built.
+ * Whether a thrown value is a refusal the library built, taking the mark off it: a mark is good for
+ * one pass through the guard, so a refusal a host caught and throws again later is the host's.
  *
  * @param thrown - Whatever was thrown.
- * @returns True only for an exception made by {@link refusal}.
+ * @returns True only for an exception made by {@link refusal} that has not passed yet.
  */
-export function isOwnRefusal(thrown: unknown): boolean {
-  return typeof thrown === 'object' && thrown !== null && OWN.has(thrown)
+export function takeOwnRefusal(thrown: unknown): boolean {
+  return typeof thrown === 'object' && thrown !== null && OWN.delete(thrown)
 }
