@@ -192,7 +192,7 @@ describe('registration under a throwing host object', () => {
     ['cluster', lazyCluster],
     ['sentinel', lazySentinel]
   ])(
-    'ends every trap of a %s option set in a coded error up to the first command',
+    'ends every trap of a %s option set that the library reads in a coded error, and lets only a trap the driver reaches through',
     async (_mode, make) => {
       for (let nth = 1; nth <= LIMIT; nth++) {
         const run: Run = { ops: 0, trap: '', stack: '' }
@@ -225,6 +225,7 @@ describe('registration under a throwing host object', () => {
           continue
         }
         expect(thrown).toBeInstanceOf(CacheException)
+        expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
         expect((thrown as CacheException).cause).toBe(HOST)
       }
       throw new Error(`the call still reached traps after ${LIMIT}`)
