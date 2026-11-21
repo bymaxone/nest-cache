@@ -89,7 +89,11 @@ describe('cache admin issues no write (real Redis, a user that cannot write)', (
     await owner.call('ACL', 'SETUSER', USER, ...ACL_RULES)
     await owner.call('ACL', 'LOG', 'RESET')
 
-    monitor = new Redis(redis.url)
+    // `monitor()` opens a second connection and switches it to monitor mode only after the reply to MONITOR
+    // is handled, so a line another connection's command echoes in that window would reach a connection
+    // with no command waiting. This connection therefore never connects and never sends a ready-check
+    // INFO, and the feed it opens (which inherits the options) sends none either.
+    monitor = new Redis(redis.url, { lazyConnect: true, enableReadyCheck: false })
     const feed = await monitor.monitor()
     // The first line MONITOR echoes proves the feed is in monitor mode: the app boots only after it, so a
     // line from its first command can never reach a connection that has not switched yet.
