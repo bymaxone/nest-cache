@@ -98,7 +98,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   #bootError: unknown = null
 
   /** The driver options built from the connection config; they carry the password. */
-  readonly #redisOptionsResolved: RedisOptions
+  readonly #redisOptionsResolved: RedisOptions & { connectTimeout: number }
 
   /** How long the boot waits for the client to be ready, in milliseconds. */
   readonly #connectDeadline: number
@@ -126,7 +126,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     this.#connectDeadline = readingOptions(() =>
       options.mode === 'cluster'
         ? (options.cluster?.options?.redisOptions?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS)
-        : (this.#redisOptionsResolved.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS)
+        : this.#redisOptionsResolved.connectTimeout
     )
   }
 
@@ -342,12 +342,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */
-  private buildRedisOptions(opts: ResolvedOptions): RedisOptions {
+  private buildRedisOptions(opts: ResolvedOptions): RedisOptions & { connectTimeout: number } {
     const c = opts.connection ?? {}
     const fromUrl = c.url ? parseRedisUrl(c.url) : {}
     return {
       lazyConnect: c.lazyConnect ?? false,
-      connectTimeout: c.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS,
       commandTimeout: c.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
       maxRetriesPerRequest: c.maxRetriesPerRequest ?? DEFAULT_MAX_RETRIES_PER_REQUEST,
       disconnectTimeout: DISCONNECT_TIMEOUT_MS,
@@ -364,7 +363,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       ...(!isUnset(c.db) && { db: c.db }),
       ...(!isUnset(c.username) && { username: c.username }),
       ...(!isUnset(c.tls) && { tls: c.tls }),
-      ...fromUrl
+      ...fromUrl,
+      // After the URL, which names no timer, so the type says what is true: a number, always.
+      connectTimeout: c.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
     }
   }
 
