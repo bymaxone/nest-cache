@@ -92,7 +92,7 @@ describe('tls.profile', () => {
 
 describe('script definitions', () => {
   // Scenario: the scripts value is unset, or is not a list at all.
-  // Rule: unset is accepted as before; anything else that is not an array is refused naming `scripts`.
+  // Rule: unset is accepted; anything else that is not an array is refused naming `scripts`.
   it.each([
     ['undefined', undefined],
     ['null', null]

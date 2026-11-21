@@ -30,7 +30,7 @@ const KIND = 'must be an object, a profile name or a boolean'
 
 describe('the kind of a whole tls value', () => {
   // Scenario: tls is enabled as a flag, disabled, left unset, or given as an object.
-  // Rule: all of these are accepted as before: `true` makes the driver speak tls with its defaults.
+  // Rule: all of these are accepted: `true` makes the driver speak tls with its defaults.
   it.each([
     ['true', true],
     ['false', false],
