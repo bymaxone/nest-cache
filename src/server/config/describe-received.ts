@@ -21,10 +21,15 @@ const TYPE_NAMES = {
  * The value's type, or the number itself when it is finite.
  *
  * @param value - The refused option value.
+ * @param credential - Whether the option holds a credential: a number is then reported as the type only,
+ *   because a numeric password is still a password.
  * @returns A finite number as itself; `NaN` and an infinity as their names; anything else as a
  *   phrase such as `a string`, `an array` or `null`. No part of a non-number value appears in it.
  */
-export function describeReceived(value: unknown): number | string {
+export function describeReceived(value: unknown, credential = false): number | string {
+  if (credential && typeof value === 'number') {
+    return 'a number'
+  }
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : String(value)
   }

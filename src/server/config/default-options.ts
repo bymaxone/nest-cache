@@ -303,6 +303,13 @@ function validateAddresses(option: string, list: unknown, shorthand: boolean): v
  * @throws {CacheException} `INVALID_OPTIONS` naming the entry by position, never by key.
  */
 function validateNatMap(option: string, map: unknown): void {
+  if (
+    map !== undefined &&
+    typeof map !== 'function' &&
+    (typeof map !== 'object' || Array.isArray(map))
+  ) {
+    refuseOption(option, 'must be an object or a function', map)
+  }
   if (typeof map === 'object' && map !== null && !Array.isArray(map)) {
     Object.values(map).forEach((entry: unknown, index: number) => {
       if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
@@ -327,7 +334,7 @@ function validateScripts(scripts: unknown): void {
   }
   scripts.forEach((definition: unknown, index: number) => {
     const where = `scripts[${index}]`
-    if (typeof definition !== 'object' || definition === null) {
+    if (typeof definition !== 'object' || definition === null || Array.isArray(definition)) {
       refuseOption(where, 'must be an object', definition)
     }
     for (const field of ['name', 'lua'] as const) {

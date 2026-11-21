@@ -7,6 +7,7 @@
  * answer: each property is read here, once, by name from a typed list, into a plain copy.
  */
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls'
+import { types } from 'node:util'
 
 import type { ClusterOptions, SentinelAddress } from 'ioredis'
 
@@ -22,7 +23,7 @@ import { refuseOption } from './refuse-option'
 
 // Stryker disable BooleanLiteral: only the keys of the records below are read, so flipping a `true` value changes nothing
 /** Every key of the standalone block, as a complete record: a key added to the interface fails here. */
-const STANDALONE_KEYS: Readonly<Record<keyof BymaxCacheStandaloneConnection, true>> = {
+export const STANDALONE_KEYS: Readonly<Record<keyof BymaxCacheStandaloneConnection, true>> = {
   url: true,
   host: true,
   port: true,
@@ -59,7 +60,7 @@ const SENTINEL_KEYS: Readonly<Record<keyof BymaxCacheSentinelConnection, true>> 
  * read by name, so a class instance, a get-only proxy or a non-enumerable field loses none of them;
  * the own enumerable keys beyond these are copied as well.
  */
-const TLS_KEYS: Readonly<Record<keyof TlsConnectionOptions | 'profile', true>> = {
+export const TLS_KEYS: Readonly<Record<keyof TlsConnectionOptions | 'profile', true>> = {
   ALPNCallback: true,
   ALPNProtocols: true,
   SNICallback: true,
@@ -146,8 +147,22 @@ function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknow
     : value
 }
 
-/** The tls options that hold key material: a string, a `Buffer`, or a list of them. */
-const KEY_MATERIAL = ['ca', 'cert', 'key', 'pfx', 'crl'] as const
+/**
+ * The tls options that hold bytes the driver reads again on every reconnect: a string, a `Buffer`, or a
+ * list of them. `ticketKeys` decides who can resume a session, `session` and `dhparam` are read the same
+ * way, and `ALPNProtocols` is a list of names or a buffer.
+ */
+const KEY_MATERIAL = [
+  'ca',
+  'cert',
+  'key',
+  'pfx',
+  'crl',
+  'ticketKeys',
+  'session',
+  'dhparam',
+  'ALPNProtocols'
+] as const
 
 /**
  * Copies bytes the host could write to later: any view of an `ArrayBuffer` (a `Buffer`, a `Uint8Array`, a
@@ -160,12 +175,71 @@ function copyBytes(value: unknown): unknown {
   return value instanceof ArrayBuffer ? Buffer.from(new Uint8Array(value)) : value
 }
 
+/** The tls options whose entries may be objects, with the field that holds their bytes. */
+const ENTRY_BYTES = { key: 'pem', pfx: 'buf' } as const
+
+/**
+ * Copies an object entry of `tls.key` or `tls.pfx` by name: its bytes through {@link copyBytes} and its
+ * passphrase, which must be a string. A `KeyObject` is kept as it is, and so are bytes (copied through
+ * {@link copyBytes}) and anything that is not an object; every other object, whatever its prototype, is
+ * read by name and copied, and one with another own key is refused, so nothing the driver would read
+ * goes uncopied.
+ *
+ * @param entry - The entry as the host wrote it.
+ * @param option - The list's name, echoed with the entry's position.
+ * @param field - The field that holds the bytes: `pem` for a key, `buf` for a pfx.
+ * @param index - The entry's position.
+ * @returns A plain copy, or the entry itself (copied when it is bytes) when it is a `KeyObject`, bytes or
+ *   not an object.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the entry by position.
+ */
+function copyKeyEntry(entry: unknown, option: string, field: string, index: number): unknown {
+  if (
+    !isObject(entry) ||
+    Array.isArray(entry) ||
+    ArrayBuffer.isView(entry) ||
+    entry instanceof ArrayBuffer ||
+    types.isKeyObject(entry)
+  ) {
+    return copyBytes(entry)
+  }
+  const where = `${option}[${index}]`
+  if (Object.keys(entry).some((name) => name !== field && name !== 'passphrase')) {
+    refuseOption(where, `has a key that is not ${field} or passphrase`, entry)
+  }
+  const passphrase: unknown = Reflect.get(entry, 'passphrase')
+  if (passphrase !== undefined && typeof passphrase !== 'string') {
+    refuseOption(`${where}.passphrase`, 'must be a string', passphrase)
+  }
+  const bytes: unknown = Reflect.get(entry, field)
+  return { [field]: copyBytes(bytes), ...(passphrase !== undefined && { passphrase }) }
+}
+
+/**
+ * Copies one key material option: a list through {@link copyList}, an object entry of `key` or `pfx`
+ * through {@link copyKeyEntry}, anything else through {@link copyBytes}.
+ *
+ * @param material - The option's value as the host wrote it.
+ * @param key - The option's name.
+ * @returns The copy.
+ */
+function copyMaterial(material: unknown, key: (typeof KEY_MATERIAL)[number]): unknown {
+  const option = `tls.${key}`
+  const copyOne = (entry: unknown, index: number): unknown =>
+    key === 'key' || key === 'pfx'
+      ? copyKeyEntry(entry, option, ENTRY_BYTES[key], index)
+      : copyBytes(entry)
+  return Array.isArray(material) ? copyList(material, option, copyOne) : copyOne(material, 0)
+}
+
 /**
  * Copies a `tls` object once: its options by name, and the key material one level deeper. A list is
  * read once (the length first, each index once, both bounded like the other lists) and every `Buffer`
  * element of it is copied, because the driver merges the object again on every reconnect and a list or
  * a `Buffer` the host changes later would change the trust roots or the identity it connects with. An
- * object entry such as `{ pem, passphrase }` and a `secureContext` stay by reference.
+ * object entry of `key` or `pfx` (`{ pem, passphrase }`, `{ buf, passphrase }`) is copied by name too,
+ * through `copyKeyEntry`; only a `KeyObject` and a
+ * `secureContext` stay by reference.
  *
  * @param tls - The `tls` value as the host wrote it.
  * @returns A plain copy, or the value itself when it is not an object or is an array.
@@ -178,13 +252,7 @@ function readTls(tls: unknown): unknown {
     for (const key of KEY_MATERIAL) {
       const material: unknown = Reflect.get(copy as object, key)
       if (material !== undefined) {
-        Reflect.set(
-          copy as object,
-          key,
-          Array.isArray(material)
-            ? copyList(material, `tls.${key}`, copyBytes)
-            : copyBytes(material)
-        )
+        Reflect.set(copy as object, key, copyMaterial(material, key))
       }
     }
   }
@@ -206,7 +274,11 @@ const readEntry = (entry: unknown): unknown => readPlain(entry, ENTRY_KEYS)
  * @throws {CacheException} `INVALID_OPTIONS` when the length is not a count, or the list holds more
  *   than the cap.
  */
-function copyList(list: unknown, option: string, copy: (entry: unknown) => unknown): unknown {
+function copyList(
+  list: unknown,
+  option: string,
+  copy: (entry: unknown, index: number) => unknown
+): unknown {
   if (!Array.isArray(list)) {
     return list
   }
@@ -217,12 +289,12 @@ function copyList(list: unknown, option: string, copy: (entry: unknown) => unkno
   if (length > MAX_LIST_ENTRIES) {
     refuseOption(option, 'has too many entries', length, { max: MAX_LIST_ENTRIES })
   }
-  return Array.from({ length }, (_, index) => copy(list[index]))
+  return Array.from({ length }, (_, index) => copy(list[index], index))
 }
 
 /**
  * Copies a `natMap` once, each entry once, after its key count is checked against the cap. A function
- * map is kept as is.
+ * map and an array are kept as they are, the array for validation to refuse.
  *
  * @param map - The map as the host wrote it.
  * @param option - The map's name, echoed when it holds too many entries.
@@ -230,7 +302,7 @@ function copyList(list: unknown, option: string, copy: (entry: unknown) => unkno
  * @throws {CacheException} `INVALID_OPTIONS` when the map holds more than the cap.
  */
 function copyNatMap(map: unknown, option: string): unknown {
-  if (!isObject(map)) {
+  if (!isObject(map) || Array.isArray(map)) {
     return map
   }
   const names = Object.keys(map)

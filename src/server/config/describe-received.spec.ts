@@ -35,3 +35,17 @@ describe('describeReceived', () => {
     expect(describeReceived(value)).toBe(expected)
   })
 })
+
+describe('describeReceived for a credential', () => {
+  // Scenario: the refused option holds a credential, so a number in it may be a password.
+  // Rule: a number of any kind is reported as the type, and every other value as before.
+  it.each([42, -3.5, NaN, Infinity])('reports the number %p as a number', (value) => {
+    expect(describeReceived(value, true)).toBe('a number')
+  })
+
+  it('reports anything else as it does for any option', () => {
+    expect(describeReceived('secret', true)).toBe('a string')
+    expect(describeReceived(null, true)).toBe('null')
+    expect(describeReceived(42, false)).toBe(42)
+  })
+})

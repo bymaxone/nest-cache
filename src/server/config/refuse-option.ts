@@ -9,6 +9,12 @@ import { describeReceived } from './describe-received'
 import { refusal } from './own-refusals'
 
 /**
+ * The options that hold a credential, by name: their refusals never print a number. `url` is one because
+ * a connection URL carries a user name and a password; `rejectUnauthorized` is not one.
+ */
+const CREDENTIAL = /pass|user|secret|token|cred|auth(?!orized)|url/i
+
+/**
  * Throws `code` for an option value, reporting its type and never its content.
  *
  * @param code - The error code of the refusal: the one the option's family has always used.
@@ -28,7 +34,7 @@ export function refuseValue(
   throw refusal(code, {
     reason: `${option} ${problem}`,
     option,
-    received: describeReceived(value),
+    received: describeReceived(value, CREDENTIAL.test(option)),
     ...bounds
   })
 }
