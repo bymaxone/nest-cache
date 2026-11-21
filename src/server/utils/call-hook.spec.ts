@@ -79,7 +79,7 @@ describe('callHook', () => {
   // absorbed silently, and another hook gets its own line.
   describe('the failure log', () => {
     const logged = async (
-      run: (callHookFresh: typeof callHook) => Promise<void> | void
+      run: (callHookFresh: typeof callHook, written: unknown[]) => Promise<void> | void
     ): Promise<unknown[]> => {
       const lines: unknown[] = []
       await jest.isolateModulesAsync(async () => {
@@ -88,7 +88,7 @@ describe('callHook', () => {
           lines.push(line)
         })
         const fresh = await import('./call-hook')
-        await run(fresh.callHook)
+        await run(fresh.callHook, lines)
         await settle()
         spy.mockRestore()
       })
@@ -163,13 +163,14 @@ describe('callHook', () => {
       ]
     ])('with %s', (_name, disable, enable) => {
       it('writes nothing and keeps the budget', async () => {
-        const lines = await logged(async (fresh) => {
+        const lines = await logged(async (fresh, written) => {
           const nest = await import('@nestjs/common')
           const fail = (): never => {
             throw new Error('x')
           }
           disable(nest)
           fresh('onEvent', fail)
+          expect(written).toEqual([])
           enable(nest)
           fresh('onEvent', fail)
         })
