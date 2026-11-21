@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.31] - 2026-11-21
+
 ### Fixed
 
 - The `scripts` option (the array and each definition) is read under the same guard as the rest of the options, so a getter or a proxy of the host's in it ends as `INVALID_OPTIONS` with the thrown error on `cause`, and the status screen of `./admin` lists no script names when the definitions cannot be read. The connection manager reads the connect timeout once, when it is built, and the boot wait uses that value: before, it read the option a second time.
@@ -1127,7 +1129,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.30...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.31...HEAD
+[1.2.31]: https://github.com/bymaxone/nest-cache/compare/v1.2.30...v1.2.31
 [1.2.30]: https://github.com/bymaxone/nest-cache/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/bymaxone/nest-cache/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/bymaxone/nest-cache/compare/v1.2.27...v1.2.28
