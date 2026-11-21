@@ -305,7 +305,6 @@ function validateAddresses(option: string, list: unknown, shorthand: boolean): v
 function validateNatMap(option: string, map: unknown): void {
   if (
     map !== undefined &&
-    map !== null &&
     typeof map !== 'function' &&
     (typeof map !== 'object' || Array.isArray(map))
   ) {

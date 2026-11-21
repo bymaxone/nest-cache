@@ -80,6 +80,28 @@ describe.each([
     )
   })
 
+  // Scenario: the host leaves the passphrase out, as most keys do.
+  // Rule: the held entry is accepted and carries no passphrase key at all, not an undefined one.
+  it('accepts an entry without a passphrase and holds none', () => {
+    const held = heldTls({ [key]: [{ [bytes]: 'x' }] })[key] as Array<Record<string, unknown>>
+
+    expect(Object.keys(held[0] as object)).toEqual([bytes])
+  })
+
+  // Scenario: the entry has no prototype, as Object.create(null) or a parsed config gives.
+  // Rule: it is a plain object like any other: copied, so a later change of it does not reach the held tls.
+  it('copies an entry with a null prototype', () => {
+    const entry: Record<string, unknown> = Object.assign(Object.create(null) as object, {
+      [bytes]: 'first',
+      passphrase: 'p'
+    })
+    const held = heldTls({ [key]: [entry] })[key] as Array<Record<string, unknown>>
+    entry[bytes] = 'later'
+
+    expect(held[0]).not.toBe(entry)
+    expect(held[0]).toEqual({ [bytes]: 'first', passphrase: 'p' })
+  })
+
   it('keeps an entry that is not a plain object, such as a key object, as it is', () => {
     class KeyObjectLike {}
     const entry = new KeyObjectLike()
@@ -123,10 +145,11 @@ describe('a natMap of the wrong kind', () => {
     ]
   ]
 
-  it.each(where)('%s accepts an object, a function and nothing', (_option, make) => {
+  it.each(where)('%s accepts an object, a function and null and nothing', (_option, make) => {
     expect(() => resolve(make({ 'a:1': { host: 'b', port: 2 } }))).not.toThrow()
     expect(() => resolve(make((): void => undefined))).not.toThrow()
     expect(() => resolve(make(undefined))).not.toThrow()
+    expect(() => resolve(make(null))).not.toThrow()
   })
 
   it.each(where)('%s refuses an array, a string and a number', (option, make) => {
