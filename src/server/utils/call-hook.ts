@@ -3,7 +3,7 @@
  *
  * Layer: server.
  */
-import { Logger } from '@nestjs/common'
+import { ConsoleLogger, Logger } from '@nestjs/common'
 
 import type { CacheEventName } from '../../shared/types/cache-event.types'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
@@ -27,14 +27,20 @@ export const HOOK_FAILED_EVENT = 'CACHE_HOOK_FAILED'
  * `Logger.isLevelEnabled` alone cannot tell, so this reads both; measured on `@nestjs/common` 11.0.16,
  * 11.2.11 and 12.6.0, where `overrideLogger(false)` leaves it false and the instance undefined.
  *
+ * The levels filter Nest's own `ConsoleLogger` only: a custom logger installed after them gets every
+ * call, so the levels are consulted only while the installed logger is a `ConsoleLogger`.
+ *
  * @returns False only when the application disabled Nest's logging (`logger: false`) or left `warn`
- *   out of an explicit list of levels.
+ *   out of an explicit list of levels its own logger filters by.
  */
 function writable(): boolean {
   try {
+    const installed: unknown = Reflect.get(Logger, 'staticInstanceRef')
     return (
-      Reflect.get(Logger, 'staticInstanceRef') !== undefined &&
-      (Reflect.get(Logger, 'logLevels') === undefined || Logger.isLevelEnabled('warn'))
+      installed !== undefined &&
+      (!(installed instanceof ConsoleLogger) ||
+        Reflect.get(Logger, 'logLevels') === undefined ||
+        Logger.isLevelEnabled('warn'))
     )
   } catch {
     return true
