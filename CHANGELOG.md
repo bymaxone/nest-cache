@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.36] - 2026-11-21
+
 ### Fixed
 
 - The key material of a `tls` object (`ca`, `cert`, `key`, `pfx`, `crl`) is copied once when the options are resolved. The driver merges the `tls` object into the connection options on every connect and reconnect, and the copy kept those lists and `Buffer`s by reference, so a host that pushed into a `ca` list, or overwrote a `Buffer`, after the module was registered changed the trust roots or the identity of the next reconnect. A list is now read once (the length first, then each index), and every view of bytes (a `Buffer`, a `Uint8Array`, a `DataView`) and every `ArrayBuffer`, in a list or given whole, is copied into a `Buffer` of its own. A list of more than 1 000 entries, or one whose length is not a count, is refused as `INVALID_OPTIONS` (`reason: 'tls.ca has too many entries'`, `'tls.ca has an invalid length'`). The same holds for the `tls` and the `sentinelTLS` of the cluster node options (`cluster.options.redisOptions`). An object entry of `key` or `pfx` (`{ pem, passphrase }`) and a `secureContext` stay by reference.
@@ -1176,7 +1178,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.35...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.36...HEAD
+[1.2.36]: https://github.com/bymaxone/nest-cache/compare/v1.2.35...v1.2.36
 [1.2.35]: https://github.com/bymaxone/nest-cache/compare/v1.2.34...v1.2.35
 [1.2.34]: https://github.com/bymaxone/nest-cache/compare/v1.2.33...v1.2.34
 [1.2.33]: https://github.com/bymaxone/nest-cache/compare/v1.2.32...v1.2.33
