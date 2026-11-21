@@ -19,9 +19,9 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Documentation
 
-- The 1.2.28 entry for a refused queued command said the error was "mapped like any command's", which reads as if it carried a library code. It does not: a timeout or an offline connection is `cache.command_timeout` or `cache.connection_lost`, and any other refusal (an out-of-memory refusal, say) is the driver's own error with no library code and no `cause`, as for every other command. The README says so under `mset`.
-- The frozen copy of the hook data is the top level only: a nested value (`err`, an array) is shared with the library and with every other bag. The README says to treat it as read-only.
-- The CHANGELOG of 1.2.28 did not mention that the main entry exports `guardClient` at runtime. It is an internal export that `@bymax-one/nest-cache/admin` uses and it is not supported; the README names it as such.
+- The 1.2.28 entry for a refused queued command said the error was "mapped like any command's", which reads as if it carried a library code. It does not: a timeout or an offline connection is `cache.command_timeout` or `cache.connection_lost`, and any other refusal (an out-of-memory refusal, say) is the driver's own error with no library code and no `cause`, as for every other command.
+- The frozen copy of the hook data is the top level only: a nested value (`err`, an array) is shared with the library.
+- The CHANGELOG of 1.2.28 did not mention that the main entry exports `guardClient` at runtime. It is an internal export that `@bymax-one/nest-cache/admin` uses and it is not supported.
 
 ## [1.2.28] - 2026-11-20
 
