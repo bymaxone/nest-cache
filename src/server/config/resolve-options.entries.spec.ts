@@ -13,10 +13,10 @@ const resolve = (options: Record<string, unknown>): unknown =>
   resolveOptions(options as unknown as BymaxCacheModuleOptions)
 
 /** The refusal a call is expected to throw: the exact reason. */
-const refusing = (reason: string): Error =>
+const refusing = (reason: string, more: Record<string, unknown> = {}): Error =>
   expect.objectContaining({
     code: 'cache.invalid_options',
-    details: expect.objectContaining({ reason })
+    details: expect.objectContaining({ reason, ...more })
   }) as Error
 
 const sentinel = (sentinels: unknown[]): Record<string, unknown> => ({
@@ -99,7 +99,9 @@ describe('the size of a natMap', () => {
   // Rule: a map of 1000 entries is accepted and one of 1001 is refused before it is copied.
   it.each(where)('%s accepts 1000 entries and refuses 1001', (option, make) => {
     expect(() => resolve(make(keys(1000)))).not.toThrow()
-    expect(() => resolve(make(keys(1001)))).toThrow(refusing(`${option} has too many entries`))
+    expect(() => resolve(make(keys(1001)))).toThrow(
+      refusing(`${option} has too many entries`, { max: 1000 })
+    )
   })
 })
 
