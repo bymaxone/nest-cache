@@ -79,7 +79,7 @@ describe('callHook', () => {
   // absorbed silently, and another hook gets its own line.
   describe('the failure log', () => {
     const logged = async (
-      run: (callHookFresh: typeof callHook) => Promise<void> | void
+      run: (callHookFresh: typeof callHook, written: unknown[]) => Promise<void> | void
     ): Promise<unknown[]> => {
       const lines: unknown[] = []
       await jest.isolateModulesAsync(async () => {
@@ -88,7 +88,7 @@ describe('callHook', () => {
           lines.push(line)
         })
         const fresh = await import('./call-hook')
-        await run(fresh.callHook)
+        await run(fresh.callHook, lines)
         await settle()
         spy.mockRestore()
       })
@@ -145,6 +145,134 @@ describe('callHook', () => {
       })
 
       expect(lines).toEqual([])
+    })
+
+    // Scenario: the application turned Nest's logging off, or left `warn` out of its levels.
+    // Rule: nothing is written, and the once-per-hook budget is kept for when logging is on again.
+    type Nest = typeof import('@nestjs/common')
+    describe.each([
+      [
+        'logging disabled',
+        (nest: Nest) => nest.Logger.overrideLogger(false),
+        (nest: Nest) => nest.Logger.overrideLogger(new nest.ConsoleLogger())
+      ],
+      [
+        'warn left out of the levels',
+        (nest: Nest) => nest.Logger.overrideLogger(['error']),
+        (nest: Nest) => nest.Logger.overrideLogger(['warn', 'error'])
+      ]
+    ])('with %s', (_name, disable, enable) => {
+      it('writes nothing and keeps the budget', async () => {
+        const lines = await logged(async (fresh, written) => {
+          const nest = await import('@nestjs/common')
+          const fail = (): never => {
+            throw new Error('x')
+          }
+          disable(nest)
+          fresh('onEvent', fail)
+          expect(written).toEqual([])
+          enable(nest)
+          fresh('onEvent', fail)
+        })
+
+        expect(lines).toEqual([
+          { event: 'CACHE_HOOK_FAILED', message: 'A host hook failed', hook: 'onEvent' }
+        ])
+      })
+    })
+
+    it('writes through levels that include warn and through a custom logger', async () => {
+      const lines = await logged(async (fresh) => {
+        const nest = await import('@nestjs/common')
+        nest.Logger.overrideLogger(['warn', 'error'])
+        fresh('onEvent', () => {
+          throw new Error('x')
+        })
+        nest.Logger.overrideLogger({
+          log: () => undefined,
+          warn: () => undefined,
+          error: () => undefined
+        })
+        fresh('onQueue', () => {
+          throw new Error('x')
+        })
+      })
+
+      expect(lines.map((line) => (line as { hook: string }).hook)).toEqual(['onEvent', 'onQueue'])
+    })
+
+    // Scenario: the application set levels without warn, then installed its own logger (useLogger).
+    // Rule: the levels filter Nest's own logger only; the custom logger receives warn, so the line is written.
+    it('writes through a custom logger installed after levels without warn', async () => {
+      const lines = await logged(async (fresh) => {
+        const nest = await import('@nestjs/common')
+        nest.Logger.overrideLogger(['error'])
+        nest.Logger.overrideLogger({
+          log: () => undefined,
+          warn: () => undefined,
+          error: () => undefined
+        })
+        fresh('onEvent', () => {
+          throw new Error('x')
+        })
+      })
+
+      expect(lines).toHaveLength(1)
+    })
+
+    // Scenario: the installed logger is a ConsoleLogger of another copy of @nestjs/common, so instanceof is false.
+    // Rule: it counts as writable; the line is never skipped on a guess.
+    it('writes when the installed ConsoleLogger comes from another copy of Nest', async () => {
+      const lines = await logged(async (fresh) => {
+        const nest = await import('@nestjs/common')
+        nest.Logger.overrideLogger(['error'])
+        class ConsoleLogger {
+          warn(): void {}
+        }
+        Reflect.set(nest.Logger, 'staticInstanceRef', new ConsoleLogger())
+        fresh('onEvent', () => {
+          throw new Error('x')
+        })
+      })
+
+      expect(lines).toHaveLength(1)
+    })
+
+    // Scenario: levels without warn were set, then a console logger of Nest's was installed afresh.
+    // Rule: the installed logger answers for itself (a new one logs every level), not the stale levels.
+    it('asks the installed console logger, not the levels set before it', async () => {
+      const lines = await logged(async (fresh) => {
+        const nest = await import('@nestjs/common')
+        nest.Logger.overrideLogger(['error'])
+        nest.Logger.overrideLogger(new nest.ConsoleLogger())
+        fresh('onEvent', () => {
+          throw new Error('x')
+        })
+        class Quiet extends nest.ConsoleLogger {}
+        nest.Logger.overrideLogger(new Quiet('', { logLevels: ['error'] }))
+        fresh('onQueue', () => {
+          throw new Error('x')
+        })
+      })
+
+      expect(lines.map((line) => (line as { hook: string }).hook)).toEqual(['onEvent'])
+    })
+
+    it('treats a logger it cannot inspect as writable', async () => {
+      const lines = await logged(async (fresh) => {
+        const nest = await import('@nestjs/common')
+        Object.defineProperty(nest.Logger, 'staticInstanceRef', {
+          get: () => {
+            throw new Error('inspect')
+          },
+          configurable: true
+        })
+        fresh('onEvent', () => {
+          throw new Error('x')
+        })
+      })
+
+      expect(lines).toHaveLength(1)
     })
 
     it('absorbs a logger that fails in turn', async () => {

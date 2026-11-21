@@ -31,8 +31,9 @@ function firstQueued(error: unknown): unknown {
  * @param transaction - The transaction, with its commands already queued.
  * @returns The replies, in the order the commands were queued.
  * @throws {CacheException} `CONNECTION_LOST` (`reason: 'transaction_aborted'`) when `EXEC` answers
- *   nothing, and otherwise the first failing command's error, mapped like any command's: a command
- *   refused as it was queued reports its own refusal, not the `EXECABORT` that followed it.
+ *   nothing, and otherwise the first failing command's error, where only a timeout or an offline
+ *   connection is mapped to a coded error and any other refusal is the driver's own: a command refused as
+ *   it was queued reports its own refusal, not the `EXECABORT` that followed it.
  */
 export async function execTransaction(transaction: ChainableCommander): Promise<unknown[]> {
   const replies = await guardClient(transaction)

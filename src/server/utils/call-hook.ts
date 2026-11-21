@@ -3,7 +3,7 @@
  *
  * Layer: server.
  */
-import { Logger } from '@nestjs/common'
+import { ConsoleLogger, Logger } from '@nestjs/common'
 
 import type { CacheEventName } from '../../shared/types/cache-event.types'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
@@ -17,14 +17,43 @@ const LOGGED = new Set<CacheHookName>()
 /** Where the failure of a hook is logged. */
 const LOGGER = new Logger('BymaxCache')
 
+/** The `event` code of the line written when a hook fails. */
+export const HOOK_FAILED_EVENT = 'CACHE_HOOK_FAILED'
+
+/**
+ * Whether Nest would write a `warn` line now. The static `Logger.staticInstanceRef` and the instance
+ * method `isLevelEnabled` of its `ConsoleLogger` are not part of Nest's contract, so both are read
+ * inside a guard and any doubt counts as writable: the cost of a wrong yes is the allowance spent on a
+ * line nobody sees. The levels filter Nest's own `ConsoleLogger` only, and each
+ * instance answers for itself; a custom logger installed after them gets every call. Measured on the lowest
+ * and highest `@nestjs/common` the peer range allows, where `overrideLogger(false)` leaves the instance
+ * undefined and the public static `Logger.isLevelEnabled` is false until an array of levels is set.
+ *
+ * @returns False only when the application disabled Nest's logging (`logger: false`) or its
+ *   `ConsoleLogger` has `warn` out of its levels.
+ */
+function writable(): boolean {
+  try {
+    const installed: unknown = Reflect.get(Logger, 'staticInstanceRef')
+    if (installed === undefined) {
+      return false
+    }
+    const enabled: unknown =
+      installed instanceof ConsoleLogger && Reflect.get(installed, 'isLevelEnabled')
+    return typeof enabled !== 'function' || Boolean(enabled.call(installed, 'warn'))
+  } catch {
+    return true
+  }
+}
+
 /** Logs the first failure of a hook, absorbing a logger that fails in turn. */
 function failed(hook: CacheHookName): void {
-  if (LOGGED.has(hook)) {
+  if (LOGGED.has(hook) || !writable()) {
     return
   }
   LOGGED.add(hook)
   try {
-    LOGGER.warn({ event: 'CACHE_HOOK_FAILED', message: 'A host hook failed', hook })
+    LOGGER.warn({ event: HOOK_FAILED_EVENT, message: 'A host hook failed', hook })
   } catch {
     // A faulty logger must not fail what it observes.
   }

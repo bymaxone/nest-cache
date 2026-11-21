@@ -129,4 +129,17 @@ describe('combineCacheEvents', () => {
     expect(seen.map((data) => data['role'])).toEqual(['main', 'main'])
     expect(Object.isFrozen(seen[1])).toBe(true)
   })
+
+  // Rule: only the top level is a copy; a nested value is the caller's object, shared with every bag.
+  it('shares a nested value across bags and leaves it unfrozen', () => {
+    const seen: unknown[] = []
+    const bag: ICacheEvents = { onEvent: (_event, data) => void seen.push(data['err']) }
+    const err = new Error('driver')
+
+    combineCacheEvents(bag, bag).onEvent?.('error', { role: 'main', err })
+
+    expect(seen).toEqual([err, err])
+    expect(seen[0]).toBe(err)
+    expect(Object.isFrozen(err)).toBe(false)
+  })
 })

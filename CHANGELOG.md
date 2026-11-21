@@ -7,6 +7,22 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- `CACHE_LOG_EVENTS.hookFailed`, the code `CACHE_HOOK_FAILED` that the main entry writes when a hook of `events` fails, in the catalog of `@bymax-one/nest-cache/observability`.
+
+  **Apply to a consumer:** nothing changes unless you iterate over `CACHE_LOG_EVENTS`: it gains the key `hookFailed`. The line was already written by 1.2.28; this only lists its code.
+
+### Fixed
+
+- The one `CACHE_HOOK_FAILED` line a hook is allowed is no longer spent when nothing can be written: while Nest's logging is disabled (`logger: false`) or `warn` is left out of its levels, the hook keeps its allowance for when logging is on again.
+
+### Documentation
+
+- The 1.2.28 entry for a refused queued command said the error was "mapped like any command's", which reads as if it carried a library code. It does not: a timeout or an offline connection is `cache.command_timeout` or `cache.connection_lost`, and any other refusal (an out-of-memory refusal, say) is the driver's own error with no library code and no `cause`, as for every other command.
+- The frozen copy of the hook data is the top level only: a nested value (`err`, an array) is shared with the library.
+- The CHANGELOG of 1.2.28 did not mention that the main entry exports `guardClient` at runtime. It is an internal export that `@bymax-one/nest-cache/admin` uses and it is not supported.
+
 ## [1.2.28] - 2026-11-20
 
 ### Fixed
