@@ -160,13 +160,17 @@ const readEntry = (entry: unknown): unknown => readPlain(entry, ENTRY_KEYS)
  * @param option - The option's name, echoed when the list is too long.
  * @param copy - Copies one entry.
  * @returns A plain array of copied entries.
- * @throws {CacheException} `INVALID_OPTIONS` when the list holds more than the cap.
+ * @throws {CacheException} `INVALID_OPTIONS` when the length is not a count, or the list holds more
+ *   than the cap.
  */
 function copyList(list: unknown, option: string, copy: (entry: unknown) => unknown): unknown {
   if (!Array.isArray(list)) {
     return list
   }
   const length: number = list.length
+  if (!Number.isInteger(length) || length < 0) {
+    refuseOption(option, 'has an invalid length', length)
+  }
   if (length > MAX_LIST_ENTRIES) {
     refuseOption(option, 'has too many entries', length, { max: MAX_LIST_ENTRIES })
   }

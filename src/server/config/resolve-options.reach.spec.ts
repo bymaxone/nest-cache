@@ -170,3 +170,40 @@ describe('scripts are read once', () => {
     expect(reads).toBe(1)
   })
 })
+
+describe('a list whose length is not a count is refused, never copied as empty', () => {
+  /** An array whose length answers `length`, whatever it holds. */
+  const claiming = (length: unknown): unknown[] =>
+    new Proxy([{ host: 'x', port: 1 }], {
+      get: (target, key, receiver): unknown =>
+        key === 'length' ? length : Reflect.get(target, key, receiver)
+    })
+
+  const lists: Array<[string, (list: unknown) => unknown]> = [
+    [
+      'sentinel.sentinels',
+      (list) => ({ mode: 'sentinel', sentinel: { sentinels: list, name: 'm' } })
+    ],
+    ['cluster.nodes', (list) => ({ mode: 'cluster', cluster: { nodes: list } })],
+    ['scripts', (list) => ({ connection: { host: 'h' }, scripts: list })]
+  ]
+
+  // Scenario: a list reports NaN, a negative, a fractional or an infinite length.
+  // Rule: it is refused as INVALID_OPTIONS naming the option, so no list is silently emptied.
+  it.each(
+    lists.flatMap(([option, make]) =>
+      [Number.NaN, -1, 1.5, Number.POSITIVE_INFINITY].map(
+        (length) => [option, length, make] as const
+      )
+    )
+  )('%s with length %s is refused', (option, length, make) => {
+    expect(() =>
+      resolveOptions(make(claiming(length)) as unknown as BymaxCacheModuleOptions)
+    ).toThrow(
+      expect.objectContaining({
+        code: 'cache.invalid_options',
+        details: expect.objectContaining({ reason: `${option} has an invalid length` })
+      })
+    )
+  })
+})
