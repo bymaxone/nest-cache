@@ -69,6 +69,40 @@ describe('the shorthand entries are a node thing only', () => {
   })
 })
 
+describe('the size of a natMap', () => {
+  const keys = (count: number): Record<string, unknown> =>
+    Object.fromEntries(Array.from({ length: count }, (_, i) => [`n${i}`, { host: 'h', port: 1 }]))
+  const where: Array<[string, (natMap: unknown) => Record<string, unknown>]> = [
+    [
+      'sentinel.natMap',
+      (natMap) => ({
+        mode: 'sentinel',
+        sentinel: { sentinels: [{ host: 's', port: 1 }], name: 'm', natMap }
+      })
+    ],
+    [
+      'cluster.options.natMap',
+      (natMap) => ({
+        mode: 'cluster',
+        cluster: { nodes: [{ host: 'a', port: 7000 }], options: { natMap } }
+      })
+    ],
+    [
+      'cluster.options.redisOptions.natMap',
+      (natMap) => ({
+        mode: 'cluster',
+        cluster: { nodes: [{ host: 'a', port: 7000 }], options: { redisOptions: { natMap } } }
+      })
+    ]
+  ]
+
+  // Rule: a map of 1000 entries is accepted and one of 1001 is refused before it is copied.
+  it.each(where)('%s accepts 1000 entries and refuses 1001', (option, make) => {
+    expect(() => resolve(make(keys(1000)))).not.toThrow()
+    expect(() => resolve(make(keys(1001)))).toThrow(refusing(`${option} has too many entries`))
+  })
+})
+
 describe('the natMap of the cluster options', () => {
   const bad = { 'a:1': [] }
 

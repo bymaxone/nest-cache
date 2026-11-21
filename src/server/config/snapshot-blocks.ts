@@ -149,8 +149,16 @@ function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknow
 /** The tls options that hold key material: a string, a `Buffer`, or a list of them. */
 const KEY_MATERIAL = ['ca', 'cert', 'key', 'pfx', 'crl'] as const
 
-/** Copies a `Buffer`, so a later write by the host does not reach the copy; anything else is kept. */
-const copyBytes = (value: unknown): unknown => (Buffer.isBuffer(value) ? Buffer.from(value) : value)
+/**
+ * Copies bytes the host could write to later: any view of an `ArrayBuffer` (a `Buffer`, a `Uint8Array`, a
+ * `DataView`) and an `ArrayBuffer` itself become a `Buffer` of their own; anything else is kept.
+ */
+function copyBytes(value: unknown): unknown {
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
+  }
+  return value instanceof ArrayBuffer ? Buffer.from(new Uint8Array(value)) : value
+}
 
 /**
  * Copies a `tls` object once: its options by name, and the key material one level deeper. A list is
@@ -213,15 +221,23 @@ function copyList(list: unknown, option: string, copy: (entry: unknown) => unkno
 }
 
 /**
- * Copies a `natMap` once, each entry once. A function map is kept as is.
+ * Copies a `natMap` once, each entry once, after its key count is checked against the cap. A function
+ * map is kept as is.
  *
  * @param map - The map as the host wrote it.
+ * @param option - The map's name, echoed when it holds too many entries.
  * @returns A plain map of copied entries.
+ * @throws {CacheException} `INVALID_OPTIONS` when the map holds more than the cap.
  */
-function copyNatMap(map: unknown): unknown {
-  return isObject(map)
-    ? Object.fromEntries(Object.entries(readSet(map, {})).map(([key, to]) => [key, readEntry(to)]))
-    : map
+function copyNatMap(map: unknown, option: string): unknown {
+  if (!isObject(map)) {
+    return map
+  }
+  const names = Object.keys(map)
+  if (names.length > MAX_LIST_ENTRIES) {
+    refuseOption(option, 'has too many entries', names.length, { max: MAX_LIST_ENTRIES })
+  }
+  return Object.fromEntries(names.map((name) => [name, readEntry(Reflect.get(map, name))]))
 }
 
 /**
@@ -240,13 +256,13 @@ function readClusterOptions(options: unknown): unknown {
   const node = isObject(redisOptions) ? readSet(redisOptions, REDIS_OPTION_KEYS) : undefined
   return {
     ...copy,
-    natMap: copyNatMap(copy.natMap),
+    natMap: copyNatMap(copy.natMap, 'cluster.options.natMap'),
     ...(node !== undefined && {
       redisOptions: {
         ...node,
         tls: readTls(node.tls),
         sentinelTLS: readTls(node.sentinelTLS),
-        natMap: copyNatMap(node.natMap)
+        natMap: copyNatMap(node.natMap, 'cluster.options.redisOptions.natMap')
       }
     })
   }
@@ -276,7 +292,7 @@ export function snapshotBlocks(options: BymaxCacheModuleOptions): BymaxCacheModu
       ? {
           ...sentinelBlock,
           sentinels: copyList(sentinelBlock.sentinels, 'sentinel.sentinels', readEntry),
-          natMap: copyNatMap(sentinelBlock.natMap)
+          natMap: copyNatMap(sentinelBlock.natMap, 'sentinel.natMap')
         }
       : sentinelBlock,
     cluster: isObject(clusterBlock)

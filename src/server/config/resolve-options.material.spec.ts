@@ -53,6 +53,50 @@ describe.each(KEYS)('tls.%s', (key) => {
     expect(((heldList[key] as Buffer[])[0] as Buffer).toString()).toBe('trusted')
   })
 
+  // Scenario: the host overwrites a Uint8Array, a DataView or an ArrayBuffer after the options are resolved,
+  // as a value and as an element.
+  // Rule: any view of bytes the driver accepts is copied, so the bytes it holds are the bytes that were read.
+  it.each([
+    [
+      'a Uint8Array',
+      (bytes: Uint8Array): unknown => bytes,
+      (bytes: Uint8Array): void => {
+        bytes.fill(0)
+      }
+    ],
+    [
+      'a DataView',
+      (bytes: Uint8Array): unknown =>
+        new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+      (bytes: Uint8Array): void => {
+        bytes.fill(0)
+      }
+    ],
+    [
+      'an ArrayBuffer',
+      (bytes: Uint8Array): unknown =>
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      (): void => undefined
+    ]
+  ])('keeps the bytes of %s overwritten later', (label, wrap, overwrite) => {
+    const text = 'trusted'
+    const whole = new Uint8Array(Buffer.from(text))
+    const element = new Uint8Array(Buffer.from(text))
+    const wholeValue = wrap(whole)
+    const elementValue = wrap(element)
+    const held = heldTls({ [key]: wholeValue })
+    const heldList = heldTls({ [key]: [elementValue] })
+    overwrite(whole)
+    overwrite(element)
+    if (label === 'an ArrayBuffer') {
+      new Uint8Array(wholeValue as ArrayBuffer).fill(0)
+      new Uint8Array(elementValue as ArrayBuffer).fill(0)
+    }
+
+    expect(Buffer.from(held[key] as Uint8Array).toString()).toBe(text)
+    expect(Buffer.from((heldList[key] as Uint8Array[])[0] as Uint8Array).toString()).toBe(text)
+  })
+
   // Scenario: the length of the array answers 1 once and 0 afterwards, and an index answers once.
   // Rule: the length and each index are read once.
   it('reads the length and each index once', () => {
