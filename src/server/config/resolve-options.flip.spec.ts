@@ -163,20 +163,33 @@ describe('options read once, under a getter that answers differently on each rea
     client.disconnect()
   })
 
-  // Scenario: the cluster blocks themselves answer once, then `undefined`.
-  // Rule: the options, their node options and the node list are each read once.
-  it.each([
-    ['options', 'options'],
-    ['nodes', 'nodes']
-  ])('cluster.%s', (key) => {
-    const good = key === 'nodes' ? NODES : { lazyConnect: true, redisOptions: { password: 'kept' } }
+  // Scenario: `cluster.options` answers once, then `undefined`.
+  // Rule: the options are read once, so the node options they carry survive.
+  it('cluster.options is read once', () => {
     const base = {
       nodes: NODES,
       options: { lazyConnect: true, redisOptions: { password: 'kept' } }
     }
-    const client = clientOf({ mode: 'cluster', cluster: flipping(base, key, good) })
+    const cluster = flipping(base, 'options', base.options)
+    const client = clientOf({ mode: 'cluster', cluster })
 
     expect(nodeOptions(client)['password']).toBe('kept')
+    client.disconnect()
+  })
+
+  // Scenario: `cluster.nodes` answers the node list once, then an empty list.
+  // Rule: the getter is read exactly once and the client keeps the first list as its seed nodes.
+  it('cluster.nodes is read once and the client keeps that list', () => {
+    let reads = 0
+    const cluster = { options: { lazyConnect: true } }
+    Object.defineProperty(cluster, 'nodes', {
+      enumerable: true,
+      get: (): unknown => (reads++ === 0 ? NODES : [])
+    })
+    const client = clientOf({ mode: 'cluster', cluster })
+
+    expect((client as unknown as { startupNodes: unknown[] }).startupNodes).toEqual(NODES)
+    expect(reads).toBe(1)
     client.disconnect()
   })
 
