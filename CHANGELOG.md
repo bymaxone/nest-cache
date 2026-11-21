@@ -7,6 +7,8 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.37] - 2026-11-21
+
 ### Fixed
 
 - An object entry of `tls.key` or `tls.pfx` (`{ pem, passphrase }`, `{ buf, passphrase }`) is copied by name once the options are resolved: its bytes like the other key material and its passphrase, which must be a string; another key in it is refused as `INVALID_OPTIONS` naming the entry by position (`tls.key[0] has a key that is not pem or passphrase`). The entry stayed by reference, so a host that swapped its bytes after boot changed the identity the next reconnect presented. A `KeyObject` and a `secureContext` stay by reference; any other object, a class instance or one made over a prototype, is read by name and copied.
@@ -14,7 +16,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - A script given as an array, even with a `name` and a `lua` on it, and a `natMap` that is an array, a string or a number are refused as `INVALID_OPTIONS`. A script `name` or `lua` made only of blanks or invisible characters (the Unicode default-ignorable set: zero-width characters, joiners, word joiner, byte order mark, soft hyphen, direction marks, Hangul filler) is refused like an empty one, in `scripts` and in `register`.
 - A refusal of an option that holds a credential (`password`, `username`, `sentinelPassword`, `url`, a `passphrase`) reports a number as the type only (`received: 'a number'`). It printed the number, so a numeric password given to the wrong option appeared in the error. A number in an option that holds a quantity is still printed as itself.
 
-  **Apply to a consumer:** a host that passed a script as an array, a `natMap` that is not an object or a function, a key entry with a key other than `pem` and `passphrase`, a pfx entry with a key other than `buf` and `passphrase`, or a passphrase that is not a string, or a script text made only of invisible characters, now gets `cache.invalid_options` when the options are resolved, or when `register` is called. A host that read a number from `details.received` of a credential option reads `'a number'`. No declaration changes.
+  **Apply to a consumer:** a host that passed a script as an array, a `natMap` that is not an object or a function, a key entry with a key other than `pem` and `passphrase`, a pfx entry with a key other than `buf` and `passphrase`, or a passphrase that is not a string, or a script text made only of characters that print as nothing, now gets `cache.invalid_options` when the options are resolved, or when `register` is called. A host that read a number from `details.received` of a credential option reads `'a number'`. A host that changes `tls.ticketKeys`, `tls.session`, `tls.dhparam`, `tls.ALPNProtocols` or a key or pfx object entry (a class instance included) after boot no longer reaches the next reconnect; set them before the module is registered. No declaration changes.
 
 ## [1.2.36] - 2026-11-21
 
@@ -1187,7 +1189,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.36...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.37...HEAD
+[1.2.37]: https://github.com/bymaxone/nest-cache/compare/v1.2.36...v1.2.37
 [1.2.36]: https://github.com/bymaxone/nest-cache/compare/v1.2.35...v1.2.36
 [1.2.35]: https://github.com/bymaxone/nest-cache/compare/v1.2.34...v1.2.35
 [1.2.34]: https://github.com/bymaxone/nest-cache/compare/v1.2.33...v1.2.34
