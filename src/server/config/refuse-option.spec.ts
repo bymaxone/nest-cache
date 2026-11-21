@@ -5,6 +5,7 @@
  */
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS } from '../connection/copy-cluster-options'
 import { refuseOption } from './refuse-option'
 
 function thrownBy(fn: () => never): CacheException {
@@ -60,5 +61,103 @@ describe('refuseOption', () => {
     expect(thrownBy(() => refuseOption('connection.port', 'r', 70000)).details).toMatchObject({
       received: 70000
     })
+  })
+})
+
+/** The driver options that are not credentials. A driver option added later is not in this list. */
+const NOT_CREDENTIALS = [
+  'Connector',
+  'autoPipeliningIgnoredCommands',
+  'autoResendUnfulfilledCommands',
+  'autoResubscribe',
+  'blockingTimeout',
+  'blockingTimeoutGrace',
+  'clientInfoTag',
+  'clusterNodeRetryStrategy',
+  'clusterRetryStrategy',
+  'commandQueue',
+  'commandTimeout',
+  'connectTimeout',
+  'connectionName',
+  'db',
+  'disableClientInfo',
+  'disconnectTimeout',
+  'dnsLookup',
+  'enableAutoPipelining',
+  'enableOfflineQueue',
+  'enableReadyCheck',
+  'enableTLSForSentinelMode',
+  'failoverDetector',
+  'family',
+  'himportFieldsets',
+  'keepAlive',
+  'keyPrefix',
+  'lazyConnect',
+  'maxLoadingRetryTime',
+  'maxRedirections',
+  'maxRetriesPerRequest',
+  'monitor',
+  'name',
+  'natMap',
+  'noDelay',
+  'offlineQueue',
+  'preferredSlaves',
+  'protocol',
+  'reconnectOnError',
+  'redisOptions',
+  'replyMapping',
+  'resolveSrv',
+  'retryDelayOnClusterDown',
+  'retryDelayOnFailover',
+  'retryDelayOnMoved',
+  'retryDelayOnTryAgain',
+  'role',
+  'scaleReads',
+  'scripts',
+  'sentinelCommandTimeout',
+  'sentinelMaxConnections',
+  'sentinelReconnectStrategy',
+  'sentinelRetryStrategy',
+  'sentinelTLS',
+  'shardedSubscribers',
+  'showFriendlyErrorStack',
+  'slotsRefreshInterval',
+  'slotsRefreshTimeout',
+  'socketTimeout',
+  'stringNumbers',
+  'tls',
+  'updateSentinels',
+  'useSRVRecords'
+]
+
+describe('the options that hold a credential', () => {
+  const driver = [
+    ...new Set([...Object.keys(CLUSTER_OPTION_KEYS), ...Object.keys(REDIS_OPTION_KEYS)])
+  ]
+  const credentials = driver.filter((name) => !NOT_CREDENTIALS.includes(name))
+
+  // Scenario: every driver option is either a known non-credential or reported as a credential.
+  // Rule: an option the driver adds that is neither fails here until it is classified, so a credential
+  // named in a way the check does not recognise is never printed by accident.
+  it('are exactly the driver options that are not on the list of non-credentials', () => {
+    expect(credentials.sort()).toEqual([
+      'password',
+      'sentinelPassword',
+      'sentinelUsername',
+      'username'
+    ])
+  })
+
+  it.each([
+    'password',
+    'sentinelPassword',
+    'sentinelUsername',
+    'username',
+    'authToken',
+    'apiSecret'
+  ])('report a number given as %s as a number', (name) => {
+    expect(
+      thrownBy(() => refuseOption(`cluster.options.redisOptions.${name}`, 'r', 12345)).details
+    ).toMatchObject({ received: 'a number' })
   })
 })
