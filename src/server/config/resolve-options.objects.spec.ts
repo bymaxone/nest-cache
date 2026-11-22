@@ -373,6 +373,14 @@ describe('cluster.options.himportFieldsets', () => {
     expect(result).toEqual([{ name: 'n1', fields: ['f1'] }])
   })
 
+  // Scenario: an entry of the list is not an object: a string, null, a list.
+  // Rule: it is kept as it is, for the driver to refuse; the copy neither turns it into an object nor drops it.
+  it('keeps an entry that is not an object for the driver to refuse', () => {
+    const nested: unknown[] = []
+
+    expect(held(['text', null, nested, 5])).toEqual(['text', null, nested, 5])
+  })
+
   it('accepts an absent list', () => {
     expect(() => resolve(cluster(undefined))).not.toThrow()
   })
