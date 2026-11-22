@@ -128,8 +128,16 @@ describe('BymaxCacheModule.forRoot', () => {
     const events = { onEvent: jest.fn() }
     const mod = BymaxCacheModule.forRoot({ connection: { host: 'h' }, events })
 
-    const provider = findProvider(mod.providers ?? [], BYMAX_CACHE_EVENTS)
-    expect(provider).toEqual({ provide: BYMAX_CACHE_EVENTS, useValue: events })
+    const provider = findProvider(mod.providers ?? [], BYMAX_CACHE_EVENTS) as {
+      provide: symbol
+      useValue: { onEvent: (event: string, data: object) => void }
+    }
+    expect(provider.provide).toBe(BYMAX_CACHE_EVENTS)
+    // The bag is read once into an object without a prototype, so the provided hook is the host's,
+    // bound to it, and not the host's object itself.
+    provider.useValue.onEvent('x', { a: 1 })
+    expect(events.onEvent).toHaveBeenCalledWith('x', { a: 1 })
+    expect(Object.getPrototypeOf(provider.useValue)).toBeNull()
   })
 
   // Without an events bag, the provider must fall back to `null` (the nullish

@@ -7,7 +7,7 @@
  */
 import { runInNewContext } from 'node:vm'
 
-import { bare, readKey } from './read-key'
+import { bare, readHooks, readKey } from './read-key'
 
 /** Plants `key` on `Object.prototype` for the length of `run`. */
 function planted<T>(key: string, value: unknown, run: () => T): T {
@@ -107,5 +107,37 @@ describe('bare', () => {
   it('does not change a value that is not an object', () => {
     expect(bare('text')).toBe('text')
     expect(bare(undefined)).toBeUndefined()
+  })
+})
+
+describe('readHooks', () => {
+  it('binds a hook to the host object so that a hook that uses this keeps working', () => {
+    class Events {
+      seen: string[] = []
+      onEvent(event: string): void {
+        this.seen.push(event)
+      }
+    }
+    const events = new Events()
+    const hooks = readHooks(events) as { onEvent: (event: string) => void }
+
+    hooks.onEvent('ready')
+
+    expect(events.seen).toEqual(['ready'])
+    expect(Object.getPrototypeOf(hooks)).toBeNull()
+  })
+
+  it('holds only the hooks the host put, never one planted on Object.prototype', () => {
+    const spy = jest.fn()
+    const hooks = planted('onQueue', spy, () => readHooks({ onEvent: () => undefined })) as object
+
+    expect(Object.keys(hooks)).toEqual(['onEvent'])
+  })
+
+  it('keeps a value that is not a function as it is, and one that is not an object', () => {
+    expect((readHooks({ onEvent: 'text' }) as Record<string, unknown>)['onEvent']).toBe('text')
+    expect(readHooks(undefined)).toBeUndefined()
+    expect(readHooks(null)).toBeNull()
+    expect(readHooks('events')).toBe('events')
   })
 })

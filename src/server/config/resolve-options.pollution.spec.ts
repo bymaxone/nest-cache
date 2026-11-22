@@ -38,6 +38,8 @@ const SHAPES: Record<string, () => Raw> = {
     scripts: [{ name: 'a', lua: 'return 1' }]
   }),
   url: () => ({ connection: { url: 'redis://h:6379' } }),
+  events: () => ({ connection: { host: 'h' }, events: { onEvent: (): void => undefined } }),
+  eventsEmpty: () => ({ connection: { host: 'h' }, events: {} }),
   sentinel: () => ({
     mode: 'sentinel',
     sentinel: {
@@ -78,7 +80,10 @@ const KEYS = [
     'readOnly',
     'pem',
     'buf',
-    'passphrase'
+    'passphrase',
+    'onEvent',
+    'onOperation',
+    'onQueue'
   ])
 ].sort()
 
@@ -198,5 +203,40 @@ describe('a key the host did put', () => {
     )
 
     expect(resolveOptions(proxy as unknown as BymaxCacheModuleOptions).namespace).toBe('fromProxy')
+  })
+})
+
+describe('a hook planted on Object.prototype', () => {
+  // Scenario: another part of the process plants onEvent, onOperation or onQueue, and the host's events
+  // bag does not hold it. Rule: it is never called: the hooks are read once at boot, from the host's bag.
+  it.each(['onEvent', 'onOperation', 'onQueue'])('is not called when %s is planted', (hook) => {
+    const spy = jest.fn()
+    Object.defineProperty(Object.prototype, hook, {
+      value: spy,
+      configurable: true,
+      writable: true
+    })
+    try {
+      const resolved = resolveOptions({
+        connection: { host: 'h' },
+        events: {}
+      } as unknown as BymaxCacheModuleOptions)
+
+      expect(Reflect.get(resolved.events as object, hook)).toBeUndefined()
+      resolved.events?.onEvent?.('ready', {})
+      resolved.events?.onOperation?.('get', 'ok' as never)
+      resolved.events?.onQueue?.(1)
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      Reflect.deleteProperty(Object.prototype, hook)
+    }
+  })
+
+  it('leaves the bag alone when the host gave none', () => {
+    const resolved = resolveOptions({
+      connection: { host: 'h' }
+    } as unknown as BymaxCacheModuleOptions)
+
+    expect(resolved.events).toBeUndefined()
   })
 })

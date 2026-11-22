@@ -28,7 +28,7 @@ import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { isUnset } from './is-unset'
 import { takeOwnRefusal, refusal } from './own-refusals'
-import { bare, readKey } from './read-key'
+import { bare, readHooks, readKey } from './read-key'
 import { refuseOption, refuseValue } from './refuse-option'
 import { requireText } from './require-text'
 import type { ResolvedOptions } from './resolved-options'
@@ -727,7 +727,8 @@ export function resolveOptions(options: BymaxCacheModuleOptions): Readonly<Resol
       connection: bare(copied.connection),
       sentinel: bare(copied.sentinel),
       cluster: bare(copied.cluster),
-      scripts: bare(copied.scripts)
+      scripts: bare(copied.scripts),
+      events: readHooks(copied.events)
     })
     validateOptions(snapshot)
     return applyDefaults(snapshot)

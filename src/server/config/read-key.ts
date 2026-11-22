@@ -76,3 +76,37 @@ export function bare(value: unknown): unknown {
   }
   return copy
 }
+
+/** The hooks of `ICacheEvents`, the only names the library calls. */
+const HOOKS = ['onEvent', 'onOperation', 'onQueue'] as const
+
+/**
+ * Reads the hooks of the host's `events` once, at boot, into an object without a prototype: a hook
+ * found only on `Object.prototype` is not the host's and is never called, and the ones the host put are
+ * bound to its own object so that a hook which uses `this` keeps working. A value that is not an object
+ * is kept for validation.
+ *
+ * @param events - The `events` option as the host wrote it.
+ * @returns The prototype-less hooks, or the value itself when it is not an object.
+ */
+export function readHooks(events: unknown): unknown {
+  if (typeof events !== 'object' || events === null) {
+    return events
+  }
+  const copy: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+  for (const name of HOOKS) {
+    const hook: unknown = readKey(events, name)
+    if (hook !== undefined) {
+      Object.defineProperty(copy, name, {
+        value:
+          typeof hook === 'function'
+            ? (hook as (...args: unknown[]) => unknown).bind(events)
+            : hook,
+        enumerable: true,
+        writable: true,
+        configurable: true
+      })
+    }
+  }
+  return copy
+}
