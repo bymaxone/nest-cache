@@ -8,6 +8,8 @@
  * redirect or reconfigure the connection. Giving the object an own key, with the value `undefined`, for
  * every name the driver reads shadows what is planted: `undefined` is what an absent option is to it.
  */
+import { types } from 'node:util'
+
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS } from './copy-cluster-options'
@@ -61,9 +63,16 @@ const STANDARD_DESCRIPTORS: ReadonlyMap<string, PropertyDescriptor | undefined> 
 /** `Function.prototype.toString` as it was when this module loaded. */
 const fnToString = Function.prototype.toString
 
-/** Whether `value` is a function the engine implements, not one written in JavaScript. */
+/**
+ * Whether `value` is a function the engine implements, not one written in JavaScript and not a proxy,
+ * which `Function.prototype.toString` also reports as native.
+ */
 function isNative(value: unknown): boolean {
-  return typeof value === 'function' && /\{\s*\[native code\]\s*\}\s*$/.test(fnToString.call(value))
+  return (
+    typeof value === 'function' &&
+    !types.isProxy(value) &&
+    /\{\s*\[native code\]\s*\}\s*$/.test(fnToString.call(value))
+  )
 }
 
 /**
@@ -117,7 +126,8 @@ function isOverwritten(name: string): boolean {
  * names are an allowlist, so a replaced value would otherwise keep the count at zero, and so does a standard
  * name that was already replaced when this module loaded (not a native function with its own name, or
  * `__proto__` without a native getter and setter): the refusal is the same at every use, not a throw at
- * import, so a host that only imports the types is not affected.
+ * import, so a host that only imports the types is not affected. A script that impersonates the engine
+ * before the import (a replaced `Function.prototype.toString`) is out of reach of this check.
  *
  * It runs when the manager is built, when each client is built and in the tick that opens every socket,
  * on the first connect and on every reconnect (the connector). It does not cover `Array.prototype`,

@@ -289,6 +289,18 @@ describe('a standard key that was already replaced when the module loaded', () =
     }
   )
 
+  // Scenario: the replacement is a Proxy over the native function, which reports itself as native and
+  // forwards the name.
+  // Rule: it is refused too.
+  it('refuses a proxy over the native function in place of a standard key', () => {
+    const error = loadedUnder('hasOwnProperty', (original) => ({
+      ...original,
+      value: new Proxy(original.value as object, {})
+    }))
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+
   it('refuses an accessor in place of a standard value before the load', () => {
     const error = loadedUnder('toLocaleString', () => ({
       get: () => undefined,
