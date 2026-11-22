@@ -164,15 +164,28 @@ const KEY_MATERIAL = [
   'ALPNProtocols'
 ] as const
 
+/** Whether a value is an `ArrayBuffer` or a `SharedArrayBuffer`, which a view reads and a copy must own. */
+function isBuffer(value: unknown): value is ArrayBuffer | SharedArrayBuffer {
+  return value instanceof ArrayBuffer || value instanceof SharedArrayBuffer
+}
+
 /**
  * Copies bytes the host could write to later: any view of an `ArrayBuffer` (a `Buffer`, a `Uint8Array`, a
- * `DataView`) and an `ArrayBuffer` itself become a `Buffer` of their own; anything else is kept.
+ * `DataView`), an `ArrayBuffer` and a `SharedArrayBuffer` (another thread can write to one) become a
+ * `Buffer` of their own; anything else is kept.
  */
 function copyBytes(value: unknown): unknown {
   if (ArrayBuffer.isView(value)) {
     return Buffer.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
   }
-  return value instanceof ArrayBuffer ? Buffer.from(new Uint8Array(value)) : value
+  return isBuffer(value) ? Buffer.from(new Uint8Array(value)) : value
+}
+
+/** The keys of an ioredis script definition, as a complete record. */
+const SCRIPT_DEFINITION_KEYS: Readonly<Record<'lua' | 'numberOfKeys' | 'readOnly', true>> = {
+  lua: true,
+  numberOfKeys: true,
+  readOnly: true
 }
 
 /** The tls options whose entries may be objects, with the field that holds their bytes. */
@@ -183,7 +196,7 @@ const ENTRY_BYTES = { key: 'pem', pfx: 'buf' } as const
  * passphrase, which must be a string. A `KeyObject` is kept as it is, and so are bytes (copied through
  * {@link copyBytes}) and anything that is not an object; every other object, whatever its prototype, is
  * read by name and copied, and one with another own key is refused, so nothing the driver would read
- * goes uncopied.
+ * goes uncopied. An entry that holds no bytes is refused too, which a proxy over a `KeyObject` is.
  *
  * @param entry - The entry as the host wrote it.
  * @param option - The list's name, echoed with the entry's position.
@@ -198,7 +211,7 @@ function copyKeyEntry(entry: unknown, option: string, field: string, index: numb
     !isObject(entry) ||
     Array.isArray(entry) ||
     ArrayBuffer.isView(entry) ||
-    entry instanceof ArrayBuffer ||
+    isBuffer(entry) ||
     types.isKeyObject(entry)
   ) {
     return copyBytes(entry)
@@ -212,6 +225,12 @@ function copyKeyEntry(entry: unknown, option: string, field: string, index: numb
     refuseOption(`${where}.passphrase`, 'must be a string', passphrase)
   }
   const bytes: unknown = Reflect.get(entry, field)
+  if (bytes === undefined) {
+    refuseOption(where, `has no ${field}`, entry)
+  }
+  if (typeof bytes !== 'string' && !ArrayBuffer.isView(bytes) && !isBuffer(bytes)) {
+    refuseOption(`${where}.${field}`, 'must be bytes or a string', bytes)
+  }
   return { [field]: copyBytes(bytes), ...(passphrase !== undefined && { passphrase }) }
 }
 
@@ -229,7 +248,13 @@ function copyMaterial(material: unknown, key: (typeof KEY_MATERIAL)[number]): un
     key === 'key' || key === 'pfx'
       ? copyKeyEntry(entry, option, ENTRY_BYTES[key], index)
       : copyBytes(entry)
-  return Array.isArray(material) ? copyList(material, option, copyOne) : copyOne(material, 0)
+  return Array.isArray(material)
+    ? copyList(material, option, (entry, index) =>
+        Array.isArray(entry)
+          ? refuseOption(`${option}[${index}]`, 'must not be a list', entry)
+          : copyOne(entry, index)
+      )
+    : copyOne(material, 0)
 }
 
 /**
@@ -313,6 +338,67 @@ function copyNatMap(map: unknown, option: string): unknown {
 }
 
 /**
+ * Copies a `himportFieldsets` entry by name: its `name` through {@link copyBytes} and its `fields` list
+ * the same way, so a getter of the host is read here once and never inside the driver. An entry that is
+ * not an object is kept for the driver to refuse.
+ *
+ * @param entry - The entry as the host wrote it.
+ * @param index - The entry's position.
+ * @returns A plain copy, or the entry itself when it is not an object.
+ * @throws {CacheException} `INVALID_OPTIONS` for a hole or an `undefined`, in the list or in the fields.
+ */
+function copyFieldset(entry: unknown, index: number): unknown {
+  if (entry === undefined) {
+    refuseOption(`cluster.options.himportFieldsets[${index}]`, 'must not be empty', entry)
+  }
+  if (!isObject(entry) || Array.isArray(entry)) {
+    return entry
+  }
+  return {
+    name: copyBytes(Reflect.get(entry, 'name')),
+    fields: copyList(
+      Reflect.get(entry, 'fields'),
+      'cluster.options.himportFieldsets[].fields',
+      (field, at) =>
+        field === undefined
+          ? refuseOption(
+              `cluster.options.himportFieldsets[].fields[${at}]`,
+              'must not be empty',
+              field
+            )
+          : copyBytes(field)
+    )
+  }
+}
+
+/**
+ * Copies a `cluster.options.scripts` map by name: each definition becomes its `lua`, `numberOfKeys`
+ * and `readOnly`, read once, so the driver never reaches a getter of the host while it builds the
+ * client. A value that is not an object, and a definition that is not an object, are kept for the
+ * driver to refuse.
+ *
+ * @param scripts - The map as the host wrote it.
+ * @returns A plain copy, or the value itself when it is not an object.
+ */
+function copyScriptMap(scripts: unknown): unknown {
+  if (!isObject(scripts) || Array.isArray(scripts)) {
+    return scripts
+  }
+  const names = Object.keys(scripts)
+  if (names.length > MAX_LIST_ENTRIES) {
+    refuseOption('cluster.options.scripts', 'has too many entries', names.length, {
+      max: MAX_LIST_ENTRIES
+    })
+  }
+  return Object.fromEntries(
+    names.map((name) => {
+      const definition: unknown = Reflect.get(scripts, name)
+      return [name, readPlain(definition, SCRIPT_DEFINITION_KEYS)]
+    })
+  )
+}
+
+/**
  * Copies the `cluster.options` group and its `redisOptions`, each read once, with the `tls` and
  * `natMap` objects the driver reads live copied as well.
  *
@@ -329,6 +415,12 @@ function readClusterOptions(options: unknown): unknown {
   return {
     ...copy,
     natMap: copyNatMap(copy.natMap, 'cluster.options.natMap'),
+    himportFieldsets: copyList(
+      copy.himportFieldsets,
+      'cluster.options.himportFieldsets',
+      copyFieldset
+    ),
+    scripts: copyScriptMap(copy.scripts),
     ...(node !== undefined && {
       redisOptions: {
         ...node,

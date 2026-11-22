@@ -140,6 +140,33 @@ describe.each([
     expect(held[0]).toEqual({ [bytes]: 'first', passphrase: 'p' })
   })
 
+  // Scenario: an entry has no bytes: only a passphrase, or a proxy over a key object (which no check can see through).
+  // Rule: it is refused at boot, naming the entry, rather than held as an entry with undefined bytes that
+  // the driver would refuse late.
+  it('refuses an entry that holds no bytes', () => {
+    const throughProxy = new Proxy(createSecretKey(Buffer.from('secret')), {})
+
+    for (const entry of [{ passphrase: 'p' }, {}, new Map(), new Date(0), throughProxy]) {
+      expect(() => heldTls({ [key]: [entry] })).toThrow(refusing(`tls.${key}[0] has no ${bytes}`))
+    }
+  })
+
+  // Scenario: a list of key material holds a list.
+  // Rule: it is refused naming the entry: the driver takes bytes, a string or an object there, not a list.
+  it('refuses a list inside the list', () => {
+    expect(() => heldTls({ [key]: [['nested']] })).toThrow(
+      refusing(`tls.${key}[0] must not be a list`)
+    )
+  })
+
+  // Scenario: the bytes of an entry are not bytes: null, a number, an object, a boolean.
+  // Rule: refused naming the field, as only bytes or a string reach the driver there.
+  it.each([null, 5, {}, true, [1]])('refuses %p as the bytes of an entry', (value) => {
+    expect(() => heldTls({ [key]: [{ [bytes]: value }] })).toThrow(
+      refusing(`tls.${key}[0].${bytes} must be bytes or a string`)
+    )
+  })
+
   it('keeps a key object as it is', () => {
     const entry = createSecretKey(Buffer.from('secret'))
 
@@ -163,6 +190,23 @@ describe.each(['ticketKeys', 'session', 'dhparam', 'ALPNProtocols'])('tls.%s', (
     expect(heldTls({ [name]: 'text' })[name]).toBe('text')
   })
 })
+
+// Scenario: the host hands a SharedArrayBuffer, which another thread can write to after boot.
+// Rule: it is copied into a Buffer of its own, like any other view of bytes.
+describe.each(['ca', 'cert', 'ticketKeys', 'key', 'pfx'])(
+  'a SharedArrayBuffer given as tls.%s',
+  (name) => {
+    it('is copied', () => {
+      const shared = new SharedArrayBuffer(4)
+      new Uint8Array(shared).set([1, 2, 3, 4])
+      const held = heldTls({ [name]: shared })[name] as Buffer
+      new Uint8Array(shared).fill(0)
+
+      expect(Buffer.isBuffer(held)).toBe(true)
+      expect([...held]).toEqual([1, 2, 3, 4])
+    })
+  }
+)
 
 describe('tls.ALPNProtocols as a list', () => {
   it('is copied by position', () => {
@@ -233,7 +277,16 @@ describe('a script text made of invisible characters', () => {
     ['a mongolian vowel separator', '᠎'],
     ['a soft hyphen', '­'],
     ['the direction marks', '‎‏'],
-    ['a hangul filler', 'ㅤ']
+    ['a hangul filler', 'ㅤ'],
+    ['a braille blank', '⠀'],
+    ['a next line', ''],
+    ['a control character', ''],
+    ['a delete and an application program command', ''],
+    ['an object replacement character', '￼'],
+    ['an interlinear annotation anchor', '￹'],
+    ['an arabic letter mark', '؜'],
+    ['an arabic number sign', '؀'],
+    ['a tab, a carriage return and a line feed', '\t\r\n']
   ])('refuses %s as a name or a source', (_label, blank) => {
     expect(() =>
       resolve({ connection: { host: 'h' }, scripts: [{ name: blank, lua: 'return 1' }] })
@@ -247,5 +300,190 @@ describe('a script text made of invisible characters', () => {
     expect(() =>
       resolve({ connection: { host: 'h' }, scripts: [{ name: '​a', lua: 'return 1' }] })
     ).not.toThrow()
+  })
+})
+
+describe('cluster.options.scaleReads', () => {
+  const cluster = (options: Record<string, unknown>): Record<string, unknown> => ({
+    mode: 'cluster',
+    cluster: { nodes: [{ host: 'a', port: 7000 }], options }
+  })
+
+  // Scenario: the host spells scaleReads wrong or gives it a value of another kind.
+  // Rule: refused naming the option; `received` is the type of a string, null or an object, and a number
+  // as itself (a quantity, not a secret), never the driver's own message.
+  it.each([
+    ['masters', 'a string'],
+    [5, 5],
+    [null, 'null'],
+    [{}, 'an object']
+  ])('refuses %p, naming the option and reporting %p as received', (value, received) => {
+    const error = (() => {
+      try {
+        resolve(cluster({ scaleReads: value }))
+      } catch (thrown) {
+        return thrown as { details: Record<string, unknown> }
+      }
+      throw new Error('not refused')
+    })()
+
+    expect(error.details).toMatchObject({
+      reason: "cluster.options.scaleReads must be 'all', 'master', 'slave' or a function",
+      option: 'cluster.options.scaleReads',
+      received
+    })
+    expect(JSON.stringify(error.details)).not.toContain('masters')
+  })
+
+  it.each(['all', 'master', 'slave', (): string => 'all'])('accepts %p', (value) => {
+    expect(() => resolve(cluster({ scaleReads: value }))).not.toThrow()
+  })
+
+  it('accepts an absent value', () => {
+    expect(() => resolve(cluster({}))).not.toThrow()
+  })
+})
+
+describe('cluster.options.himportFieldsets', () => {
+  const cluster = (himportFieldsets: unknown): Record<string, unknown> => ({
+    mode: 'cluster',
+    cluster: { nodes: [{ host: 'a', port: 7000 }], options: { himportFieldsets } }
+  })
+  const held = (himportFieldsets: unknown): unknown[] =>
+    (
+      resolve(cluster(himportFieldsets)).cluster as unknown as {
+        options: { himportFieldsets: unknown[] }
+      }
+    ).options.himportFieldsets
+
+  // Scenario: the host gives a value that is not a list.
+  // Rule: refused naming the option; only a list reaches the driver.
+  it.each(['text', 5, {}, true])('refuses %p', (value) => {
+    expect(() => resolve(cluster(value))).toThrow(
+      refusing('cluster.options.himportFieldsets must be a list')
+    )
+  })
+
+  // Scenario: the host changes the list or an entry after boot.
+  // Rule: the held list is a copy read once; a change afterwards does not reach it.
+  it('copies the list and each entry', () => {
+    const fields = ['f1']
+    const entry = { name: 'n1', fields }
+    const list = [entry]
+    const result = held(list)
+    entry.name = 'later'
+    fields[0] = 'later'
+    list.push({ name: 'n2', fields: [] })
+
+    expect(result).toEqual([{ name: 'n1', fields: ['f1'] }])
+  })
+
+  // Scenario: an entry of the list is not an object: a string, null, a list.
+  // Rule: it is kept as it is, for the driver to refuse; the copy neither turns it into an object nor drops it.
+  it('keeps an entry that is not an object for the driver to refuse', () => {
+    const nested: unknown[] = []
+
+    expect(held(['text', null, nested, 5])).toEqual(['text', null, nested, 5])
+  })
+
+  it('accepts an absent list', () => {
+    expect(() => resolve(cluster(undefined))).not.toThrow()
+  })
+
+  /** The details of the refusal a call throws, for the bound it prints. */
+  const refusedWith = (himportFieldsets: unknown): Record<string, unknown> => {
+    try {
+      resolve(cluster(himportFieldsets))
+    } catch (thrown) {
+      return (thrown as { details: Record<string, unknown> }).details
+    }
+    throw new Error('not refused')
+  }
+  const entries = (count: number): unknown[] =>
+    Array.from({ length: count }, (_, index) => ({ name: `n${index}`, fields: [] }))
+
+  // Scenario: the list, or the fields of an entry, holds more than 1 000 entries.
+  // Rule: refused before any is copied, naming the list and printing the count and the bound; 1 000 pass.
+  it('refuses a list of 1 001 entries, naming it and the bound', () => {
+    expect(refusedWith(entries(1001))).toMatchObject({
+      reason: 'cluster.options.himportFieldsets has too many entries',
+      received: 1001,
+      max: 1000
+    })
+  })
+
+  it('refuses the fields of an entry past 1 000, naming them and the bound', () => {
+    expect(refusedWith([{ name: 'n', fields: new Array(1001).fill('f') }])).toMatchObject({
+      reason: 'cluster.options.himportFieldsets[].fields has too many entries',
+      received: 1001,
+      max: 1000
+    })
+  })
+
+  it('accepts 1 000 entries and 1 000 fields', () => {
+    expect(() => resolve(cluster(entries(1000)))).not.toThrow()
+    expect(() => resolve(cluster([{ name: 'n', fields: new Array(1000).fill('f') }]))).not.toThrow()
+  })
+
+  // Scenario: a hole, or an undefined, in the list or in the fields.
+  // Rule: refused by position, never dropped or turned into an entry the driver would skip.
+  it('refuses a hole and an undefined in the list and in the fields', () => {
+    const sparse: unknown[] = new Array<unknown>(3)
+    sparse[0] = { name: 'a', fields: [] }
+    sparse[2] = { name: 'b', fields: [] }
+
+    expect(() => resolve(cluster(sparse))).toThrow(
+      refusing('cluster.options.himportFieldsets[1] must not be empty')
+    )
+    expect(() => resolve(cluster([undefined]))).toThrow(
+      refusing('cluster.options.himportFieldsets[0] must not be empty')
+    )
+    expect(() => resolve(cluster([{ name: 'a', fields: ['f', undefined] }]))).toThrow(
+      refusing('cluster.options.himportFieldsets[].fields[1] must not be empty')
+    )
+  })
+})
+
+describe('cluster.options.scripts', () => {
+  const cluster = (scripts: unknown): Record<string, unknown> => ({
+    mode: 'cluster',
+    cluster: { nodes: [{ host: 'a', port: 7000 }], options: { scripts } }
+  })
+  const definitions = (count: number): Record<string, unknown> =>
+    Object.fromEntries(Array.from({ length: count }, (_, i) => [`s${i}`, { lua: 'return 1' }]))
+
+  // Scenario: the map holds more than 1 000 scripts.
+  // Rule: refused before any definition is read, naming the map and printing the count and the bound.
+  it('refuses 1 001 scripts, naming the map and the bound', () => {
+    const details = (() => {
+      try {
+        resolve(cluster(definitions(1001)))
+      } catch (thrown) {
+        return (thrown as { details: Record<string, unknown> }).details
+      }
+      throw new Error('not refused')
+    })()
+
+    expect(details).toMatchObject({
+      reason: 'cluster.options.scripts has too many entries',
+      received: 1001,
+      max: 1000
+    })
+  })
+
+  // Scenario: a definition of the map is not an object: a string, null, a number.
+  // Rule: it is kept as it is, for the driver to refuse; the copy neither turns it into an object nor drops it.
+  it('keeps a definition that is not an object for the driver to refuse', () => {
+    const held = (
+      resolve(cluster({ a: 'text', b: null, c: 5 })).cluster as unknown as {
+        options: { scripts: Record<string, unknown> }
+      }
+    ).options.scripts
+
+    expect(held).toEqual({ a: 'text', b: null, c: 5 })
+  })
+
+  it('accepts 1 000 scripts', () => {
+    expect(() => resolve(cluster(definitions(1000)))).not.toThrow()
   })
 })

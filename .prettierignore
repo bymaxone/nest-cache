@@ -17,3 +17,7 @@ src/check-function-length.spec.ts
 src/check-function-length.baseline.spec.ts
 src/check-function-length.key.spec.ts
 scripts/commitlint-no-ai-attribution.cjs
+
+# Canonical copy from bymaxone/.github (script-templates/check-dist-fresh), kept byte-identical for the same reason.
+scripts/check-dist-fresh.mjs
+scripts/check-dist-fresh.test.mjs
