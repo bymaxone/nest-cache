@@ -9,6 +9,8 @@
  */
 import type { ClusterOptions } from 'ioredis'
 
+import { readKey } from '../config/read-key'
+
 type ClusterRedisOptions = NonNullable<ClusterOptions['redisOptions']>
 
 // Stryker disable BooleanLiteral: only the keys of the two records below are read, so flipping a `true` value changes nothing
@@ -126,7 +128,7 @@ function copySet<T extends object>(
   source: T | null | undefined,
   keys: Readonly<Record<keyof T, true>>
 ): Partial<T> {
-  const copy: Partial<T> = {}
+  const copy: Partial<T> = Object.create(null) as Partial<T>
   if (source === undefined || source === null) {
     return copy
   }
@@ -135,7 +137,7 @@ function copySet<T extends object>(
   // defineProperty, not an assignment: an own `__proto__` key (a config parsed from JSON has one) would
   // otherwise run the inherited setter and give the copy that object as its prototype.
   for (const key of Object.keys(keys)) {
-    const value: unknown = Reflect.get(source, key)
+    const value: unknown = readKey(source, key)
     if (value !== undefined && value !== null) {
       put(copy, key, value)
     }
@@ -161,9 +163,9 @@ export function readSet<T extends object>(
   source: T,
   keys: Readonly<Partial<Record<keyof T, true>>>
 ): Partial<T> {
-  const copy: Partial<T> = {}
+  const copy: Partial<T> = Object.create(null) as Partial<T>
   for (const key of Object.keys(keys)) {
-    put(copy, key, Reflect.get(source, key))
+    put(copy, key, readKey(source, key))
   }
   for (const key of Object.keys(source)) {
     if (!Object.hasOwn(keys, key)) {
@@ -181,5 +183,7 @@ export function readSet<T extends object>(
  */
 export function copyClusterOptions(options: ClusterOptions | null | undefined): ClusterOptions {
   const copy = copySet(options, CLUSTER_OPTION_KEYS)
-  return { ...copy, redisOptions: copySet(options?.redisOptions, REDIS_OPTION_KEYS) }
+  return Object.assign(Object.create(null) as ClusterOptions, copy, {
+    redisOptions: copySet(options?.redisOptions, REDIS_OPTION_KEYS)
+  })
 }

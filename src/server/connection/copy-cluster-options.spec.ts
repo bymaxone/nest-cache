@@ -70,8 +70,9 @@ describe('copyClusterOptions', () => {
   })
 
   // Scenario: a host config parsed from JSON carries an own `__proto__` key.
-  // Rule: it lands as a plain own key and the copy keeps its prototype: an assignment would have run
-  // the inherited setter and made every later read see the values of that object.
+  // Rule: it lands as a plain own key and the copy has no prototype, as every copy of the options has
+  // none: an assignment would have run the inherited setter and made every later read see the values of
+  // that object.
   it('copies an own __proto__ key as a plain key, in both groups', () => {
     const parsed = JSON.parse(
       '{"scaleReads":"slave","__proto__":{"inheritedOption":1},"redisOptions":{"db":2,"__proto__":{"inheritedNode":1}}}'
@@ -80,8 +81,8 @@ describe('copyClusterOptions', () => {
     const copy = copyClusterOptions(parsed) as Record<string, unknown>
     const redisOptions = copy['redisOptions'] as Record<string, unknown>
 
-    expect(Object.getPrototypeOf(copy)).toBe(Object.prototype)
-    expect(Object.getPrototypeOf(redisOptions)).toBe(Object.prototype)
+    expect(Object.getPrototypeOf(copy)).toBeNull()
+    expect(Object.getPrototypeOf(redisOptions)).toBeNull()
     expect(Object.keys(copy)).toContain('__proto__')
     expect(Object.keys(redisOptions)).toContain('__proto__')
     expect(copy['inheritedOption']).toBeUndefined()

@@ -28,6 +28,7 @@ import { ESCAPE_CHAR } from '../utils/key-escape'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { isUnset } from './is-unset'
 import { takeOwnRefusal, refusal } from './own-refusals'
+import { bare, readKey } from './read-key'
 import { refuseOption, refuseValue } from './refuse-option'
 import { requireText } from './require-text'
 import type { ResolvedOptions } from './resolved-options'
@@ -674,7 +675,7 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
  * check here until it is listed, so the snapshot cannot miss one. Only the keys are read.
  */
 // Stryker disable BooleanLiteral: only the keys of the record are read, so flipping a `true` value changes nothing
-const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
+export const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
   mode: true,
   connection: true,
   sentinel: true,
@@ -715,11 +716,19 @@ const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> = {
  */
 export function resolveOptions(options: BymaxCacheModuleOptions): Readonly<ResolvedOptions> {
   return readingOptions(() => {
-    const snapshot = snapshotBlocks(
+    const copied = snapshotBlocks(
       Object.fromEntries(
-        Object.keys(OPTION_KEYS).map((key) => [key, Reflect.get(options, key)])
+        Object.keys(OPTION_KEYS).map((key) => [key, readKey(options, key)])
       ) as BymaxCacheModuleOptions
     )
+    // Without a prototype, so that a key planted on `Object.prototype` is not read as an option the host
+    // left out by any step that follows; what the host holds on a class or a prototype was read above.
+    const snapshot = Object.assign(Object.create(null) as BymaxCacheModuleOptions, copied, {
+      connection: bare(copied.connection),
+      sentinel: bare(copied.sentinel),
+      cluster: bare(copied.cluster),
+      scripts: bare(copied.scripts)
+    })
     validateOptions(snapshot)
     return applyDefaults(snapshot)
   })
