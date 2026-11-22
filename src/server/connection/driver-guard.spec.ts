@@ -97,10 +97,12 @@ describe('the manager with a key planted on Object.prototype', () => {
 })
 
 describe('the keys Object.prototype holds by default', () => {
-  // Scenario: this runtime (every Node major the package supports is run by CI) holds a string key on
-  // Object.prototype that the allowlist does not name, or lacks one it names.
-  // Rule: this fails, naming the difference, so that a future ECMAScript or V8 addition breaks CI and not
-  // the hosts that start the cache. The allowlist is the set of names, never a count.
+  // Scenario: the runtime that runs this row holds a string key on Object.prototype that the allowlist does
+  // not name, or lacks one it names.
+  // Rule: this fails, naming the difference, so that an ECMAScript or V8 addition breaks the build of the
+  // library on that runtime and not the hosts that start the cache. The allowlist is the set of names,
+  // never a count. It checks the runtime of the lane that runs it: CI runs one Node version today, so a
+  // matrix over every supported major (engines is >=24) is what would run it on each.
   it('are exactly the allowlist of the guard, by name', () => {
     const held = Object.getOwnPropertyNames(Object.prototype).sort()
     const allowed = [...STANDARD_KEYS].sort()
