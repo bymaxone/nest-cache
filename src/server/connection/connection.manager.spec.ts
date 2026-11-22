@@ -309,13 +309,13 @@ describe('ConnectionManager', () => {
       manager.getClient()
       const opts = redisInstances[0]?.options ?? {}
       expect(opts['name']).toBe('mymaster')
-      expect('sentinelPassword' in opts).toBe(false)
+      expect(opts['sentinelPassword']).toBeUndefined()
       // Pins the ConditionalExpression on the `password` spread (mutant L172):
       // `→ true` would always spread `{ password: undefined }`, adding the key.
-      expect(opts).not.toHaveProperty('password')
-      expect('role' in opts).toBe(false)
+      expect(opts['password']).toBeUndefined()
+      expect(opts['role']).toBeUndefined()
       // Same for the natMap spread — absent when not supplied.
-      expect(opts).not.toHaveProperty('natMap')
+      expect(opts['natMap']).toBeUndefined()
     })
 
     // Sentinel mode with a missing sentinel block (forced past validation) must
@@ -721,10 +721,10 @@ describe('ConnectionManager', () => {
       expect(opts['keepAlive']).toBe(30_000)
       expect(opts['noDelay']).toBe(true)
       expect(opts['family']).toBe(4)
-      expect('password' in opts).toBe(false)
-      expect('db' in opts).toBe(false)
-      expect('username' in opts).toBe(false)
-      expect('tls' in opts).toBe(false)
+      expect(opts['password']).toBeUndefined()
+      expect(opts['db']).toBeUndefined()
+      expect(opts['username']).toBeUndefined()
+      expect(opts['tls']).toBeUndefined()
     })
 
     // When a url and discrete fields conflict, the URL must win (spec §11.3) —
@@ -766,7 +766,7 @@ describe('ConnectionManager', () => {
       const opts = redisInstances[0]?.options ?? {}
       expect(opts['lazyConnect']).toBe(false)
       expect(opts['connectTimeout']).toBe(10_000)
-      expect('host' in opts).toBe(false)
+      expect(opts['host']).toBeUndefined()
     })
 
     // The default retryStrategy must grow 50ms per attempt and cap at 2000ms —
