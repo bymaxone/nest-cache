@@ -9,10 +9,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Fixed
 
-- A `tls.key` or `tls.pfx` object entry that holds no bytes (only a passphrase, an empty object, or a proxy over a `KeyObject`, which cannot be recognised through the proxy) is refused as `INVALID_OPTIONS` naming the entry (`tls.key[0] has no pem`) when the options are resolved. It was held with undefined bytes, so Node refused it at connect, late and without the library's code in the message.
+- A `tls.key` or `tls.pfx` object entry that holds no bytes (only a passphrase, an empty object, a `Map`, a `Date`, or a proxy over a `KeyObject`, which cannot be recognised through the proxy) is refused as `INVALID_OPTIONS` naming the entry (`tls.key[0] has no pem`) when the options are resolved. It was held with undefined bytes, so Node refused it at connect, late and without the library's code in the message.
+- A list inside a list of key material (`tls.ca`, `cert`, `key`, `pfx`, `crl`, `ticketKeys`, `session`, `dhparam`, `ALPNProtocols`) is refused as `INVALID_OPTIONS` naming the entry (`tls.key[0] must not be a list`).
+- An option the driver refuses when the cluster client is built (`scaleReads` that is not `all`, `master`, `slave` or a function, a `himportFieldsets` or `scripts` of the wrong kind) ends as `INVALID_OPTIONS` (`the driver refused an option of the cluster`) with no `cause`: the driver's own message printed the `scaleReads` value the host gave, and none of the host's value is in the error now.
+- A script `name` or `lua` made only of U+0085 (next line) or U+2800 (braille blank) is refused as blank, like the other characters that print as nothing.
 - A `SharedArrayBuffer`, given as key material or as session material, is copied into a `Buffer` of its own like an `ArrayBuffer`: another thread can write to one after boot.
 
-  **Apply to a consumer:** a host that passed a key or pfx object entry without its `pem` or `buf`, or a proxy over a `KeyObject`, now gets `cache.invalid_options` at registration instead of a connect failure. No declaration changes.
+  **Apply to a consumer:** a host that passed a key or pfx object entry without its `pem` or `buf`, or a proxy over a `KeyObject`, now gets `cache.invalid_options` at registration instead of a connect failure, as does a list inside a list of key material; a cluster option the driver refuses is `cache.invalid_options` with a fixed reason and no `cause`, where it was the driver's own error. No declaration changes.
 
 ## [1.2.37] - 2026-11-21
 

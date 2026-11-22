@@ -146,9 +146,17 @@ describe.each([
   it('refuses an entry that holds no bytes', () => {
     const throughProxy = new Proxy(createSecretKey(Buffer.from('secret')), {})
 
-    for (const entry of [{ passphrase: 'p' }, {}, throughProxy]) {
+    for (const entry of [{ passphrase: 'p' }, {}, new Map(), new Date(0), throughProxy]) {
       expect(() => heldTls({ [key]: [entry] })).toThrow(refusing(`tls.${key}[0] has no ${bytes}`))
     }
+  })
+
+  // Scenario: a list of key material holds a list.
+  // Rule: it is refused naming the entry: the driver takes bytes, a string or an object there, not a list.
+  it('refuses a list inside the list', () => {
+    expect(() => heldTls({ [key]: [['nested']] })).toThrow(
+      refusing(`tls.${key}[0] must not be a list`)
+    )
   })
 
   it('keeps a key object as it is', () => {
@@ -261,7 +269,9 @@ describe('a script text made of invisible characters', () => {
     ['a mongolian vowel separator', '᠎'],
     ['a soft hyphen', '­'],
     ['the direction marks', '‎‏'],
-    ['a hangul filler', 'ㅤ']
+    ['a hangul filler', 'ㅤ'],
+    ['a braille blank', '⠀'],
+    ['a next line', '']
   ])('refuses %s as a name or a source', (_label, blank) => {
     expect(() =>
       resolve({ connection: { host: 'h' }, scripts: [{ name: blank, lua: 'return 1' }] })

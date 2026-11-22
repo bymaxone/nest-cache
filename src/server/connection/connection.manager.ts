@@ -68,6 +68,30 @@ type OwnedClusterOptions = Omit<ClusterOptions, 'redisOptions'> & {
   redisOptions?: OwnedRedisOptions
 }
 
+/**
+ * Builds a cluster client so that an option the driver refuses ends as `INVALID_OPTIONS`. ioredis throws
+ * an error of its own for one it cannot use, and the message of `scaleReads` prints the value the host
+ * gave, so the driver's error is dropped, with no `cause`, and only the library's code and a fixed
+ * reason remain. A {@link CacheException} the library raised while reading the options passes through.
+ *
+ * @typeParam T - The client built.
+ * @param build - The construction.
+ * @returns What the construction returns.
+ * @throws {CacheException} `INVALID_OPTIONS` when the driver refuses an option.
+ */
+function refusingDriverOptions<T>(build: () => T): T {
+  try {
+    return build()
+  } catch (error) {
+    if (error instanceof CacheException) {
+      throw error
+    }
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
+      reason: 'the driver refused an option of the cluster'
+    })
+  }
+}
+
 /** The roles a managed client can play, surfaced in event payloads. */
 type ClientRole = 'main' | 'subscriber'
 
@@ -282,24 +306,27 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       // neither lose a value a class instance keeps behind a getter nor let an explicit `undefined`
       // replace a default with "no bound".
       const supplied = readingOptions(() => copyClusterOptions(cluster.options))
-      return new Cluster(
-        readingOptions(() => cluster.nodes),
-        {
-          // Fail-fast defaults, as the other modes get: without them a cluster that goes
-          // down after boot queues every command for as long as it stays down.
-          enableOfflineQueue: false,
-          ...supplied,
-          ...(overrides?.enableOfflineQueue !== undefined && {
-            enableOfflineQueue: overrides.enableOfflineQueue
-          }),
-          redisOptions: {
-            connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-            commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
-            maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
-            disconnectTimeout: DISCONNECT_TIMEOUT_MS,
-            ...supplied.redisOptions
-          }
-        } as OwnedClusterOptions
+      return refusingDriverOptions(
+        () =>
+          new Cluster(
+            readingOptions(() => cluster.nodes),
+            {
+              // Fail-fast defaults, as the other modes get: without them a cluster that goes
+              // down after boot queues every command for as long as it stays down.
+              enableOfflineQueue: false,
+              ...supplied,
+              ...(overrides?.enableOfflineQueue !== undefined && {
+                enableOfflineQueue: overrides.enableOfflineQueue
+              }),
+              redisOptions: {
+                connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
+                commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
+                maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
+                disconnectTimeout: DISCONNECT_TIMEOUT_MS,
+                ...supplied.redisOptions
+              }
+            } as OwnedClusterOptions
+          )
       )
     }
     return new Redis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)

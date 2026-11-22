@@ -7,8 +7,11 @@
  */
 import { refuseOption } from './refuse-option'
 
-/** Blanks and the zero-width characters that print as nothing: a text made only of them is empty. */
-const INVISIBLE = /[\s\p{Default_Ignorable_Code_Point}]/gu
+/**
+ * Blanks and the characters that print as nothing (the Unicode default-ignorable set, the next-line
+ * control and the braille blank): a text made only of them is empty.
+ */
+const INVISIBLE = /[\s\p{Default_Ignorable_Code_Point}\u0085\u2800]/gu
 
 /**
  * Refuses a value that is not a non-empty string.

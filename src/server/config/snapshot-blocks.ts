@@ -238,7 +238,13 @@ function copyMaterial(material: unknown, key: (typeof KEY_MATERIAL)[number]): un
     key === 'key' || key === 'pfx'
       ? copyKeyEntry(entry, option, ENTRY_BYTES[key], index)
       : copyBytes(entry)
-  return Array.isArray(material) ? copyList(material, option, copyOne) : copyOne(material, 0)
+  return Array.isArray(material)
+    ? copyList(material, option, (entry, index) =>
+        Array.isArray(entry)
+          ? refuseOption(`${option}[${index}]`, 'must not be a list', entry)
+          : copyOne(entry, index)
+      )
+    : copyOne(material, 0)
 }
 
 /**
