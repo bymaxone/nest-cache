@@ -423,8 +423,9 @@ describe('cluster.options.himportFieldsets', () => {
   // Scenario: a hole, or an undefined, in the list or in the fields.
   // Rule: refused by position, never dropped or turned into an entry the driver would skip.
   it('refuses a hole and an undefined in the list and in the fields', () => {
-    // eslint-disable-next-line no-sparse-arrays -- the hole is the case under test
-    const sparse = [{ name: 'a', fields: [] }, , { name: 'b', fields: [] }]
+    const sparse: unknown[] = new Array<unknown>(3)
+    sparse[0] = { name: 'a', fields: [] }
+    sparse[2] = { name: 'b', fields: [] }
 
     expect(() => resolve(cluster(sparse))).toThrow(
       refusing('cluster.options.himportFieldsets[1] must not be empty')
@@ -463,6 +464,18 @@ describe('cluster.options.scripts', () => {
       received: 1001,
       max: 1000
     })
+  })
+
+  // Scenario: a definition of the map is not an object: a string, null, a number.
+  // Rule: it is kept as it is, for the driver to refuse; the copy neither turns it into an object nor drops it.
+  it('keeps a definition that is not an object for the driver to refuse', () => {
+    const held = (
+      resolve(cluster({ a: 'text', b: null, c: 5 })).cluster as unknown as {
+        options: { scripts: Record<string, unknown> }
+      }
+    ).options.scripts
+
+    expect(held).toEqual({ a: 'text', b: null, c: 5 })
   })
 
   it('accepts 1 000 scripts', () => {

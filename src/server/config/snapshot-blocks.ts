@@ -393,10 +393,7 @@ function copyScriptMap(scripts: unknown): unknown {
   return Object.fromEntries(
     names.map((name) => {
       const definition: unknown = Reflect.get(scripts, name)
-      return [
-        name,
-        isObject(definition) ? readPlain(definition, SCRIPT_DEFINITION_KEYS) : definition
-      ]
+      return [name, readPlain(definition, SCRIPT_DEFINITION_KEYS)]
     })
   )
 }
