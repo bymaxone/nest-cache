@@ -97,10 +97,14 @@ const VALUES: ReadonlyArray<readonly [string, unknown]> = [
 /** What resolving `shape` gives or throws, as text, so two results compare. */
 function outcome(raw: Raw): string {
   try {
+    // showHidden and getters: connection, sentinel and cluster are non-enumerable accessors of the
+    // resolved options, which a plain inspect neither lists nor evaluates.
     return inspect(resolveOptions(raw as unknown as BymaxCacheModuleOptions), {
       depth: 12,
       breakLength: Infinity,
-      maxArrayLength: 50
+      maxArrayLength: 50,
+      showHidden: true,
+      getters: true
     })
   } catch (error) {
     const thrown = error as { code?: string; details?: { reason?: string } }
