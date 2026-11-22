@@ -13,9 +13,12 @@ import type { Socket } from 'node:net'
 import { connect as tlsConnect } from 'node:tls'
 import type { ConnectionOptions } from 'node:tls'
 
-import { AbstractConnector } from 'ioredis'
+import { AbstractConnector, SentinelConnector } from 'ioredis'
 
-import { assertDriverUnshadowed } from './driver-option-names'
+import { assertDriverUnshadowed, DRIVER_OPTION_NAMES } from './driver-option-names'
+
+/** `Object.hasOwn` as it was when this module loaded. */
+const hasOwn = Object.hasOwn
 
 /** ioredis's own text for a connect attempt that was cancelled before the socket opened. */
 const CONNECTION_CLOSED_MESSAGE = 'Connection is closed.'
@@ -108,36 +111,75 @@ export class GuardedConnector extends AbstractConnector {
   }
 }
 
-/** A connector with a `connect()` that can be wrapped. */
-interface IWrappableConnector {
-  connect: (...args: never[]) => Promise<unknown>
+/** What the connector of a sentinel client needs of a probe client ioredis built from a literal. */
+interface IProbeClient {
+  readonly options: Record<string, unknown>
 }
 
 /**
- * Runs the guard before every connect of the connector a sentinel client built for itself, which is
- * ioredis's own `SentinelConnector`, and again once it has resolved: it asks the sentinels for the master
- * and then opens the socket from what they answered, an ordinary object Node reads with inheritance, so
- * a key planted while it waited is read there. A socket opened under a polluted `Object.prototype` is
- * destroyed before ioredis uses it and the connect is refused.
+ * The connector of a sentinel client: ioredis's own `SentinelConnector` with the guard run before the connect
+ * and again once it resolved, the socket's table of listeners sealed, and the same guard and shadows on the
+ * probe clients it builds to ask the sentinels for the master and to watch for a failover.
  *
- * @param client - A client built in sentinel mode and not yet connected: ioredis starts the first connect
- *   inside its constructor, so the caller builds it lazy and connects it after this.
- * @returns The same client.
+ * It asks the sentinels for the master and then opens the socket from what they answered, an ordinary object
+ * Node reads with inheritance, so a key planted while it waited is read there: a socket opened under a
+ * polluted `Object.prototype` is destroyed before ioredis uses it and the connect is refused. The probe
+ * clients are built from literals on ioredis's default connector, so a key planted while the connect waited
+ * would redirect them to a socket of its own and send the sentinel password there: each is given the
+ * connector of the library and an own `undefined` for every driver option name.
  */
-export function guardSentinelConnector<T extends object>(client: T): T {
-  const connector = (client as { connector: IWrappableConnector }).connector
-  const connect = connector.connect.bind(connector)
-  connector.connect = async (...args): Promise<unknown> => {
+export class GuardedSentinelConnector extends SentinelConnector {
+  /**
+   * @param options - The options ioredis built the client with.
+   */
+  public constructor(options: ConstructorParameters<typeof SentinelConnector>[0]) {
+    super(options)
+    // `connectToSentinel` is private in the typings of ioredis, so it is replaced on the instance.
+    const self = this as unknown as {
+      connectToSentinel: (endpoint: object, extra?: object) => IProbeClient
+    }
+    const original = self.connectToSentinel.bind(this)
+    self.connectToSentinel = (endpoint, extra): IProbeClient => {
+      const probe = original(endpoint, { ...extra, Connector: GuardedConnector })
+      for (const name of DRIVER_OPTION_NAMES) {
+        if (!hasOwn(probe.options, name)) probe.options[name] = undefined
+      }
+      return probe
+    }
+  }
+
+  /**
+   * Opens the socket to the master the sentinels name.
+   *
+   * @param eventEmitter - ioredis's callback for the events of the connect.
+   * @returns The socket.
+   * @throws {CacheException} `INVALID_OPTIONS` when `Object.prototype` holds a key it does not hold by
+   *   default, before or while the sentinels were asked.
+   */
+  public override async connect(
+    eventEmitter: Parameters<SentinelConnector['connect']>[0]
+  ): ReturnType<SentinelConnector['connect']> {
     assertDriverUnshadowed()
-    const stream = await connect(...args)
+    const stream = await super.connect(eventEmitter)
     try {
       assertDriverUnshadowed()
     } catch (error) {
-      ;(stream as { destroy: () => void }).destroy()
+      stream.destroy()
       throw error
     }
-    sealListeners(stream as object)
+    sealListeners(stream)
     return stream
   }
+}
+
+/**
+ * Hands the client the emitter the sentinel connector reports its events through: ioredis sets it only
+ * when it builds the connector itself, and a `Connector` option bypasses that.
+ *
+ * @param client - A client built with `GuardedSentinelConnector`.
+ * @returns The same client.
+ */
+export function bindSentinelEmitter<T extends object>(client: T): T {
+  ;(client as unknown as { connector: { emitter: unknown } }).connector.emitter = client
   return client
 }

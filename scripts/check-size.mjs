@@ -76,17 +76,17 @@ const ROOT = pkg.root
 // threshold by option name and received type, which restates the server's describing rule because the
 // admin entry reaches the server only through its public surface.
 // It also covers the guard that withholds the status screen's endpoint when the connection block cannot be read.
-// The server budget (19 180 B, measured 19 145) covers the operation tracking: the 31 command names
+// The server budget (19 340 B, measured 19 310) covers the operation tracking: the 31 command names
 // reported to `events.onOperation` with a hit/miss/ok/error outcome, the Pub/Sub backlog callback,
 // and the one caller that absorbs a throwing or rejecting host hook at every observability site, logs the
 // first failure of each hook once, and hands each hook a frozen copy of the event data, and keeps that log line's one allowance when Nest's
 // logging is off. It also covers the option-read guard, which passes only the library's own refusals through,
-// and the single read of every option block and of the tls, sentinels, nodes, natMap and scripts values under it: the key records, the complete tls option record and the copies built from them, and the validation of the tls kind and profile and of the script definitions, `register` included, the copy of the tls key material, the check of the entries of the lists the driver walks, the copy of every view of bytes in the key material, and of the object entries of `key` and `pfx`. It also covers the connector that opens every socket of a standalone client and of the nodes of a cluster, which runs the `Object.prototype` guard in the tick that opens it and hands Node an object without a prototype, and the guard on the connector of a sentinel client, which also checks the socket it opened, and the check that a standard key of `Object.prototype` was not overwritten or already replaced when the library loaded. The socket the connector opens also has its table of listeners sealed.
+// and the single read of every option block and of the tls, sentinels, nodes, natMap and scripts values under it: the key records, the complete tls option record and the copies built from them, and the validation of the tls kind and profile and of the script definitions, `register` included, the copy of the tls key material, the check of the entries of the lists the driver walks, the copy of every view of bytes in the key material, and of the object entries of `key` and `pfx`. It also covers the connector that opens every socket of a standalone client and of the nodes of a cluster, which runs the `Object.prototype` guard in the tick that opens it and hands Node an object without a prototype, and the guard on the connector of a sentinel client, which also checks the socket it opened, and the check that a standard key of `Object.prototype` was not overwritten or already replaced when the library loaded. The socket the connector opens also has its table of listeners sealed. The connector of a sentinel client, with its probe clients, and the seal of the delay queue of a cluster client are in the server budget too.
 // The observability entry (2 400 B, measured 2 373) is the optional subpath that publishes them, and
 // the fan-out of `combineCacheEvents` that raises its first failure to the module; the
 // main entry imports neither `@bymax-one/nest-core` nor `prom-client`.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 19_180 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 19_340 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_977 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   {

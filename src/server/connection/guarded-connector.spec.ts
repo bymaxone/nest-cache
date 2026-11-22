@@ -21,7 +21,7 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { selfSignedCertificate } from '../../test-helpers/self-signed-certificate'
 import { ConnectionManager } from './connection.manager'
-import { GuardedConnector, guardSentinelConnector } from './guarded-connector'
+import { GuardedConnector, GuardedSentinelConnector } from './guarded-connector'
 
 const closers: Array<() => void> = []
 let certificate = ''
@@ -415,73 +415,159 @@ describe('a real client that reconnects after a key was planted', () => {
   })
 })
 
-describe('the guard on the connector a sentinel client builds for itself', () => {
-  // Scenario: the wrapped connect, run with and without a key planted.
-  // Rule: nothing planted, the original connect runs with the same arguments and its result is returned;
-  // planted, it is refused before the original runs.
-  it('calls the connect it wraps when nothing is planted', async () => {
-    const stream = { on: jest.fn() }
-    const original = jest.fn().mockResolvedValue(stream)
-    const client = { connector: { connect: original } }
-    guardSentinelConnector(client)
+const SENTINEL_OPTIONS = {
+  name: 'm',
+  sentinels: [{ host: '127.0.0.1', port: 1 }],
+  sentinelPassword: 'SENTPASS'
+} as unknown as ConstructorParameters<typeof GuardedSentinelConnector>[0]
 
-    const result = await (
-      client.connector.connect as unknown as (...args: unknown[]) => Promise<unknown>
-    )('emitter')
+/** A socket the way a sentinel connector hands it back: with a table of listeners and a destroy. */
+const fakeStream = (): { destroy: jest.Mock; _events: object } => ({
+  destroy: jest.fn(),
+  _events: { close: undefined }
+})
 
-    expect(result).toBe(stream)
-    expect(original).toHaveBeenCalledWith('emitter')
+describe('the connector of a sentinel client', () => {
+  // Scenario: the connect, run with and without a key planted, and a key planted while it waited.
+  // Rule: nothing planted, the connect of ioredis runs with the same argument and its socket is returned,
+  // its table of listeners sealed; planted before, it is refused before ioredis runs; planted while it
+  // waited, the socket is destroyed and the connect refused.
+  it('returns the socket of the connect it extends, with its listeners sealed, when nothing is planted', async () => {
+    const stream = fakeStream()
+    const spy = jest
+      .spyOn(SentinelConnector.prototype, 'connect')
+      .mockResolvedValue(stream as never)
+    try {
+      const result = await new GuardedSentinelConnector(SENTINEL_OPTIONS).connect(
+        'emitter' as never
+      )
+
+      expect(result).toBe(stream)
+      expect(spy).toHaveBeenCalledWith('emitter')
+      expect(Reflect.getPrototypeOf(stream._events)).toBeNull()
+      expect(stream.destroy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
-  it('is refused, and the connect it wraps does not run, when a key is planted', async () => {
-    const original = jest.fn().mockResolvedValue('stream')
-    const client = { connector: { connect: original } }
-    guardSentinelConnector(client)
+  it('is refused, and the connect it extends does not run, when a key is planted', async () => {
+    const spy = jest.spyOn(SentinelConnector.prototype, 'connect')
+    try {
+      const error = await planted('anything', 1, () =>
+        new GuardedSentinelConnector(SENTINEL_OPTIONS).connect(jest.fn()).catch((e: unknown) => e)
+      )
 
-    const error = await planted('anything', 1, () =>
-      (client.connector.connect as unknown as () => Promise<unknown>)().catch((e: unknown) => e)
-    )
-
-    expect((error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-    expect(original).not.toHaveBeenCalled()
+      expect((error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
-  // Scenario: the connect it wraps waits (the sentinels are asked for the master) and a key is planted
-  // while it waits, before the socket is opened from what they answered.
-  // Rule: the socket is destroyed before ioredis uses it and the connect is refused.
   it('destroys the socket and refuses when a key was planted while it waited', async () => {
-    const stream = { destroy: jest.fn() }
-    const original = jest.fn(async () => {
+    const stream = fakeStream()
+    const spy = jest.spyOn(SentinelConnector.prototype, 'connect').mockImplementation(async () => {
       Object.defineProperty(Object.prototype, 'path', { value: 'x', configurable: true })
       await Promise.resolve()
-      return stream
+      return stream as never
     })
-    const client = { connector: { connect: original } }
-    guardSentinelConnector(client)
-
     let error: unknown
     try {
-      await (client.connector.connect as unknown as () => Promise<unknown>)()
+      await new GuardedSentinelConnector(SENTINEL_OPTIONS).connect(jest.fn())
     } catch (caught) {
       error = caught
     } finally {
       Reflect.deleteProperty(Object.prototype, 'path')
+      spy.mockRestore()
     }
 
     expect((error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
     expect(stream.destroy).toHaveBeenCalledTimes(1)
   })
 
-  it('leaves the socket alone when nothing was planted', async () => {
-    const stream = { destroy: jest.fn(), on: jest.fn() }
-    const client = { connector: { connect: jest.fn().mockResolvedValue(stream) } }
-    guardSentinelConnector(client)
+  // Scenario: the manager builds a client in sentinel mode.
+  // Rule: it is on the connector of the library, and that connector reports its events through the client.
+  it('is the connector of a client the manager builds in sentinel mode, bound to it', () => {
+    const manager = new ConnectionManager(
+      resolveOptions({
+        mode: 'sentinel',
+        connection: { lazyConnect: true },
+        sentinel: { name: 'm', sentinels: [{ host: '127.0.0.1', port: 1 }] }
+      } as unknown as BymaxCacheModuleOptions)
+    )
+    const client = manager.getClient() as unknown as {
+      connector: { emitter: unknown }
+      disconnect: () => void
+    }
+    closers.push(() => client.disconnect())
 
-    const result = await (client.connector.connect as unknown as () => Promise<unknown>)()
-
-    expect(result).toBe(stream)
-    expect(stream.destroy).not.toHaveBeenCalled()
+    expect(client.connector).toBeInstanceOf(GuardedSentinelConnector)
+    expect(client.connector.emitter).toBe(client)
   })
+
+  // Scenario: the probe clients the connector builds to ask the sentinels for the master and to watch for a
+  // failover, from literals, on the default connector of ioredis.
+  // Rule: each has the connector of the library and an own undefined for every driver option name.
+  it('builds its probe clients on the connector of the library, with an own key for every option name', () => {
+    const connector = new GuardedSentinelConnector(SENTINEL_OPTIONS)
+    const probe = (
+      connector as unknown as {
+        connectToSentinel: (endpoint: object) => {
+          options: Record<string, unknown>
+          disconnect: () => void
+          on: (event: string, listener: () => void) => void
+        }
+      }
+    ).connectToSentinel({ host: '127.0.0.1', port: 1 })
+    probe.on('error', () => undefined)
+    closers.push(() => probe.disconnect())
+
+    expect(probe.options['Connector']).toBe(GuardedConnector)
+    expect(Object.hasOwn(probe.options, 'socketTimeout')).toBe(true)
+    expect(Object.hasOwn(probe.options, 'sentinelPassword')).toBe(true)
+  })
+
+  // Scenario: a key naming the attacker's unix socket is planted while the connect waits for a slow sentinel,
+  // and the next probe client is built after that.
+  // Rule: the probe client sends nothing and the sentinel password reaches nobody; the stock connector of
+  // ioredis, run the same way, connects to that socket and sends the password (the control).
+  it.each([
+    ['the connector of the library', GuardedSentinelConnector, false],
+    ['the stock connector of ioredis', SentinelConnector, true]
+  ] as const)(
+    'with %s, a probe built after a planted path leaks: %s',
+    async (_label, Connector, leaks) => {
+      const received: string[] = []
+      let connections = 0
+      const attacker = await listenOnPath(
+        netServer((socket) => {
+          connections += 1
+          socket.on('data', (chunk) => received.push(chunk.toString('latin1')))
+          socket.on('error', () => undefined)
+        }),
+        'probe'
+      )
+      const connector = new Connector(SENTINEL_OPTIONS)
+      const build = (): { on: (e: string, l: () => void) => void; disconnect: () => void } =>
+        (
+          connector as unknown as {
+            connectToSentinel: (endpoint: object) => ReturnType<typeof build>
+          }
+        ).connectToSentinel({ host: '127.0.0.1', port: 1 })
+
+      const probe = await planted('path', attacker, async () => {
+        const client = build()
+        client.on('error', () => undefined)
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        return client
+      })
+      probe.disconnect()
+
+      expect(connections > 0).toBe(leaks)
+      expect(received.join('').includes('SENTPASS')).toBe(leaks)
+    }
+  )
 
   // Scenario: a sentinel client that is not lazy; ioredis starts the first connect inside its constructor.
   // Rule: that first connect goes through the guard too: a key planted while it waited destroys the
@@ -554,39 +640,6 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
     } finally {
       spy.mockRestore()
     }
-  })
-
-  // Scenario: the socket a sentinel connector opened is handed back to ioredis.
-  // Rule: its table of listeners has no prototype, as the socket of the library's own connector has.
-  it('seals the table of listeners of the socket of a sentinel client', async () => {
-    const stream = { destroy: jest.fn(), _events: { close: undefined } }
-    const client = { connector: { connect: jest.fn().mockResolvedValue(stream) } }
-    guardSentinelConnector(client)
-
-    await (client.connector.connect as unknown as () => Promise<unknown>)()
-
-    expect(Reflect.getPrototypeOf(stream._events)).toBeNull()
-  })
-
-  it('is on the connector of a client the manager builds in sentinel mode', async () => {
-    const manager = new ConnectionManager(
-      resolveOptions({
-        mode: 'sentinel',
-        connection: { lazyConnect: true },
-        sentinel: { name: 'm', sentinels: [{ host: '127.0.0.1', port: 1 }] }
-      } as unknown as BymaxCacheModuleOptions)
-    )
-    const client = manager.getClient() as unknown as {
-      connector: { connect: () => Promise<unknown> }
-      disconnect: () => void
-    }
-    closers.push(() => client.disconnect())
-
-    const error = await planted('anything', 1, () =>
-      client.connector.connect().catch((e: unknown) => e)
-    )
-
-    expect((error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
   })
 })
 

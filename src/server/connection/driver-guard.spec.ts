@@ -336,63 +336,71 @@ describe('a standard key that was already replaced when the module loaded', () =
   })
 
   // Scenario: Node was started with --disable-proto=delete, which removes __proto__ from Object.prototype
-  // itself; the flag reaches the process as an argument or through NODE_OPTIONS.
-  // Rule: the missing __proto__ is not pollution then, and is when the flag is not set; the flag does not
-  // hide any other defect.
+  // itself, however the flag reached the process (an argument, NODE_OPTIONS, a config file): the module can
+  // only see that the accessor is missing when it loads.
+  // Rule: a __proto__ missing at load is not pollution, whatever the process arguments say; a present one
+  // must be the native accessor (the rows above); a deletion AFTER the load is still counted; the flag does
+  // not hide any other defect.
   describe('with __proto__ missing from Object.prototype', () => {
-    /** The error of the guard of a copy of the module loaded while `__proto__` is missing and `flag` is set. */
-    function loadedWithoutProto(
-      flag: 'argument' | 'environment' | 'none',
-      alsoReplaced?: string
-    ): ReturnType<typeof thrownBy> {
+    /** Runs `run` while `__proto__` is deleted from Object.prototype, and puts it back. */
+    function withoutProto<T>(run: () => T): T {
       const proto = Object.getOwnPropertyDescriptor(
         Object.prototype,
         '__proto__'
       ) as PropertyDescriptor
-      const argv = Object.getOwnPropertyDescriptor(process, 'execArgv') as PropertyDescriptor
-      const options = process.env['NODE_OPTIONS']
-      const run = (): ReturnType<typeof thrownBy> => {
-        let guard: () => void = () => undefined
-        jest.isolateModules(() => {
-          guard = (require('./driver-option-names') as typeof DriverNames).assertDriverUnshadowed
-        })
-        return thrownBy(guard)
-      }
+      Reflect.deleteProperty(Object.prototype, '__proto__')
       try {
-        if (flag === 'argument') {
-          Object.defineProperty(process, 'execArgv', {
-            value: ['--disable-proto=delete'],
-            configurable: true
-          })
-        }
-        if (flag === 'environment')
-          process.env['NODE_OPTIONS'] = '--max-old-space-size=512 --disable-proto=delete'
-        Reflect.deleteProperty(Object.prototype, '__proto__')
-        return alsoReplaced === undefined ? run() : overwritten(alsoReplaced, copyOf, run)
+        return run()
       } finally {
         Object.defineProperty(Object.prototype, '__proto__', proto)
-        Object.defineProperty(process, 'execArgv', argv)
-        if (options === undefined) delete process.env['NODE_OPTIONS']
-        else process.env['NODE_OPTIONS'] = options
       }
     }
 
-    it.each(['argument', 'environment'] as const)(
-      'is not refused when the flag is set as an %s',
-      (flag) => {
-        expect(loadedWithoutProto(flag)).toBeUndefined()
-      }
-    )
+    /** The error of the guard of a copy of the module loaded inside `run`. */
+    function guardOfCopy(): () => void {
+      let guard: () => void = () => undefined
+      jest.isolateModules(() => {
+        guard = (require('./driver-option-names') as typeof DriverNames).assertDriverUnshadowed
+      })
+      return guard
+    }
 
-    it('is refused when the flag is not set', () => {
-      expect(loadedWithoutProto('none')?.details).toEqual({
+    it('is not refused when the module loads without it, and arguments say nothing', () => {
+      const error = withoutProto(() => thrownBy(guardOfCopy()))
+
+      expect(error).toBeUndefined()
+    })
+
+    it('is not refused when the module loads without it and the arguments name another mode', () => {
+      const argv = Object.getOwnPropertyDescriptor(process, 'execArgv') as PropertyDescriptor
+      Object.defineProperty(process, 'execArgv', {
+        value: ['--disable-proto=throw'],
+        configurable: true
+      })
+      try {
+        expect(withoutProto(() => thrownBy(guardOfCopy()))).toBeUndefined()
+      } finally {
+        Object.defineProperty(process, 'execArgv', argv)
+      }
+    })
+
+    it('still refuses another standard key that was replaced', () => {
+      const error = withoutProto(() =>
+        overwritten('hasOwnProperty', copyOf, () => thrownBy(guardOfCopy()))
+      )
+
+      expect(error?.details).toEqual({
         reason: 'Object.prototype holds keys the driver would read as its own',
         count: 1
       })
     })
 
-    it('still refuses another standard key that was replaced, flag or not', () => {
-      expect(loadedWithoutProto('argument', 'hasOwnProperty')?.details).toEqual({
+    it('counts a deletion that happens after the load', () => {
+      const guard = guardOfCopy()
+
+      const error = withoutProto(() => thrownBy(guard))
+
+      expect(error?.details).toEqual({
         reason: 'Object.prototype holds keys the driver would read as its own',
         count: 1
       })

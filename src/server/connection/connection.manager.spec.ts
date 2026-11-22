@@ -765,7 +765,7 @@ describe('ConnectionManager', () => {
 
       manager.getClient()
       const opts = redisInstances[0]?.options ?? {}
-      expect(opts['lazyConnect']).toBe(true) // built lazy, connected by the manager (guarded)
+      expect(opts['lazyConnect']).toBe(false)
       expect(opts['connectTimeout']).toBe(10_000)
       expect(opts['host']).toBeUndefined()
     })

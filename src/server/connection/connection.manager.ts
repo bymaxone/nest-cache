@@ -38,7 +38,12 @@ import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
 import { copyClusterOptions } from './copy-cluster-options'
 import { assertDriverUnshadowed, withOwnKeys } from './driver-option-names'
-import { GuardedConnector, guardSentinelConnector } from './guarded-connector'
+import {
+  bindSentinelEmitter,
+  GuardedConnector,
+  GuardedSentinelConnector
+} from './guarded-connector'
+import { sealDelayQueue } from './sealed-delay-queue'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
@@ -331,7 +336,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
           ...supplied.redisOptions
         })
       } as OwnedClusterOptions
-      return refusingDriverOptions(() => new Cluster(nodes, withOwnKeys(driverOptions)))
+      return refusingDriverOptions(() =>
+        sealDelayQueue(new Cluster(nodes, withOwnKeys(driverOptions)))
+      )
     }
     return new Redis(
       withOwnKeys({
@@ -343,9 +350,8 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
-   * Builds a sentinel-mode client whose every connect, the first one included, runs the guard: ioredis
-   * starts the first connect inside its constructor, before the connector can be wrapped, so the client
-   * is built lazy, wrapped, and connected here when the host did not ask for `lazyConnect`.
+   * Builds a sentinel-mode client on the connector of the library, which runs the guard in every connect,
+   * the first one included (ioredis starts it inside its constructor), and on its probe clients too.
    *
    * @param sentinel - The resolved sentinel block.
    * @param overrides - Extra `RedisOptions` merged over the resolved defaults.
@@ -355,12 +361,14 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     sentinel: NonNullable<ResolvedOptions['sentinel']>,
     overrides?: Partial<RedisOptions>
   ): Redis {
-    const options = withOwnKeys(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
-    const lazy = Boolean(options.lazyConnect)
-    options.lazyConnect = true
-    const client = guardSentinelConnector(new Redis(options))
-    if (!lazy) client.connect().catch(() => undefined)
-    return client
+    return bindSentinelEmitter(
+      new Redis(
+        withOwnKeys({
+          Connector: GuardedSentinelConnector,
+          ...readingOptions(() => this.sentinelOptions(sentinel, overrides))
+        } as OwnedRedisOptions)
+      )
+    )
   }
 
   /**
