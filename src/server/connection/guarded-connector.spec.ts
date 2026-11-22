@@ -340,10 +340,13 @@ describe('a real client that reconnects after a key was planted', () => {
       client.disconnect(true)
       return next
     })
+    const status = (client as unknown as { status: string }).status
     client.disconnect()
 
     expect(outcome).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
     expect(reached).toBe(0)
+    // ioredis ends a client whose connector rejects: it is not retried, so it is not used again.
+    expect(status).toBe('end')
   })
 })
 
@@ -375,6 +378,43 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
 
     expect((error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
     expect(original).not.toHaveBeenCalled()
+  })
+
+  // Scenario: the connect it wraps waits (the sentinels are asked for the master) and a key is planted
+  // while it waits, before the socket is opened from what they answered.
+  // Rule: the socket is destroyed before ioredis uses it and the connect is refused.
+  it('destroys the socket and refuses when a key was planted while it waited', async () => {
+    const stream = { destroy: jest.fn() }
+    const original = jest.fn(async () => {
+      Object.defineProperty(Object.prototype, 'path', { value: 'x', configurable: true })
+      await Promise.resolve()
+      return stream
+    })
+    const client = { connector: { connect: original } }
+    guardSentinelConnector(client)
+
+    let error: unknown
+    try {
+      await (client.connector.connect as unknown as () => Promise<unknown>)()
+    } catch (caught) {
+      error = caught
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'path')
+    }
+
+    expect((error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(stream.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the socket alone when nothing was planted', async () => {
+    const stream = { destroy: jest.fn() }
+    const client = { connector: { connect: jest.fn().mockResolvedValue(stream) } }
+    guardSentinelConnector(client)
+
+    const result = await (client.connector.connect as unknown as () => Promise<unknown>)()
+
+    expect(result).toBe(stream)
+    expect(stream.destroy).not.toHaveBeenCalled()
   })
 
   it('is on the connector of a client the manager builds in sentinel mode', async () => {
@@ -416,6 +456,24 @@ describe('the connector in the options the manager hands ioredis', () => {
     closers.push(() => client.disconnect())
 
     expect(client.options.redisOptions.Connector).toBe(GuardedConnector)
+  })
+
+  // Scenario: the host puts a connector in the connection block of a standalone client.
+  // Rule: it is not read; the library's is the one used (the host can only give one to cluster nodes).
+  it('is the connector of a standalone client whatever the connection block holds', () => {
+    class Own {}
+    const manager = new ConnectionManager(
+      resolveOptions({
+        connection: { host: '127.0.0.1', lazyConnect: true, Connector: Own }
+      } as unknown as BymaxCacheModuleOptions)
+    )
+    const client = manager.getClient() as unknown as {
+      options: { Connector: unknown }
+      disconnect: () => void
+    }
+    closers.push(() => client.disconnect())
+
+    expect(client.options.Connector).toBe(GuardedConnector)
   })
 
   // Scenario: the host gives its own connector in the options of the nodes.

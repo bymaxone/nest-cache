@@ -48,7 +48,8 @@ export class GuardedConnector extends AbstractConnector {
    *
    * @returns The socket, a TLS socket when `tls` is set.
    * @throws {CacheException} `INVALID_OPTIONS` when `Object.prototype` holds a key it does not hold by
-   *   default, so the connection is refused and ioredis retries by its own strategy.
+   *   default. ioredis ends a client whose connector rejects (status `end`, no retry), so the client is
+   *   not used again.
    */
   public connect(): Promise<Socket> {
     const { options } = this
@@ -97,8 +98,10 @@ interface IWrappableConnector {
 
 /**
  * Runs the guard before every connect of the connector a sentinel client built for itself, which is
- * ioredis's own `SentinelConnector`: it resolves the master through clients of its own and opens the
- * socket from what the sentinel answered, so the guard has to come first.
+ * ioredis's own `SentinelConnector`, and again once it has resolved: it asks the sentinels for the master
+ * and then opens the socket from what they answered, an ordinary object Node reads with inheritance, so
+ * a key planted while it waited is read there. A socket opened under a polluted `Object.prototype` is
+ * destroyed before ioredis uses it and the connect is refused.
  *
  * @param client - A client built in sentinel mode.
  * @returns The same client.
@@ -106,13 +109,16 @@ interface IWrappableConnector {
 export function guardSentinelConnector<T extends object>(client: T): T {
   const connector = (client as { connector: IWrappableConnector }).connector
   const connect = connector.connect.bind(connector)
-  connector.connect = (...args): Promise<unknown> => {
+  connector.connect = async (...args): Promise<unknown> => {
+    assertDriverUnshadowed()
+    const stream = await connect(...args)
     try {
       assertDriverUnshadowed()
     } catch (error) {
-      return Promise.reject(error)
+      ;(stream as { destroy: () => void }).destroy()
+      throw error
     }
-    return connect(...args)
+    return stream
   }
   return client
 }
