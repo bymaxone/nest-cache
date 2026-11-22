@@ -343,9 +343,14 @@ function copyNatMap(map: unknown, option: string): unknown {
  * not an object is kept for the driver to refuse.
  *
  * @param entry - The entry as the host wrote it.
+ * @param index - The entry's position.
  * @returns A plain copy, or the entry itself when it is not an object.
+ * @throws {CacheException} `INVALID_OPTIONS` for a hole or an `undefined`, in the list or in the fields.
  */
-function copyFieldset(entry: unknown): unknown {
+function copyFieldset(entry: unknown, index: number): unknown {
+  if (entry === undefined) {
+    refuseOption(`cluster.options.himportFieldsets[${index}]`, 'must not be empty', entry)
+  }
   if (!isObject(entry) || Array.isArray(entry)) {
     return entry
   }
@@ -354,7 +359,14 @@ function copyFieldset(entry: unknown): unknown {
     fields: copyList(
       Reflect.get(entry, 'fields'),
       'cluster.options.himportFieldsets[].fields',
-      copyBytes
+      (field, at) =>
+        field === undefined
+          ? refuseOption(
+              `cluster.options.himportFieldsets[].fields[${at}]`,
+              'must not be empty',
+              field
+            )
+          : copyBytes(field)
     )
   }
 }

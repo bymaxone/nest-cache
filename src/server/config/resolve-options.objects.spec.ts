@@ -376,4 +376,88 @@ describe('cluster.options.himportFieldsets', () => {
   it('accepts an absent list', () => {
     expect(() => resolve(cluster(undefined))).not.toThrow()
   })
+
+  /** The details of the refusal a call throws, for the bound it prints. */
+  const refusedWith = (himportFieldsets: unknown): Record<string, unknown> => {
+    try {
+      resolve(cluster(himportFieldsets))
+    } catch (thrown) {
+      return (thrown as { details: Record<string, unknown> }).details
+    }
+    throw new Error('not refused')
+  }
+  const entries = (count: number): unknown[] =>
+    Array.from({ length: count }, (_, index) => ({ name: `n${index}`, fields: [] }))
+
+  // Scenario: the list, or the fields of an entry, holds more than 1 000 entries.
+  // Rule: refused before any is copied, naming the list and printing the count and the bound; 1 000 pass.
+  it('refuses a list of 1 001 entries, naming it and the bound', () => {
+    expect(refusedWith(entries(1001))).toMatchObject({
+      reason: 'cluster.options.himportFieldsets has too many entries',
+      received: 1001,
+      max: 1000
+    })
+  })
+
+  it('refuses the fields of an entry past 1 000, naming them and the bound', () => {
+    expect(refusedWith([{ name: 'n', fields: new Array(1001).fill('f') }])).toMatchObject({
+      reason: 'cluster.options.himportFieldsets[].fields has too many entries',
+      received: 1001,
+      max: 1000
+    })
+  })
+
+  it('accepts 1 000 entries and 1 000 fields', () => {
+    expect(() => resolve(cluster(entries(1000)))).not.toThrow()
+    expect(() => resolve(cluster([{ name: 'n', fields: new Array(1000).fill('f') }]))).not.toThrow()
+  })
+
+  // Scenario: a hole, or an undefined, in the list or in the fields.
+  // Rule: refused by position, never dropped or turned into an entry the driver would skip.
+  it('refuses a hole and an undefined in the list and in the fields', () => {
+    // eslint-disable-next-line no-sparse-arrays -- the hole is the case under test
+    const sparse = [{ name: 'a', fields: [] }, , { name: 'b', fields: [] }]
+
+    expect(() => resolve(cluster(sparse))).toThrow(
+      refusing('cluster.options.himportFieldsets[1] must not be empty')
+    )
+    expect(() => resolve(cluster([undefined]))).toThrow(
+      refusing('cluster.options.himportFieldsets[0] must not be empty')
+    )
+    expect(() => resolve(cluster([{ name: 'a', fields: ['f', undefined] }]))).toThrow(
+      refusing('cluster.options.himportFieldsets[].fields[1] must not be empty')
+    )
+  })
+})
+
+describe('cluster.options.scripts', () => {
+  const cluster = (scripts: unknown): Record<string, unknown> => ({
+    mode: 'cluster',
+    cluster: { nodes: [{ host: 'a', port: 7000 }], options: { scripts } }
+  })
+  const definitions = (count: number): Record<string, unknown> =>
+    Object.fromEntries(Array.from({ length: count }, (_, i) => [`s${i}`, { lua: 'return 1' }]))
+
+  // Scenario: the map holds more than 1 000 scripts.
+  // Rule: refused before any definition is read, naming the map and printing the count and the bound.
+  it('refuses 1 001 scripts, naming the map and the bound', () => {
+    const details = (() => {
+      try {
+        resolve(cluster(definitions(1001)))
+      } catch (thrown) {
+        return (thrown as { details: Record<string, unknown> }).details
+      }
+      throw new Error('not refused')
+    })()
+
+    expect(details).toMatchObject({
+      reason: 'cluster.options.scripts has too many entries',
+      received: 1001,
+      max: 1000
+    })
+  })
+
+  it('accepts 1 000 scripts', () => {
+    expect(() => resolve(cluster(definitions(1000)))).not.toThrow()
+  })
 })
