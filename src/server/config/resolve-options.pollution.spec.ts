@@ -270,7 +270,8 @@ describe('the copies of the options', () => {
           host: 'h',
           tls: { ca: 'x', key: [{ pem: 'k', passphrase: 'p' }], pfx: [{ buf: 'b' }] }
         }
-      }
+      },
+      ['connection', 'connection.tls', 'connection.tls.key[0]', 'connection.tls.pfx[0]']
     ],
     [
       'cluster',
@@ -282,16 +283,29 @@ describe('the copies of the options', () => {
             redisOptions: { tls: { key: [{ pem: 'k' }] }, natMap: { 'a:1': { host: 'b' } } }
           }
         }
-      }
+      },
+      [
+        'cluster',
+        'cluster.nodes[0]',
+        'cluster.options',
+        'cluster.options.redisOptions',
+        'cluster.options.redisOptions.tls',
+        'cluster.options.redisOptions.tls.key[0]',
+        'cluster.options.redisOptions.natMap',
+        'cluster.options.redisOptions.natMap.a:1'
+      ]
     ]
-  ])('have no prototype, in the %s options', (_label, raw) => {
+  ])('have no prototype, in the %s options', (_label, raw, visited) => {
     const resolved = resolveOptions(raw as unknown as BymaxCacheModuleOptions)
     const found: Array<[string, object]> = []
-    for (const [key, value] of Object.entries(resolved)) {
-      walk(value, key, found)
+    // By every own name, not Object.entries: `connection`, `sentinel` and `cluster` are non-enumerable
+    // accessors of the resolved options, which Object.entries skips.
+    for (const key of Object.getOwnPropertyNames(resolved)) {
+      walk((resolved as unknown as Raw)[key], key, found)
     }
     const withPrototype = found.filter(([, object]) => Reflect.getPrototypeOf(object) !== null)
 
+    expect(found.map(([path]) => path)).toEqual(expect.arrayContaining(visited))
     expect(withPrototype.map(([path]) => path)).toEqual([])
   })
 })
