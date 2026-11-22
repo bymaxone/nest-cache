@@ -46,6 +46,49 @@ describe('readKey', () => {
     expect(readKey({}, 'absent')).toBeUndefined()
   })
 
+  // Scenario: the root of another realm carries a planted key, and a root has its `constructor` overwritten.
+  // Rule: a root is recognised by its shape (no prototype, reached through the object), never by a property
+  // it holds, so neither a root of another realm nor an overwritten constructor makes a planted key count.
+  it('does not read a key planted on the root of another realm', () => {
+    const other = runInNewContext('Object.prototype.planted = "X"; ({ a: "own" })') as object
+
+    expect(readKey(other, 'planted')).toBeUndefined()
+    expect(readKey(other, 'a')).toBe('own')
+  })
+
+  it('is not fooled by a constructor overwritten on a root, here or in another realm', () => {
+    const original = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    Object.defineProperty(Object.prototype, 'constructor', {
+      value: {},
+      configurable: true,
+      writable: true
+    })
+    try {
+      planted('plantedKey', 'x', () => {
+        expect(readKey({}, 'plantedKey')).toBeUndefined()
+        expect(readKey({ a: 1 }, 'a')).toBe(1)
+      })
+    } finally {
+      Object.defineProperty(Object.prototype, 'constructor', original)
+    }
+    const other = runInNewContext(
+      'Object.prototype.constructor = null; Object.prototype.planted = "X"; ({ a: 2 })'
+    ) as object
+
+    expect(readKey(other, 'planted')).toBeUndefined()
+    expect(readKey(other, 'a')).toBe(2)
+  })
+
+  it('reads a key an object without a prototype holds itself, and not one only a prototype-less holder above holds', () => {
+    const bare = Object.assign(Object.create(null) as object, { k: 1 })
+
+    expect(readKey(bare, 'k')).toBe(1)
+    expect(readKey(Object.create(bare) as object, 'k')).toBeUndefined()
+  })
+
   it('reads a key of a proxy as the proxy answers it', () => {
     const proxy = new Proxy({}, { get: (_t, name) => (name === 'a' ? 'fromTrap' : undefined) })
 

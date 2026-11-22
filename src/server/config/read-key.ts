@@ -3,16 +3,24 @@
  *
  * Layer: server. A property access on a plain object also finds what another part of the process
  * planted on `Object.prototype`, so an option the host left out would take the planted value: a `url`
- * that redirects the connection, a `namespace`, a `serializer`, a list of `scripts`. A key counts when
- * the object, or a prototype between it and the realm's root prototype, holds it, so a class instance
- * with getters, an object made over a prototype and an object from another realm (its root prototype is
- * not this realm's) are read as before, and a value found only on `Object.prototype` is not there.
+ * that redirects the connection, a `namespace`, a `serializer`, a list of `scripts`. The root of a
+ * prototype chain is recognised by its shape and never by a property it holds: an object with no
+ * prototype that the key was reached through, not the object itself. So the root of this realm and the
+ * root of another realm are both skipped, whatever `constructor` or any other key of theirs was
+ * overwritten with, while an own key, a class getter, a prototype between the object and its root, and
+ * an object without a prototype that holds the key itself are read as before.
  */
 import { types } from 'node:util'
 
+// Captured when the module loads, so that a later overwrite of these built-ins is not what decides.
+const hasOwn = Object.hasOwn
+const prototypeOf = Reflect.getPrototypeOf
+const get = Reflect.get
+
 /**
- * Reads `key` of `source`, or `undefined` when it is found only on the realm's root prototype or
- * nowhere. A proxy answers for itself, as the host wrote it.
+ * Reads `key` of `source`, or `undefined` when the first object of its prototype chain that holds the
+ * key is a root: not `source` itself, and without a prototype. A proxy answers for itself, as the host
+ * wrote it.
  *
  * @param source - The object the host supplied.
  * @param key - The option name.
@@ -20,15 +28,11 @@ import { types } from 'node:util'
  */
 export function readKey(source: object, key: string): unknown {
   if (types.isProxy(source)) {
-    return Reflect.get(source, key)
+    return get(source, key)
   }
-  for (
-    let holder: object | null = source;
-    holder !== null && holder !== Object.prototype;
-    holder = Reflect.getPrototypeOf(holder)
-  ) {
-    if (Object.hasOwn(holder, key)) {
-      return Reflect.get(source, key)
+  for (let holder: object | null = source; holder !== null; holder = prototypeOf(holder)) {
+    if (hasOwn(holder, key)) {
+      return holder !== source && prototypeOf(holder) === null ? undefined : get(source, key)
     }
   }
   return undefined
