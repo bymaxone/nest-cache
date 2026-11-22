@@ -38,6 +38,7 @@ jest.mock('ioredis', () => {
     quit = jest.fn().mockResolvedValue('OK')
     disconnect = jest.fn()
     connector = { connect: jest.fn() }
+    connect = jest.fn().mockResolvedValue(undefined)
     constructor(...args: unknown[]) {
       super()
       this.options = (args.length > 1 ? args[1] : args[0]) as Record<string, unknown>

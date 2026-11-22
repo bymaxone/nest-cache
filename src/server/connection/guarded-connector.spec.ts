@@ -15,6 +15,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer as tlsServer } from 'node:tls'
 
+import { SentinelConnector } from 'ioredis'
+
 import { resolveOptions } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
@@ -415,6 +417,61 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
 
     expect(result).toBe(stream)
     expect(stream.destroy).not.toHaveBeenCalled()
+  })
+
+  // Scenario: a sentinel client that is not lazy; ioredis starts the first connect inside its constructor.
+  // Rule: that first connect goes through the guard too: a key planted while it waited destroys the
+  // socket and the client ends; a lazy client is not connected at all.
+  const sentinelManager = (connection: Record<string, unknown>): ConnectionManager =>
+    new ConnectionManager(
+      resolveOptions({
+        mode: 'sentinel',
+        connection,
+        sentinel: { name: 'm', sentinels: [{ host: '127.0.0.1', port: 1 }] }
+      } as unknown as BymaxCacheModuleOptions)
+    )
+
+  it('guards the first connect of a sentinel client that is not lazy', async () => {
+    const stream = { destroy: jest.fn() }
+    const spy = jest.spyOn(SentinelConnector.prototype, 'connect').mockImplementation(async () => {
+      Object.defineProperty(Object.prototype, 'path', { value: 'x', configurable: true })
+      await Promise.resolve()
+      return stream as never
+    })
+    try {
+      const client = sentinelManager({}).getClient() as unknown as {
+        once: (event: string, listener: (error: { code?: string }) => void) => void
+        disconnect: () => void
+        status: string
+      }
+      closers.push(() => client.disconnect())
+      const code = await new Promise<string | undefined>((resolve) =>
+        client.once('error', (error) => resolve(error.code))
+      )
+
+      expect(code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+      expect(stream.destroy).toHaveBeenCalledTimes(1)
+      expect(client.status).toBe('end')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'path')
+      spy.mockRestore()
+    }
+  })
+
+  it('does not connect a sentinel client that is lazy', () => {
+    const spy = jest.spyOn(SentinelConnector.prototype, 'connect')
+    try {
+      const client = sentinelManager({ lazyConnect: true }).getClient() as unknown as {
+        disconnect: () => void
+        status: string
+      }
+      closers.push(() => client.disconnect())
+
+      expect(client.status).toBe('wait')
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('is on the connector of a client the manager builds in sentinel mode', async () => {

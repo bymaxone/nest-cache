@@ -56,6 +56,7 @@ jest.mock('ioredis', () => {
     quit = jest.fn().mockResolvedValue('OK')
     disconnect = jest.fn()
     connector = { connect: jest.fn() }
+    connect = jest.fn().mockResolvedValue(undefined)
     constructor(options: Record<string, unknown>) {
       super()
       this.options = options
@@ -300,8 +301,7 @@ describe('ConnectionManager', () => {
       expect(redisInstances[0]?.options['role']).toBe('slave')
     })
 
-    // A sentinel block WITHOUT the optional secrets/role covers the false side of the three
-    // conditional spreads: the driver is handed no value for them (an own `undefined`).
+    // WITHOUT the optional secrets/role, the three conditional spreads hand the driver no value.
     it('creates a sentinel client without optional fields', () => {
       const manager = makeManager({
         mode: 'sentinel',
@@ -765,7 +765,7 @@ describe('ConnectionManager', () => {
 
       manager.getClient()
       const opts = redisInstances[0]?.options ?? {}
-      expect(opts['lazyConnect']).toBe(false)
+      expect(opts['lazyConnect']).toBe(true) // built lazy, connected by the manager (guarded)
       expect(opts['connectTimeout']).toBe(10_000)
       expect(opts['host']).toBeUndefined()
     })

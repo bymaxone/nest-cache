@@ -96,6 +96,131 @@ describe('the manager with a key planted on Object.prototype', () => {
   })
 })
 
+/**
+ * Replaces a standard key of `Object.prototype` for the length of `run` by the descriptor `replace` makes
+ * from the original one, and puts the original back.
+ */
+function overwritten<T>(
+  name: string,
+  replace: (original: PropertyDescriptor) => PropertyDescriptor,
+  run: () => T
+): T {
+  const original = Object.getOwnPropertyDescriptor(Object.prototype, name) as PropertyDescriptor
+  Object.defineProperty(Object.prototype, name, replace(original))
+  try {
+    return run()
+  } finally {
+    Object.defineProperty(Object.prototype, name, original)
+  }
+}
+
+/** A descriptor whose function behaves as the original and is not it, so the code that runs meanwhile works. */
+const copyOf = (original: PropertyDescriptor): PropertyDescriptor => ({
+  ...original,
+  value: function (this: unknown, ...args: unknown[]): unknown {
+    return (original.value as (...a: unknown[]) => unknown).apply(this, args)
+  }
+})
+
+describe('a standard key of Object.prototype that was overwritten', () => {
+  // Scenario: another part of the process replaces a standard name (the planted value is JSON-reachable
+  // with `__proto__` or a polluting merge), which an allowlist by name alone does not see.
+  // Rule: the manager refuses, counting it as planted.
+  it.each(['hasOwnProperty', 'toString', 'constructor', 'valueOf', 'isPrototypeOf'])(
+    'refuses to be built when %s is replaced',
+    (name) => {
+      const error = overwritten(name, copyOf, () => thrownBy(build))
+
+      expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+      expect(error?.details).toEqual({
+        reason: 'Object.prototype holds keys the driver would read as its own',
+        count: 1
+      })
+    }
+  )
+
+  // Scenario: the other ways to change a standard property: an accessor in place of the value, a value
+  // made enumerable, a key deleted.
+  // Rule: each is refused too, and the library's own check does not count them twice.
+  it('refuses a standard key redefined as an accessor, made enumerable or deleted', () => {
+    const accessor = overwritten(
+      'toLocaleString',
+      () => ({ get: () => undefined, configurable: true }),
+      () => thrownBy(build)
+    )
+    const enumerable = overwritten(
+      'valueOf',
+      () => ({ enumerable: true }),
+      () => thrownBy(build)
+    )
+    const deleted = (() => {
+      const original = Object.getOwnPropertyDescriptor(Object.prototype, 'propertyIsEnumerable')
+      Reflect.deleteProperty(Object.prototype, 'propertyIsEnumerable')
+      try {
+        return thrownBy(build)
+      } finally {
+        Object.defineProperty(
+          Object.prototype,
+          'propertyIsEnumerable',
+          original as PropertyDescriptor
+        )
+      }
+    })()
+
+    for (const error of [accessor, enumerable, deleted]) {
+      expect(error?.details).toEqual({
+        reason: 'Object.prototype holds keys the driver would read as its own',
+        count: 1
+      })
+    }
+  })
+
+  // Scenario: the accessor of `__proto__` gets another getter, then another setter, and a data property is
+  // made read-only, each with the same value as before.
+  // Rule: each is refused: the check compares the getter, the setter and the attributes, not the value only.
+  it.each([
+    [
+      'getter',
+      (o: PropertyDescriptor): PropertyDescriptor => ({
+        ...o,
+        get: function (this: unknown) {
+          return (o.get as () => unknown).call(this)
+        }
+      })
+    ],
+    [
+      'setter',
+      (o: PropertyDescriptor): PropertyDescriptor => ({
+        ...o,
+        set: function (this: unknown, value: unknown) {
+          ;(o.set as (v: unknown) => void).call(this, value)
+        }
+      })
+    ]
+  ])('refuses __proto__ with another %s', (_label, replace) => {
+    const error = overwritten('__proto__', replace, () => thrownBy(build))
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+
+  it('refuses a standard value that was made read-only', () => {
+    const error = overwritten(
+      'valueOf',
+      (original) => ({ ...original, writable: false }),
+      () => thrownBy(build)
+    )
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+
+  it('refuses a client that is built after a standard key was replaced', () => {
+    const manager = build()
+    const error = overwritten('hasOwnProperty', copyOf, () => thrownBy(() => manager.getClient()))
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+})
+
 describe('the keys Object.prototype holds by default', () => {
   // Scenario: the runtime that runs this row holds a string key on Object.prototype that the allowlist does
   // not name, or lacks one it names.

@@ -39,6 +39,7 @@ jest.mock('ioredis', () => {
     quit = jest.fn().mockResolvedValue('OK')
     disconnect = jest.fn()
     connector = { connect: jest.fn() }
+    connect = jest.fn().mockResolvedValue(undefined)
     constructor(options: Record<string, unknown>) {
       super()
       this.options = options

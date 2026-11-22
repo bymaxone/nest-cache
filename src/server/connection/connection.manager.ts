@@ -302,9 +302,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       if (!sentinel) {
         throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode: 'sentinel' })
       }
-      return guardSentinelConnector(
-        new Redis(withOwnKeys(readingOptions(() => this.sentinelOptions(sentinel, overrides))))
-      )
+      return this.createSentinelClient(sentinel, overrides)
     }
     if (this.options.mode === 'cluster') {
       const cluster = this.options.cluster
@@ -342,6 +340,27 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         ...overrides
       } as OwnedRedisOptions)
     )
+  }
+
+  /**
+   * Builds a sentinel-mode client whose every connect, the first one included, runs the guard: ioredis
+   * starts the first connect inside its constructor, before the connector can be wrapped, so the client
+   * is built lazy, wrapped, and connected here when the host did not ask for `lazyConnect`.
+   *
+   * @param sentinel - The resolved sentinel block.
+   * @param overrides - Extra `RedisOptions` merged over the resolved defaults.
+   * @returns The client.
+   */
+  private createSentinelClient(
+    sentinel: NonNullable<ResolvedOptions['sentinel']>,
+    overrides?: Partial<RedisOptions>
+  ): Redis {
+    const options = withOwnKeys(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
+    const lazy = options.lazyConnect === true
+    options.lazyConnect = true
+    const client = guardSentinelConnector(new Redis(options))
+    if (!lazy) client.connect().catch(() => undefined)
+    return client
   }
 
   /**

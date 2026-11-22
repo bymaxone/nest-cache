@@ -103,7 +103,8 @@ interface IWrappableConnector {
  * a key planted while it waited is read there. A socket opened under a polluted `Object.prototype` is
  * destroyed before ioredis uses it and the connect is refused.
  *
- * @param client - A client built in sentinel mode.
+ * @param client - A client built in sentinel mode and not yet connected: ioredis starts the first connect
+ *   inside its constructor, so the caller builds it lazy and connects it after this.
  * @returns The same client.
  */
 export function guardSentinelConnector<T extends object>(client: T): T {

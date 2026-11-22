@@ -53,14 +53,41 @@ export const STANDARD_KEYS: ReadonlySet<string> = new Set([
   'valueOf'
 ])
 
+/** The property descriptors of the standard keys as they were when this module loaded. */
+const STANDARD_DESCRIPTORS: ReadonlyMap<string, PropertyDescriptor | undefined> = new Map(
+  [...STANDARD_KEYS].map((name) => [name, Object.getOwnPropertyDescriptor(Object.prototype, name)])
+)
+
 /**
- * Refuses to go on while `Object.prototype` holds a string key it does not hold by default.
+ * Whether a standard key of `Object.prototype` is not what it was when this module loaded: replaced,
+ * redefined as an accessor, made writable or enumerable, or deleted.
+ */
+function isOverwritten(name: string): boolean {
+  const was = STANDARD_DESCRIPTORS.get(name)
+  const now = Object.getOwnPropertyDescriptor(Object.prototype, name)
+  if (was === undefined || now === undefined) return was !== now
+  return (
+    !Object.is(was.value, now.value) ||
+    was.get !== now.get ||
+    was.set !== now.set ||
+    was.writable !== now.writable ||
+    was.enumerable !== now.enumerable ||
+    // Stryker disable next-line EqualityOperator,ConditionalExpression: a standard property made non-configurable cannot be put back, and a test would freeze it for every other spec of the realm
+    was.configurable !== now.configurable
+  )
+}
+
+/**
+ * Refuses to go on while `Object.prototype` holds a string key it does not hold by default, or a
+ * standard key that is not what it was when this module loaded.
  *
  * ioredis reads names off objects it creates itself (a client, a cluster, a connector, a pipeline, a
  * command, a subscriber) that those objects do not hold when they are built, through `this`, through an
  * alias of `this` and through other objects, so a key planted on `Object.prototype` is what the read
  * finds. The library cannot give those objects an own key and no list of the names can be complete, so a
- * polluted `Object.prototype` is refused as a whole. A symbol key is not a name the driver reads.
+ * polluted `Object.prototype` is refused as a whole. A symbol key is not a name the driver reads. A
+ * standard name that was overwritten (`hasOwnProperty`, `toString`, `constructor`) counts as planted: the
+ * names are an allowlist, so a replaced value would otherwise keep the count at zero.
  *
  * It runs when the manager is built, when each client is built and in the tick that opens every socket,
  * on the first connect and on every reconnect (the connector). It does not cover `Array.prototype`,
@@ -70,9 +97,10 @@ export const STANDARD_KEYS: ReadonlySet<string> = new Set([
  * @throws {CacheException} `INVALID_OPTIONS` with the count of the keys, never a key or a value.
  */
 export function assertDriverUnshadowed(): void {
-  const planted = Object.getOwnPropertyNames(Object.prototype).filter(
-    (name) => !STANDARD_KEYS.has(name)
-  )
+  const planted = [
+    ...Object.getOwnPropertyNames(Object.prototype).filter((name) => !STANDARD_KEYS.has(name)),
+    ...[...STANDARD_KEYS].filter(isOverwritten)
+  ]
   if (planted.length > 0) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
       reason: 'Object.prototype holds keys the driver would read as its own',
