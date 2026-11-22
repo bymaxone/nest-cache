@@ -292,6 +292,8 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    *   `enableOfflineQueue` applies, at the cluster level.
    */
   private createClient(overrides?: Partial<RedisOptions>): AnyRedis {
+    // Again here: a name can be planted between the construction of the manager and the build of a client.
+    assertDriverUnshadowed()
     if (this.options.mode === 'sentinel') {
       const sentinel = this.options.sentinel
       if (!sentinel) {

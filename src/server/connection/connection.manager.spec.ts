@@ -298,8 +298,9 @@ describe('ConnectionManager', () => {
       expect(redisInstances[0]?.options['role']).toBe('slave')
     })
 
-    // A sentinel block WITHOUT the optional secrets/role covers the false side of
-    // the three conditional spreads — those keys must be absent.
+    // A sentinel block WITHOUT the optional secrets/role covers the false side of the three
+    // conditional spreads: the driver is handed no value for them (the key is own and undefined, as
+    // every driver option name is, see driver-option-names.ts).
     it('creates a sentinel client without optional fields', () => {
       const manager = makeManager({
         mode: 'sentinel',
@@ -310,11 +311,10 @@ describe('ConnectionManager', () => {
       const opts = redisInstances[0]?.options ?? {}
       expect(opts['name']).toBe('mymaster')
       expect(opts['sentinelPassword']).toBeUndefined()
-      // Pins the ConditionalExpression on the `password` spread (mutant L172):
-      // `→ true` would always spread `{ password: undefined }`, adding the key.
+      // The `password` spread: nothing is handed over when the block holds none.
       expect(opts['password']).toBeUndefined()
       expect(opts['role']).toBeUndefined()
-      // Same for the natMap spread — absent when not supplied.
+      // Same for the natMap spread: no value when not supplied.
       expect(opts['natMap']).toBeUndefined()
     })
 
@@ -706,7 +706,7 @@ describe('ConnectionManager', () => {
     })
 
     // A host-only connection must take every default — the right side of every
-    // `??` and the false side of each conditional spread (optional keys absent).
+    // `??` and the false side of each conditional spread (optional keys unset: own and undefined).
     it('applies defaults for an unspecified connection', () => {
       const manager = makeManager({ connection: { host: 'h' } })
 

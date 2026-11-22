@@ -57,6 +57,7 @@ export const DRIVER_INSTANCE_NAMES: readonly string[] = [
   'length',
   'manuallyClosing',
   'nodeifiedPromise',
+  'preferKey',
   'reconnectTimeout',
   'retryAttempts',
   'shardedSubscribers',

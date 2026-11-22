@@ -54,20 +54,45 @@ describe('the manager with a name of the driver planted on Object.prototype', ()
     }
   })
 
+  // Scenario: the name is planted after the manager is built and before it builds a client.
+  // Rule: the client is not built: the check runs when each client is created.
+  it('refuses to build a client when a name is planted after the manager was built', () => {
+    const manager = build()
+    Object.defineProperty(Object.prototype, 'manuallyClosing', {
+      value: true,
+      configurable: true,
+      writable: true
+    })
+    try {
+      expect(() => manager.getClient()).toThrow(
+        expect.objectContaining({
+          code: CACHE_ERROR_CODES.INVALID_OPTIONS,
+          details: expect.objectContaining({ name: 'manuallyClosing' })
+        }) as Error
+      )
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'manuallyClosing')
+    }
+  })
+
   it('is built when nothing is planted', () => {
     expect(build()).toBeInstanceOf(ConnectionManager)
   })
 })
 
-/** The names read as `this.NAME` (not called) in one file of the built ioredis. */
+/**
+ * The names read as `this.NAME` (not called) in one file of the built ioredis, and as `ALIAS.NAME` for
+ * each alias the file makes of `this` (`const _this = this`, which the compiled code uses in callbacks).
+ */
 function thisReads(file: string): string[] {
   const root = dirname(require.resolve('ioredis/package.json'))
   const source = readFileSync(join(root, 'built', file), 'utf8')
-  return [
-    ...new Set(
-      [...source.matchAll(/\bthis\.([A-Za-z_]\w*)\b(?!\s*\()/g)].map((m) => m[1] as string)
-    )
+  const aliases = [
+    'this',
+    ...[...source.matchAll(/\bconst\s+(\w+)\s*=\s*this\s*;/g)].map((m) => m[1] as string)
   ]
+  const reads = new RegExp(`\\b(?:${aliases.join('|')})\\.([A-Za-z_]\\w*)\\b(?!\\s*\\()`, 'g')
+  return [...new Set([...source.matchAll(reads)].map((m) => m[1] as string))]
 }
 
 describe('the driver instance names', () => {
