@@ -23,6 +23,14 @@ interface Captured {
 // `var`: initialised before the hoisted import runs the mock factory (see connection.manager.spec).
 var created: Captured[] = []
 
+// The refusal to build while Object.prototype holds a key (driver-guard.spec.ts) would stop every
+// row here before the library read anything; it is switched off so that the reads of the library itself,
+// of the options it hands to the driver and of an omitted connection block, are what is compared.
+jest.mock('./driver-option-names', () => ({
+  ...jest.requireActual<typeof import('./driver-option-names')>('./driver-option-names'),
+  assertDriverUnshadowed: (): void => undefined
+}))
+
 jest.mock('ioredis', () => {
   class Fake extends EventEmitter {
     status = 'wait'

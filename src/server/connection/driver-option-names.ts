@@ -35,52 +35,44 @@ export const DRIVER_OPTION_NAMES: readonly string[] = [
 ].sort()
 
 /**
- * The names ioredis reads off objects it creates itself (a client, a cluster, a connector, a pipeline,
- * a command, a subscriber) that those objects do not hold when they are built, so a key planted on
- * `Object.prototype` is what the read finds. The library does not create these objects and cannot give
- * them an own key, so it refuses to build a client while any of them is planted.
+ * The string keys `Object.prototype` holds in every Node version the library supports. Anything else is a
+ * key another part of the process planted there.
  */
-export const DRIVER_INSTANCE_NAMES: readonly string[] = [
-  '_blockingDeadline',
-  '_blockingTimeoutTimer',
-  '_commandTimeoutTimer',
-  '_transformer',
-  'bufferMode',
-  'condition',
-  'firstError',
-  'flagMap',
-  'isReadOnly',
-  'items',
-  'keys',
-  'lastActiveSubscriber',
-  'leftRedirections',
-  'length',
-  'manuallyClosing',
-  'nodeifiedPromise',
-  'preferKey',
-  'reconnectTimeout',
-  'retryAttempts',
-  'shardedSubscribers',
-  'slot',
-  'slotsTimer',
-  'socketTimeoutTimer',
-  'stream',
-  'subscriberGroupEmitter'
-]
+const STANDARD_KEYS: ReadonlySet<string> = new Set([
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  '__proto__',
+  'constructor',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+  'toString',
+  'valueOf'
+])
 
 /**
- * Refuses to go on when a name the driver reads off its own objects is planted on `Object.prototype`.
+ * Refuses to go on while `Object.prototype` holds a string key it does not hold by default.
  *
- * @throws {CacheException} `INVALID_OPTIONS` naming the planted name (one of the driver's, never a value).
+ * ioredis reads names off objects it creates itself (a client, a cluster, a connector, a pipeline, a
+ * command, a subscriber) that those objects do not hold when they are built, through `this`, through an
+ * alias of `this` and through other objects, so a key planted on `Object.prototype` is what the read
+ * finds. The library cannot give those objects an own key and no list of the names can be complete, so a
+ * polluted `Object.prototype` is refused as a whole. A symbol key is not a name the driver reads.
+ *
+ * @throws {CacheException} `INVALID_OPTIONS` with the count of the keys, never a key or a value.
  */
 export function assertDriverUnshadowed(): void {
-  for (const name of DRIVER_INSTANCE_NAMES) {
-    if (Object.hasOwn(Object.prototype, name)) {
-      throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-        reason: 'Object.prototype holds a name the driver reads from its own objects',
-        name
-      })
-    }
+  const planted = Object.getOwnPropertyNames(Object.prototype).filter(
+    (name) => !STANDARD_KEYS.has(name)
+  )
+  if (planted.length > 0) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
+      reason: 'Object.prototype holds keys the driver would read as its own',
+      count: planted.length
+    })
   }
 }
 

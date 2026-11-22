@@ -4,9 +4,9 @@
  * Layer: server. ioredis merges the options it is given into an ordinary object of its own and reads
  * names the library did not set from it, so a planted `host`, `port`, `tls`, `password`, `username`,
  * `sentinels` or `natMap` would configure the connection. The library gives every driver option name an
- * own key. Nothing here mocks the driver: each name is planted, a client is built through the manager
- * (lazyConnect, never connected) and the options the driver holds must equal those of a build without it.
- * The list of names is checked against the source of the pinned ioredis.
+ * own key. Nothing here mocks the driver: a client is built through the manager (lazyConnect, never
+ * connected), each name is planted afterwards and the options the driver holds must not change. The list
+ * of names is checked against the source of the pinned ioredis.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path'
 import { resolveOptions } from '../config/default-options'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ConnectionManager } from './connection.manager'
-import { DRIVER_INSTANCE_NAMES, DRIVER_OPTION_NAMES } from './driver-option-names'
+import { DRIVER_OPTION_NAMES } from './driver-option-names'
 
 type Raw = Record<string, unknown>
 
@@ -32,8 +32,11 @@ const SHAPES: Record<string, () => Raw> = {
   })
 }
 
-/** What the driver holds for every driver option name, on its options and on a cluster's node options. */
-function held(make: () => Raw): string {
+/** A client of the options `make` builds, through the manager, and what it holds for every driver option name. */
+function clientOf(make: () => Raw): {
+  client: { options: Record<string, unknown>; disconnect: () => void }
+  held: () => string
+} {
   const manager = new ConnectionManager(
     resolveOptions(make() as unknown as BymaxCacheModuleOptions)
   )
@@ -48,37 +51,38 @@ function held(make: () => Raw): string {
         (object as Record<string, unknown> | undefined)?.[name]
       ])
     )
-  const text = JSON.stringify(
-    { options: read(client.options), nodes: read(client.options['redisOptions']) },
-    (_key, value: unknown) => (typeof value === 'function' ? '[function]' : value)
-  )
-  client.disconnect()
-  return text
+  return {
+    client,
+    held: () =>
+      JSON.stringify(
+        { options: read(client.options), nodes: read(client.options['redisOptions']) },
+        (_key, value: unknown) => (typeof value === 'function' ? '[function]' : value)
+      )
+  }
 }
 
 describe.each(Object.keys(SHAPES))('a real ioredis client of the %s options', (shape) => {
   const make = SHAPES[shape] as () => Raw
 
-  // Scenario: another part of the process plants a driver option the library did not set.
-  // Rule: the driver holds exactly what it holds without it.
-  // A name that is also read off an object the driver creates is refused by the manager when it is
-  // planted (see driver-instance-names.spec.ts), so it is not built here.
-  it.each(DRIVER_OPTION_NAMES.filter((name) => !DRIVER_INSTANCE_NAMES.includes(name)))(
-    'holds the same options when %s is planted',
-    (name) => {
-      const base = held(make)
-      Object.defineProperty(Object.prototype, name, {
-        value: 'PLANTED',
-        configurable: true,
-        writable: true
-      })
-      try {
-        expect([name, held(make)]).toEqual([name, base])
-      } finally {
-        Reflect.deleteProperty(Object.prototype, name)
-      }
+  // Scenario: a driver option name is planted on Object.prototype AFTER the client was built (the manager
+  // refuses to build one while any key is planted, so what is left is what the driver reads from the
+  // options it keeps, later, when it reconnects or builds a node client).
+  // Rule: the driver holds exactly what it held before, because each of those names has an own key.
+  it.each(DRIVER_OPTION_NAMES)('holds the same options when %s is planted later', (name) => {
+    const { client, held } = clientOf(make)
+    const before = held()
+    Object.defineProperty(Object.prototype, name, {
+      value: 'PLANTED',
+      configurable: true,
+      writable: true
+    })
+    try {
+      expect([name, held()]).toEqual([name, before])
+    } finally {
+      Reflect.deleteProperty(Object.prototype, name)
+      client.disconnect()
     }
-  )
+  })
 })
 
 /** Every `.js` file under `directory`. */
