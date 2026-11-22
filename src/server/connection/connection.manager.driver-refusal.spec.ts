@@ -8,7 +8,7 @@
  */
 import { inspect } from 'node:util'
 
-import { applyDefaults, validateOptions } from '../config/default-options'
+import { applyDefaults, resolveOptions, validateOptions } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { ConnectionManager } from './connection.manager'
@@ -33,8 +33,6 @@ function refusal(options: Record<string, unknown>): CacheException {
 }
 
 describe.each([
-  ['scaleReads', { scaleReads: SECRET }],
-  ['himportFieldsets given as a string', { himportFieldsets: SECRET }],
   ['himportFieldsets holding a string', { himportFieldsets: [SECRET] }],
   ['scripts given as a string', { scripts: SECRET }]
 ])('a cluster option the driver refuses: %s', (_label, options) => {
@@ -86,5 +84,103 @@ describe('an option that cannot be read while the cluster client is built', () =
     expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
     expect(error?.details).toEqual({ reason: 'option could not be read' })
     expect(error?.cause).toBe(failure)
+  })
+})
+
+describe('a value the driver reads while the client is built', () => {
+  /** The exception building the client for a cluster whose `himportFieldsets` entry throws `thrown`. */
+  const throwing = (thrown: unknown): CacheException =>
+    refusal({
+      himportFieldsets: [
+        {
+          get name(): string {
+            throw thrown
+          },
+          fields: []
+        }
+      ]
+    })
+
+  // Scenario: a getter of the host, read inside the driver's constructor, throws a CacheException the host
+  // made, or a proxy whose getPrototypeOf trap runs host code.
+  // Rule: the driver's construction is never trusted: whatever it throws is dropped, the thrown value is
+  // not inspected, and the exception is the library's fixed refusal.
+  it('does not pass on an exception the host made', () => {
+    const forged = new CacheException(CACHE_ERROR_CODES.CONNECTION_FAILED, {
+      reason: 'HOSTSECRET-forged'
+    })
+    const error = throwing(forged)
+
+    expect(error).not.toBe(forged)
+    expect(error.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error.details).toEqual({ reason: 'the driver refused an option of the cluster' })
+  })
+
+  it('does not run the trap of a proxy it catches', () => {
+    let trapRan = false
+    const trap = new Proxy(
+      {},
+      {
+        getPrototypeOf: () => {
+          trapRan = true
+          return null
+        }
+      }
+    )
+    const error = throwing(trap)
+
+    expect(trapRan).toBe(false)
+    expect(error.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error.details).toEqual({ reason: 'the driver refused an option of the cluster' })
+  })
+})
+
+describe('what the host wrote, while the driver builds the client', () => {
+  // Scenario: the options carry values behind getters of the host (a fieldset name, a script definition),
+  // counted as they are read.
+  // Rule: every one is read while the options are resolved and none is read again when the client is
+  // built, so nothing of the host's runs inside the driver's constructor.
+  it('reaches no getter of the host inside the constructor', () => {
+    const reads: string[] = []
+    const counted = <T>(label: string, value: T): { readonly value: T } => ({
+      get value(): T {
+        reads.push(label)
+        return value
+      }
+    })
+    const name = counted('fieldset.name', 'n1')
+    const lua = counted('script.lua', 'return 1')
+    const raw = {
+      mode: 'cluster',
+      cluster: {
+        nodes: [{ host: '127.0.0.1', port: 1 }],
+        options: {
+          lazyConnect: true,
+          himportFieldsets: [
+            {
+              get name(): string {
+                return name.value
+              },
+              fields: ['f1']
+            }
+          ],
+          scripts: {
+            demo: {
+              get lua(): string {
+                return lua.value
+              },
+              numberOfKeys: 1
+            }
+          }
+        }
+      }
+    } as unknown as BymaxCacheModuleOptions
+    const resolved = resolveOptions(raw)
+    const readsBefore = reads.length
+
+    new ConnectionManager(resolved).getClient()
+
+    expect(readsBefore).toBeGreaterThan(0)
+    expect(reads).toHaveLength(readsBefore)
   })
 })

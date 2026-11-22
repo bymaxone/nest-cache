@@ -8,10 +8,11 @@
 import { refuseOption } from './refuse-option'
 
 /**
- * Blanks and the characters that print as nothing (the Unicode default-ignorable set, the next-line
- * control and the braille blank): a text made only of them is empty.
+ * Blanks and the characters that print as nothing or are not text: the Unicode default-ignorable set,
+ * the format (`Cf`) and control (`Cc`, the next-line control included) characters, the object
+ * replacement character and the braille blank. A text made only of them is empty.
  */
-const INVISIBLE = /[\s\p{Default_Ignorable_Code_Point}\u0085\u2800]/gu
+const INVISIBLE = /[\s\p{Default_Ignorable_Code_Point}\p{Cf}\p{Cc}\uFFFC\u2800]/gu
 
 /**
  * Refuses a value that is not a non-empty string.

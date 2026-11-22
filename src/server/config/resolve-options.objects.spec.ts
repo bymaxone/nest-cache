@@ -159,6 +159,14 @@ describe.each([
     )
   })
 
+  // Scenario: the bytes of an entry are not bytes: null, a number, an object, a boolean.
+  // Rule: refused naming the field, as only bytes or a string reach the driver there.
+  it.each([null, 5, {}, true, [1]])('refuses %p as the bytes of an entry', (value) => {
+    expect(() => heldTls({ [key]: [{ [bytes]: value }] })).toThrow(
+      refusing(`tls.${key}[0].${bytes} must be bytes or a string`)
+    )
+  })
+
   it('keeps a key object as it is', () => {
     const entry = createSecretKey(Buffer.from('secret'))
 
@@ -271,7 +279,14 @@ describe('a script text made of invisible characters', () => {
     ['the direction marks', '‎‏'],
     ['a hangul filler', 'ㅤ'],
     ['a braille blank', '⠀'],
-    ['a next line', '']
+    ['a next line', ''],
+    ['a control character', ''],
+    ['a delete and an application program command', ''],
+    ['an object replacement character', '￼'],
+    ['an interlinear annotation anchor', '￹'],
+    ['an arabic letter mark', '؜'],
+    ['an arabic number sign', '؀'],
+    ['a tab, a carriage return and a line feed', '\t\r\n']
   ])('refuses %s as a name or a source', (_label, blank) => {
     expect(() =>
       resolve({ connection: { host: 'h' }, scripts: [{ name: blank, lua: 'return 1' }] })
@@ -285,5 +300,80 @@ describe('a script text made of invisible characters', () => {
     expect(() =>
       resolve({ connection: { host: 'h' }, scripts: [{ name: '​a', lua: 'return 1' }] })
     ).not.toThrow()
+  })
+})
+
+describe('cluster.options.scaleReads', () => {
+  const cluster = (options: Record<string, unknown>): Record<string, unknown> => ({
+    mode: 'cluster',
+    cluster: { nodes: [{ host: 'a', port: 7000 }], options }
+  })
+
+  // Scenario: the host spells scaleReads wrong or gives it a value of another kind.
+  // Rule: refused naming the option and the type only, never the driver's own message.
+  it.each(['masters', 5, null, {}])(
+    'refuses %p, naming the option and printing no value',
+    (value) => {
+      const error = (() => {
+        try {
+          resolve(cluster({ scaleReads: value }))
+        } catch (thrown) {
+          return thrown as { details: Record<string, unknown> }
+        }
+        throw new Error('not refused')
+      })()
+
+      expect(error.details['reason']).toBe(
+        "cluster.options.scaleReads must be 'all', 'master', 'slave' or a function"
+      )
+      expect(JSON.stringify(error.details)).not.toContain('masters')
+    }
+  )
+
+  it.each(['all', 'master', 'slave', (): string => 'all'])('accepts %p', (value) => {
+    expect(() => resolve(cluster({ scaleReads: value }))).not.toThrow()
+  })
+
+  it('accepts an absent value', () => {
+    expect(() => resolve(cluster({}))).not.toThrow()
+  })
+})
+
+describe('cluster.options.himportFieldsets', () => {
+  const cluster = (himportFieldsets: unknown): Record<string, unknown> => ({
+    mode: 'cluster',
+    cluster: { nodes: [{ host: 'a', port: 7000 }], options: { himportFieldsets } }
+  })
+  const held = (himportFieldsets: unknown): unknown[] =>
+    (
+      resolve(cluster(himportFieldsets)).cluster as unknown as {
+        options: { himportFieldsets: unknown[] }
+      }
+    ).options.himportFieldsets
+
+  // Scenario: the host gives a value that is not a list.
+  // Rule: refused naming the option; only a list reaches the driver.
+  it.each(['text', 5, {}, true])('refuses %p', (value) => {
+    expect(() => resolve(cluster(value))).toThrow(
+      refusing('cluster.options.himportFieldsets must be a list')
+    )
+  })
+
+  // Scenario: the host changes the list or an entry after boot.
+  // Rule: the held list is a copy read once; a change afterwards does not reach it.
+  it('copies the list and each entry', () => {
+    const fields = ['f1']
+    const entry = { name: 'n1', fields }
+    const list = [entry]
+    const result = held(list)
+    entry.name = 'later'
+    fields[0] = 'later'
+    list.push({ name: 'n2', fields: [] })
+
+    expect(result).toEqual([{ name: 'n1', fields: ['f1'] }])
+  })
+
+  it('accepts an absent list', () => {
+    expect(() => resolve(cluster(undefined))).not.toThrow()
   })
 })

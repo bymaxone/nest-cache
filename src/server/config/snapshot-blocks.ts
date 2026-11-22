@@ -181,6 +181,13 @@ function copyBytes(value: unknown): unknown {
   return isBuffer(value) ? Buffer.from(new Uint8Array(value)) : value
 }
 
+/** The keys of an ioredis script definition, as a complete record. */
+const SCRIPT_DEFINITION_KEYS: Readonly<Record<'lua' | 'numberOfKeys' | 'readOnly', true>> = {
+  lua: true,
+  numberOfKeys: true,
+  readOnly: true
+}
+
 /** The tls options whose entries may be objects, with the field that holds their bytes. */
 const ENTRY_BYTES = { key: 'pem', pfx: 'buf' } as const
 
@@ -220,6 +227,9 @@ function copyKeyEntry(entry: unknown, option: string, field: string, index: numb
   const bytes: unknown = Reflect.get(entry, field)
   if (bytes === undefined) {
     refuseOption(where, `has no ${field}`, entry)
+  }
+  if (typeof bytes !== 'string' && !ArrayBuffer.isView(bytes) && !isBuffer(bytes)) {
+    refuseOption(`${where}.${field}`, 'must be bytes or a string', bytes)
   }
   return { [field]: copyBytes(bytes), ...(passphrase !== undefined && { passphrase }) }
 }
@@ -328,6 +338,58 @@ function copyNatMap(map: unknown, option: string): unknown {
 }
 
 /**
+ * Copies a `himportFieldsets` entry by name: its `name` through {@link copyBytes} and its `fields` list
+ * the same way, so a getter of the host is read here once and never inside the driver. An entry that is
+ * not an object is kept for the driver to refuse.
+ *
+ * @param entry - The entry as the host wrote it.
+ * @returns A plain copy, or the entry itself when it is not an object.
+ */
+function copyFieldset(entry: unknown): unknown {
+  if (!isObject(entry) || Array.isArray(entry)) {
+    return entry
+  }
+  return {
+    name: copyBytes(Reflect.get(entry, 'name')),
+    fields: copyList(
+      Reflect.get(entry, 'fields'),
+      'cluster.options.himportFieldsets[].fields',
+      copyBytes
+    )
+  }
+}
+
+/**
+ * Copies a `cluster.options.scripts` map by name: each definition becomes its `lua`, `numberOfKeys`
+ * and `readOnly`, read once, so the driver never reaches a getter of the host while it builds the
+ * client. A value that is not an object, and a definition that is not an object, are kept for the
+ * driver to refuse.
+ *
+ * @param scripts - The map as the host wrote it.
+ * @returns A plain copy, or the value itself when it is not an object.
+ */
+function copyScriptMap(scripts: unknown): unknown {
+  if (!isObject(scripts) || Array.isArray(scripts)) {
+    return scripts
+  }
+  const names = Object.keys(scripts)
+  if (names.length > MAX_LIST_ENTRIES) {
+    refuseOption('cluster.options.scripts', 'has too many entries', names.length, {
+      max: MAX_LIST_ENTRIES
+    })
+  }
+  return Object.fromEntries(
+    names.map((name) => {
+      const definition: unknown = Reflect.get(scripts, name)
+      return [
+        name,
+        isObject(definition) ? readPlain(definition, SCRIPT_DEFINITION_KEYS) : definition
+      ]
+    })
+  )
+}
+
+/**
  * Copies the `cluster.options` group and its `redisOptions`, each read once, with the `tls` and
  * `natMap` objects the driver reads live copied as well.
  *
@@ -344,6 +406,12 @@ function readClusterOptions(options: unknown): unknown {
   return {
     ...copy,
     natMap: copyNatMap(copy.natMap, 'cluster.options.natMap'),
+    himportFieldsets: copyList(
+      copy.himportFieldsets,
+      'cluster.options.himportFieldsets',
+      copyFieldset
+    ),
+    scripts: copyScriptMap(copy.scripts),
     ...(node !== undefined && {
       redisOptions: {
         ...node,

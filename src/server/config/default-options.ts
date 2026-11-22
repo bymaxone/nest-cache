@@ -7,7 +7,7 @@
  * fields cannot be reassigned once registered. See
  * `docs/technical_specification.md` §4.6.
  */
-import type { RedisOptions } from 'ioredis'
+import type { ClusterOptions, RedisOptions } from 'ioredis'
 
 import {
   DEFAULT_KEY_ESCAPING,
@@ -361,6 +361,36 @@ function requireTimers(
   requireTimerDelay(`${group}.commandTimeout`, source?.commandTimeout, MIN_COMMAND_TIMEOUT_MS)
 }
 
+/** The values `scaleReads` takes besides a function. */
+const SCALE_READS = ['all', 'master', 'slave']
+
+/**
+ * Refuses a `scaleReads` that is not one of its three names or a function, and a `himportFieldsets`
+ * that is not a list, naming the option and the type only: the driver refuses both on its own, and
+ * the message of the first prints the value.
+ *
+ * @param options - The `cluster.options` group as copied by the snapshot; absent means nothing to check.
+ * @throws {CacheException} `INVALID_OPTIONS` naming the option.
+ */
+function validateDriverKinds(options: ClusterOptions | undefined): void {
+  const scaleReads: unknown = options?.scaleReads
+  if (
+    scaleReads !== undefined &&
+    typeof scaleReads !== 'function' &&
+    !SCALE_READS.includes(scaleReads as string)
+  ) {
+    refuseOption(
+      'cluster.options.scaleReads',
+      "must be 'all', 'master', 'slave' or a function",
+      scaleReads
+    )
+  }
+  const himportFieldsets: unknown = options?.himportFieldsets
+  if (himportFieldsets !== undefined && !Array.isArray(himportFieldsets)) {
+    refuseOption('cluster.options.himportFieldsets', 'must be a list', himportFieldsets)
+  }
+}
+
 /**
  * Validates the cluster-specific options.
  *
@@ -383,6 +413,7 @@ function validateClusterOptions(options: BymaxCacheModuleOptions): void {
       refuseOption(`connection.${option}`, `is ignored in cluster mode; set ${target}`, value)
     }
   }
+  validateDriverKinds(options.cluster?.options)
   const redisOptions = options.cluster?.options?.redisOptions
   requireTimers('cluster.options.redisOptions', redisOptions)
   validateConnectionNumbers('cluster.options.redisOptions', redisOptions)
