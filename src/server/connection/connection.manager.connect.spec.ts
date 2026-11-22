@@ -7,13 +7,13 @@
  * should not be in the list would break a connection that the construction-only specs never open. The
  * server answers the few commands the client sends while it connects and a PING; the driver is real.
  */
-import { execFileSync } from 'node:child_process'
 import { createServer as netServer } from 'node:net'
 import type { Server, Socket } from 'node:net'
 import { createServer as tlsServer } from 'node:tls'
 
 import { resolveOptions } from '../config/default-options'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
+import { selfSignedCertificate } from '../../test-helpers/self-signed-certificate'
 import { ConnectionManager } from './connection.manager'
 
 /** The commands of one RESP request, from the bytes received so far; the rest stays buffered. */
@@ -71,31 +71,7 @@ let certificate = ''
 let key = ''
 
 beforeAll(() => {
-  // A self-signed certificate for 127.0.0.1 and localhost, valid for two days, read from the output of
-  // openssl: nothing is written to disk.
-  const pem = execFileSync(
-    'openssl',
-    [
-      'req',
-      '-x509',
-      '-newkey',
-      'rsa:2048',
-      '-nodes',
-      '-days',
-      '2',
-      '-subj',
-      '/CN=localhost',
-      '-addext',
-      'subjectAltName=DNS:localhost,IP:127.0.0.1',
-      '-keyout',
-      '/dev/stdout',
-      '-out',
-      '/dev/stdout'
-    ],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-  )
-  certificate = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/.exec(pem)?.[0] ?? ''
-  key = /-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/.exec(pem)?.[0] ?? ''
+  ;({ certificate, key } = selfSignedCertificate())
 })
 
 afterEach(() => {
