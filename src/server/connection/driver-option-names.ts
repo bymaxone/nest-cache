@@ -111,11 +111,21 @@ function isNative(value: unknown): boolean {
 }
 
 /**
+ * Whether Node was started with `--disable-proto=delete`, which removes `__proto__` from `Object.prototype`
+ * itself: a hardening a host chooses, not pollution. The flag reaches the process as an argument or through
+ * `NODE_OPTIONS`.
+ */
+const PROTO_DELETED_BY_FLAG = [
+  ...process.execArgv,
+  ...(process.env['NODE_OPTIONS'] ?? '').split(/\s+/)
+].includes('--disable-proto=delete')
+
+/**
  * Whether what a standard key holds is what the language gives it: a native function with the key's own
  * name (`constructor` holds `Object`), and for `__proto__` a native getter and setter.
  */
 function hasExpectedKind(name: string, descriptor: IDescriptorFields | undefined): boolean {
-  if (descriptor === undefined) return false
+  if (descriptor === undefined) return name === '__proto__' && PROTO_DELETED_BY_FLAG
   if (name === '__proto__') return isNative(descriptor.get) && isNative(descriptor.set)
   const expectedName = name === 'constructor' ? 'Object' : name
   return isNative(descriptor.value) && (descriptor.value as { name: string }).name === expectedName
@@ -160,7 +170,7 @@ function isOverwritten(name: string): boolean {
  * standard name that was overwritten (`hasOwnProperty`, `toString`, `constructor`) counts as planted: the
  * names are an allowlist, so a replaced value would otherwise keep the count at zero, and so does a standard
  * name that was already replaced when this module loaded (not a native function with its own name, or
- * `__proto__` without a native getter and setter): the refusal is the same at every use, not a throw at
+ * `__proto__` without a native getter and setter, or missing unless Node was started with `--disable-proto=delete`): the refusal is the same at every use, not a throw at
  * import, so a host that only imports the types is not affected. A script that impersonates the engine
  * before the import (a replaced `Function.prototype.toString`) is out of reach of this check.
  *

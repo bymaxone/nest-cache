@@ -335,6 +335,70 @@ describe('a standard key that was already replaced when the module loaded', () =
     })
   })
 
+  // Scenario: Node was started with --disable-proto=delete, which removes __proto__ from Object.prototype
+  // itself; the flag reaches the process as an argument or through NODE_OPTIONS.
+  // Rule: the missing __proto__ is not pollution then, and is when the flag is not set; the flag does not
+  // hide any other defect.
+  describe('with __proto__ missing from Object.prototype', () => {
+    /** The error of the guard of a copy of the module loaded while `__proto__` is missing and `flag` is set. */
+    function loadedWithoutProto(
+      flag: 'argument' | 'environment' | 'none',
+      alsoReplaced?: string
+    ): ReturnType<typeof thrownBy> {
+      const proto = Object.getOwnPropertyDescriptor(
+        Object.prototype,
+        '__proto__'
+      ) as PropertyDescriptor
+      const argv = Object.getOwnPropertyDescriptor(process, 'execArgv') as PropertyDescriptor
+      const options = process.env['NODE_OPTIONS']
+      const run = (): ReturnType<typeof thrownBy> => {
+        let guard: () => void = () => undefined
+        jest.isolateModules(() => {
+          guard = (require('./driver-option-names') as typeof DriverNames).assertDriverUnshadowed
+        })
+        return thrownBy(guard)
+      }
+      try {
+        if (flag === 'argument') {
+          Object.defineProperty(process, 'execArgv', {
+            value: ['--disable-proto=delete'],
+            configurable: true
+          })
+        }
+        if (flag === 'environment')
+          process.env['NODE_OPTIONS'] = '--max-old-space-size=512 --disable-proto=delete'
+        Reflect.deleteProperty(Object.prototype, '__proto__')
+        return alsoReplaced === undefined ? run() : overwritten(alsoReplaced, copyOf, run)
+      } finally {
+        Object.defineProperty(Object.prototype, '__proto__', proto)
+        Object.defineProperty(process, 'execArgv', argv)
+        if (options === undefined) delete process.env['NODE_OPTIONS']
+        else process.env['NODE_OPTIONS'] = options
+      }
+    }
+
+    it.each(['argument', 'environment'] as const)(
+      'is not refused when the flag is set as an %s',
+      (flag) => {
+        expect(loadedWithoutProto(flag)).toBeUndefined()
+      }
+    )
+
+    it('is refused when the flag is not set', () => {
+      expect(loadedWithoutProto('none')?.details).toEqual({
+        reason: 'Object.prototype holds keys the driver would read as its own',
+        count: 1
+      })
+    })
+
+    it('still refuses another standard key that was replaced, flag or not', () => {
+      expect(loadedWithoutProto('argument', 'hasOwnProperty')?.details).toEqual({
+        reason: 'Object.prototype holds keys the driver would read as its own',
+        count: 1
+      })
+    })
+  })
+
   it('does not refuse a copy of the module loaded under an untouched prototype', () => {
     let guard: () => void = () => undefined
     jest.isolateModules(() => {
