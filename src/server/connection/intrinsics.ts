@@ -21,23 +21,41 @@ const uncurryThis = bind.bind(call) as <A extends unknown[], R>(
   method: (...args: A) => R
 ) => (self: unknown, ...args: A) => R
 
+/** `Object.prototype`, read when the library loads. */
 export const objectPrototype = Object.prototype
+/** `Object.getOwnPropertyNames`, as it was when the library loaded. */
 export const getOwnPropertyNames = Object.getOwnPropertyNames
+/** `Object.getOwnPropertyDescriptor`, as it was when the library loaded. */
 export const getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor
+/** `Object.defineProperty`, as it was when the library loaded. */
 export const defineProperty = Object.defineProperty
+/** `Object.hasOwn`, as it was when the library loaded. */
 export const hasOwn = Object.hasOwn
+/** `Object.is`, as it was when the library loaded. */
 export const objectIs = Object.is
+/** `Object.create`, narrowed to the one call the library makes: an object without a prototype. */
 export const createObject = Object.create as (prototype: null) => Record<string, unknown>
+/** `Object.assign`, as it was when the library loaded. */
 export const assign = Object.assign
+/** `Object.freeze`, as it was when the library loaded. */
 export const freeze = Object.freeze
+/** `Reflect.setPrototypeOf`, as it was when the library loaded. */
 export const setPrototypeOf = Reflect.setPrototypeOf
+/** `Reflect.getPrototypeOf`, as it was when the library loaded. */
 export const getPrototypeOf = Reflect.getPrototypeOf
+/** `util.types.isProxy`, as it was when the library loaded. */
 export const isProxy = types.isProxy
+/** `Function.prototype.toString` as a function of its receiver: `functionToString(fn)`. */
 export const functionToString = uncurryThis(Function.prototype.toString)
+/** `String.prototype.endsWith` as a function of its receiver: `stringEndsWith(text, suffix)`. */
 export const stringEndsWith = uncurryThis(String.prototype.endsWith)
+/** `Function.prototype.bind` as a function of its receiver: `bindFunction(fn, thisArg)`. */
 export const bindFunction = uncurryThis(Function.prototype.bind)
+/** `process.nextTick`, as it was when the library loaded. */
 export const nextTick = process.nextTick
+/** `Error.captureStackTrace`, as it was when the library loaded. */
 export const captureStackTrace = Error.captureStackTrace
+/** The `Promise` of the language as it was when the library loaded; a host may wrap the global one later. */
 export const NativePromise = Promise
 
 const arrayIterator = getPrototypeOf([][Symbol.iterator]()) as object

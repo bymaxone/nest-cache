@@ -7,7 +7,7 @@
  * that refusal, made with the references captured in `intrinsics`. It is always the typed exception with a
  * count and no value of a key.
  */
-import { CACHE_ERROR_CODES, CACHE_ERROR_MESSAGES } from '../errors/cache-error-codes'
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import {
   captureStackTrace,
@@ -24,7 +24,6 @@ export const KEYS_REASON = 'Object.prototype holds keys the driver would read as
 /** Why the guard refused when a built-in the library relies on was replaced after it loaded. */
 export const BUILTINS_REASON = 'Built-ins the library relies on were replaced after it loaded'
 const CODE = CACHE_ERROR_CODES.INVALID_OPTIONS
-const MESSAGE = CACHE_ERROR_MESSAGES.get(CODE) ?? 'Cache error'
 
 /** A data descriptor of its own fields only: `defineProperty` reads `get` and `set` through a prototype. */
 function dataDescriptor(
@@ -41,6 +40,7 @@ function dataDescriptor(
 }
 
 const TEMPLATE = new CacheException(CODE, { reason: KEYS_REASON, count: 0 })
+const MESSAGE = TEMPLATE.message
 const FIELDS = getOwnPropertyNames(TEMPLATE)
 const PROTOTYPE = getPrototypeOf(TEMPLATE) as object
 const DESCRIPTORS = createObject(null)
