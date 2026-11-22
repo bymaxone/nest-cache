@@ -82,7 +82,7 @@ const VALUES: ReadonlyArray<readonly [string, unknown]> = [
   ['an object', { planted: true }]
 ]
 
-/** The options the client was built with, for the fields an attacker would want to change. */
+/** The options the client was built with, read for every key the spec plants. */
 function built(make: () => Raw): string {
   try {
     const manager = new ConnectionManager(
@@ -90,18 +90,16 @@ function built(make: () => Raw): string {
     )
     manager.getClient()
     const o = (created[0] as Captured).options
-    const text = JSON.stringify({
-      host: o['host'],
-      port: o['port'],
-      password: o['password'],
-      username: o['username'],
-      db: o['db'],
-      tls: o['tls'],
-      sentinels: o['sentinels'],
-      lazyConnect: o['lazyConnect'],
-      family: o['family'],
-      redisOptions: o['redisOptions']
-    })
+    // Every planted key is read from the options object and from the cluster's redisOptions, functions
+    // shown as a word, so a key the object inherits from Object.prototype always shows in the text.
+    const read = (object: unknown): Record<string, unknown> =>
+      Object.fromEntries(
+        KEYS.map((key) => [key, (object as Record<string, unknown> | undefined)?.[key]])
+      )
+    const text = JSON.stringify(
+      { options: read(o), redisOptions: read(o['redisOptions']), sentinels: o['sentinels'] },
+      (_key, value: unknown) => (typeof value === 'function' ? '[function]' : value)
+    )
     return text
   } catch (error) {
     return `throws ${(error as { code?: string }).code}`
