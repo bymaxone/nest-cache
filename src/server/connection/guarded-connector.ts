@@ -20,6 +20,35 @@ import { assertDriverUnshadowed } from './driver-option-names'
 /** ioredis's own text for a connect attempt that was cancelled before the socket opened. */
 const CONNECTION_CLOSED_MESSAGE = 'Connection is closed.'
 
+/**
+ * Events Node emits on a socket that ioredis does not listen to. `emit` finds the listeners of an event with
+ * a plain property read, so a string planted on `Object.prototype` under one of these names after the
+ * guard ran is read as the listener and throws in the event loop, where nothing can catch it. A listener
+ * of its own makes the read find the socket's.
+ */
+const UNHEARD_EVENTS = [
+  'connect',
+  'lookup',
+  'connectionAttempt',
+  'connectionAttemptFailed',
+  'connectionAttemptTimeout',
+  'ready'
+] as const
+
+/**
+ * Gives a socket a no-op listener for each event of `UNHEARD_EVENTS`.
+ *
+ * @param stream - A socket that was just created.
+ */
+function hearUnheardEvents(stream: { on: (event: string, listener: () => void) => unknown }): void {
+  for (const event of UNHEARD_EVENTS) {
+    stream.on(event, noop)
+  }
+}
+
+/** A listener that does nothing. */
+function noop(): void {}
+
 /** The options of a client, as far as the connector reads them. */
 interface IConnectorOptions {
   readonly disconnectTimeout?: number | undefined
@@ -82,6 +111,7 @@ export class GuardedConnector extends AbstractConnector {
           reject(error)
           return
         }
+        hearUnheardEvents(this.stream)
         this.stream.once('error', (error) => {
           this.firstError = error
         })
@@ -119,6 +149,7 @@ export function guardSentinelConnector<T extends object>(client: T): T {
       ;(stream as { destroy: () => void }).destroy()
       throw error
     }
+    hearUnheardEvents(stream as Parameters<typeof hearUnheardEvents>[0])
     return stream
   }
   return client

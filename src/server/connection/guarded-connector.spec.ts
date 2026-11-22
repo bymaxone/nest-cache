@@ -207,6 +207,44 @@ describe('the connector, run by hand', () => {
   })
 })
 
+const UNHEARD = [
+  'connect',
+  'connectionAttempt',
+  'connectionAttemptFailed',
+  'connectionAttemptTimeout',
+  'lookup',
+  'ready'
+]
+
+describe('the events Node emits on the socket that nothing listens to', () => {
+  // Scenario: a string is planted on Object.prototype under the name of one of those events after the guard
+  // ran; Node reads the listeners of an event with a plain property read and calls the string.
+  // Rule: the socket has a listener of its own for each of them, so the read finds it.
+  it('has a listener for each of them, on a plain and on a TLS socket', async () => {
+    const plain = await listenOnPort(netServer(answer))
+    const secure = await listenOnPort(tlsServer({ key, cert: certificate }, answer))
+    const connectors = [
+      new GuardedConnector({ host: '127.0.0.1', port: plain }),
+      new GuardedConnector({
+        host: '127.0.0.1',
+        port: secure,
+        tls: { ca: certificate, servername: 'localhost' }
+      })
+    ]
+
+    for (const connector of connectors) {
+      const { stream } = await settle(connector)
+      for (const event of UNHEARD) {
+        expect(stream?.listenerCount(event)).toBeGreaterThan(0)
+      }
+      connector.disconnect()
+    }
+  })
+
+  // A string planted from a spec lands on the Object.prototype of the spec's realm, not on the one the socket
+  // code of Node reads, so the rows pin the listeners and a child process reproduces the read itself.
+})
+
 describe('the connector with a key planted on Object.prototype after the client was built', () => {
   // Scenario: a `path` is planted, the options name a port.
   // Rule: the connection is refused (INVALID_OPTIONS, the count only); the unix socket the key names
@@ -333,7 +371,8 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
   // Rule: nothing planted, the original connect runs with the same arguments and its result is returned;
   // planted, it is refused before the original runs.
   it('calls the connect it wraps when nothing is planted', async () => {
-    const original = jest.fn().mockResolvedValue('stream')
+    const stream = { on: jest.fn() }
+    const original = jest.fn().mockResolvedValue(stream)
     const client = { connector: { connect: original } }
     guardSentinelConnector(client)
 
@@ -341,7 +380,7 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
       client.connector.connect as unknown as (...args: unknown[]) => Promise<unknown>
     )('emitter')
 
-    expect(result).toBe('stream')
+    expect(result).toBe(stream)
     expect(original).toHaveBeenCalledWith('emitter')
   })
 
@@ -385,7 +424,7 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
   })
 
   it('leaves the socket alone when nothing was planted', async () => {
-    const stream = { destroy: jest.fn() }
+    const stream = { destroy: jest.fn(), on: jest.fn() }
     const client = { connector: { connect: jest.fn().mockResolvedValue(stream) } }
     guardSentinelConnector(client)
 
@@ -466,6 +505,18 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
     } finally {
       spy.mockRestore()
     }
+  })
+
+  // Scenario: the socket a sentinel connector opened is handed back to ioredis.
+  // Rule: it carries a listener for each event Node emits on it that ioredis does not listen to.
+  it('gives the socket of a sentinel client a listener for each unheard event', async () => {
+    const stream = { destroy: jest.fn(), on: jest.fn() }
+    const client = { connector: { connect: jest.fn().mockResolvedValue(stream) } }
+    guardSentinelConnector(client)
+
+    await (client.connector.connect as unknown as () => Promise<unknown>)()
+
+    expect(stream.on.mock.calls.map(([event]: [string]) => event).sort()).toEqual(UNHEARD)
   })
 
   it('is on the connector of a client the manager builds in sentinel mode', async () => {
