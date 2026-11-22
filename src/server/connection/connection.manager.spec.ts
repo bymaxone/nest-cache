@@ -75,13 +75,7 @@ jest.mock('ioredis', () => {
       clusterInstances.push(this)
     }
   }
-  return {
-    __esModule: true,
-    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
-    Redis: FakeRedis,
-    Cluster: FakeCluster,
-    default: FakeRedis
-  }
+  return require('../../test-helpers/ioredis-module').ioredisModule(FakeRedis, FakeCluster)
 })
 
 beforeEach(() => {
@@ -307,8 +301,7 @@ describe('ConnectionManager', () => {
     })
 
     // A sentinel block WITHOUT the optional secrets/role covers the false side of the three
-    // conditional spreads: the driver is handed no value for them (the key is own and undefined, as
-    // every driver option name is, see driver-option-names.ts).
+    // conditional spreads: the driver is handed no value for them (an own `undefined`).
     it('creates a sentinel client without optional fields', () => {
       const manager = makeManager({
         mode: 'sentinel',
@@ -319,10 +312,8 @@ describe('ConnectionManager', () => {
       const opts = redisInstances[0]?.options ?? {}
       expect(opts['name']).toBe('mymaster')
       expect(opts['sentinelPassword']).toBeUndefined()
-      // The `password` spread: nothing is handed over when the block holds none.
       expect(opts['password']).toBeUndefined()
       expect(opts['role']).toBeUndefined()
-      // Same for the natMap spread: no value when not supplied.
       expect(opts['natMap']).toBeUndefined()
     })
 

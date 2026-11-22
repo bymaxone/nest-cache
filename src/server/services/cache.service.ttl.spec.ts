@@ -17,13 +17,7 @@ import { CacheService } from './cache.service'
 // working client without a socket.
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return {
-    __esModule: true,
-    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
-    Redis: Mock,
-    default: Mock,
-    Cluster: class FakeCluster {}
-  }
+  return require('../../test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
 })
 
 describe('CacheService ttlSeconds', () => {

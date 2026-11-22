@@ -44,13 +44,7 @@ jest.mock('ioredis', () => {
       clients.push(this as unknown as ScriptedClient)
     }
   }
-  return {
-    __esModule: true,
-    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
-    Redis: FakeRedis,
-    Cluster: FakeRedis,
-    default: FakeRedis
-  }
+  return require('../../test-helpers/ioredis-module').ioredisModule(FakeRedis, FakeRedis)
 })
 
 beforeEach(() => {

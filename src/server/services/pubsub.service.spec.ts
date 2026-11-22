@@ -19,13 +19,7 @@ import type { Redis } from 'ioredis'
 // subscriber connection share a working pub/sub bus without a socket.
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return {
-    __esModule: true,
-    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
-    Redis: Mock,
-    default: Mock,
-    Cluster: class FakeCluster {}
-  }
+  return require('../../test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
 })
 
 /** Yields to the event loop after a publish so Promise-chain listeners settle before assertions. */
