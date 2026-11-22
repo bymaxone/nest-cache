@@ -39,6 +39,18 @@ function sealListeners(stream: object): void {
   }
 }
 
+/**
+ * The descriptor of an own key whose value is `undefined`. It has no prototype, and the key is defined and not
+ * assigned: an assignment to an inherited key that is read-only throws, and a descriptor that inherits a
+ * planted `get` or `set` is refused.
+ */
+const SHADOW = Object.assign(Object.create(null) as PropertyDescriptor, {
+  value: undefined,
+  writable: true,
+  enumerable: true,
+  configurable: true
+})
+
 /** The options of a client, as far as the connector reads them. */
 interface IConnectorOptions {
   readonly disconnectTimeout?: number | undefined
@@ -51,8 +63,8 @@ interface IConnectorOptions {
 
 /**
  * The connector of a standalone client and of the nodes of a cluster: ioredis's own `StandaloneConnector`
- * with the guard run in the tick that opens the socket, the options handed to Node held in an
- * object that has no prototype, and only the options its own options object holds read at all.
+ * with the guard run in the tick that opens the socket, and the options handed to Node held in an
+ * object that has no prototype.
  */
 export class GuardedConnector extends AbstractConnector {
   /**
@@ -60,6 +72,16 @@ export class GuardedConnector extends AbstractConnector {
    */
   public constructor(private readonly options: IConnectorOptions) {
     super(options.disconnectTimeout ?? 0)
+  }
+
+  /**
+   * The unix socket the options name, when the connector may connect to one.
+   *
+   * @param options - The options ioredis built the client with.
+   * @returns The path, or `undefined`.
+   */
+  protected pathOf(options: IConnectorOptions): string | undefined {
+    return options.path
   }
 
   /**
@@ -72,29 +94,29 @@ export class GuardedConnector extends AbstractConnector {
    */
   public connect(): Promise<Socket> {
     const { options } = this
-    this.connecting = true
-    // Only what the options hold of their own: an ordinary object of ioredis's reads `path` or `tls` off
-    // `Object.prototype` when it holds none, and this runs before the guard of the next tick.
-    const own = <K extends keyof IConnectorOptions>(name: K): IConnectorOptions[K] =>
-      hasOwn(options, name) ? options[name] : undefined
-    const { path, port, host, family, tls } = {
-      path: own('path'),
-      port: own('port'),
-      host: own('host'),
-      family: own('family'),
-      tls: own('tls')
+    // Before anything is read: ioredis builds the options of a client with a `for...in` that copies an
+    // enumerable key visible on `Object.prototype` into the options as an own key, and starts the first
+    // connect in the same synchronous step, so a key that is visible then is visible here, and one that is
+    // gone before the guard of the next tick would otherwise be read as the host's.
+    try {
+      assertDriverUnshadowed()
+    } catch (error) {
+      return Promise.reject(error)
     }
+    this.connecting = true
     const target = Object.create(null) as Record<string, unknown>
+    const path = this.pathOf(options)
     if (path) {
       target['path'] = path
     } else {
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` port as an absent one (measured), so setting it always connects the same
-      if (port != null) target['port'] = port
+      if (options.port != null) target['port'] = options.port
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` host as an absent one (measured), so setting it always connects the same
-      if (host != null) target['host'] = host
+      if (options.host != null) target['host'] = options.host
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` family as an absent one (measured), so setting it always connects the same
-      if (family != null) target['family'] = family
+      if (options.family != null) target['family'] = options.family
     }
+    const { tls } = options
     if (tls) Object.assign(target, tls)
 
     return new Promise<Socket>((resolve, reject) => {
@@ -119,6 +141,19 @@ export class GuardedConnector extends AbstractConnector {
         resolve(this.stream)
       })
     })
+  }
+}
+
+/**
+ * The connector of the probe clients of a sentinel client. A probe connects to the address of a sentinel,
+ * never to a unix socket, and ioredis copies an enumerable key it can see on `Object.prototype` into the
+ * options of a client as an own key while it builds them, in a step that a guard looking at the prototype
+ * afterwards cannot see: a `path` that was there for that step only (an accessor that removes itself)
+ * would send the probe, and the sentinel password, to a socket of its own. A probe ignores `path`.
+ */
+class ProbeConnector extends GuardedConnector {
+  protected override pathOf(): undefined {
+    return undefined
   }
 }
 
@@ -151,9 +186,9 @@ export class GuardedSentinelConnector extends SentinelConnector {
     }
     const original = self.connectToSentinel.bind(this)
     self.connectToSentinel = (endpoint, extra): IProbeClient => {
-      const probe = original(endpoint, { ...extra, Connector: GuardedConnector })
+      const probe = original(endpoint, { ...extra, Connector: ProbeConnector })
       for (const name of DRIVER_OPTION_NAMES) {
-        if (!hasOwn(probe.options, name)) probe.options[name] = undefined
+        if (!hasOwn(probe.options, name)) Object.defineProperty(probe.options, name, SHADOW)
       }
       return probe
     }
