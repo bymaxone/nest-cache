@@ -51,8 +51,8 @@ interface IConnectorOptions {
 
 /**
  * The connector of a standalone client and of the nodes of a cluster: ioredis's own `StandaloneConnector`
- * with the guard run in the tick that opens the socket, and the options handed to Node held in an
- * object that has no prototype.
+ * with the guard run in the tick that opens the socket, the options handed to Node held in an
+ * object that has no prototype, and only the options its own options object holds read at all.
  */
 export class GuardedConnector extends AbstractConnector {
   /**
@@ -73,18 +73,29 @@ export class GuardedConnector extends AbstractConnector {
   public connect(): Promise<Socket> {
     const { options } = this
     this.connecting = true
+    // Only what the options hold of their own: an ordinary object of ioredis's reads `path` or `tls` off
+    // `Object.prototype` when it holds none, and this runs before the guard of the next tick.
+    const own = <K extends keyof IConnectorOptions>(name: K): IConnectorOptions[K] =>
+      hasOwn(options, name) ? options[name] : undefined
+    const { path, port, host, family, tls } = {
+      path: own('path'),
+      port: own('port'),
+      host: own('host'),
+      family: own('family'),
+      tls: own('tls')
+    }
     const target = Object.create(null) as Record<string, unknown>
-    if (options.path) {
-      target['path'] = options.path
+    if (path) {
+      target['path'] = path
     } else {
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` port as an absent one (measured), so setting it always connects the same
-      if (options.port != null) target['port'] = options.port
+      if (port != null) target['port'] = port
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` host as an absent one (measured), so setting it always connects the same
-      if (options.host != null) target['host'] = options.host
+      if (host != null) target['host'] = host
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` family as an absent one (measured), so setting it always connects the same
-      if (options.family != null) target['family'] = options.family
+      if (family != null) target['family'] = family
     }
-    if (options.tls) Object.assign(target, options.tls)
+    if (tls) Object.assign(target, tls)
 
     return new Promise<Socket>((resolve, reject) => {
       process.nextTick(() => {
@@ -94,7 +105,7 @@ export class GuardedConnector extends AbstractConnector {
         }
         try {
           assertDriverUnshadowed()
-          this.stream = options.tls
+          this.stream = tls
             ? tlsConnect(target as unknown as ConnectionOptions)
             : createConnection(target as unknown as { path: string })
         } catch (error) {

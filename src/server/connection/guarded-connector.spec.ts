@@ -339,6 +339,53 @@ describe('the connector with a key planted on Object.prototype after the client 
   })
 })
 
+describe('a key planted only while the connector is called, and gone before its guard runs', () => {
+  // Scenario: a path and a tls are visible on Object.prototype when connect() is called and removed before the
+  // next tick, which is when the guard looks; the options object of the connector is an ordinary object that
+  // inherits them (ioredis builds probe clients from literals).
+  // Rule: the connector reads only what its options hold of their own, so it connects to the port in plain
+  // text and nothing reaches the socket the path names.
+  it('connects to its own port and sends nothing to a planted path', async () => {
+    let connections = 0
+    const attacker = await listenOnPath(
+      netServer((socket) => {
+        connections += 1
+        socket.on('error', () => undefined)
+      }),
+      'transient'
+    )
+    const port = await listenOnPort(netServer(answer))
+    const connector = new GuardedConnector({ host: '127.0.0.1', port })
+    Object.defineProperty(Object.prototype, 'path', {
+      value: attacker,
+      configurable: true,
+      enumerable: true
+    })
+    Object.defineProperty(Object.prototype, 'tls', {
+      value: { rejectUnauthorized: false },
+      configurable: true,
+      enumerable: true
+    })
+    let pending: ReturnType<typeof settle>
+    try {
+      pending = settle(connector)
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'path')
+      Reflect.deleteProperty(Object.prototype, 'tls')
+    }
+
+    const { stream, error } = await pending
+    await new Promise<void>((resolve) => stream?.once('connect', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(error).toBeUndefined()
+    expect(stream?.remotePort).toBe(port)
+    expect((stream as unknown as { encrypted?: boolean }).encrypted).toBeUndefined()
+    expect(connections).toBe(0)
+    connector.disconnect()
+  })
+})
+
 describe('a real client that reconnects after a key was planted', () => {
   /** The first of `ready` and `error` the client emits next, as `ready` or the error's code. */
   const nextOutcome = (client: {
