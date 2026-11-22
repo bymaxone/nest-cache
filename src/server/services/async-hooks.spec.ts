@@ -17,7 +17,13 @@ import type { Redis } from 'ioredis'
 
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return {
+    __esModule: true,
+    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
+    Redis: Mock,
+    default: Mock,
+    Cluster: class FakeCluster {}
+  }
 })
 
 /** A hook that is async and rejects, as an `async` arrow handed to a `=> void` slot does. */

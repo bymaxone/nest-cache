@@ -62,6 +62,11 @@ export const STANDARD_KEYS: ReadonlySet<string> = new Set([
  * finds. The library cannot give those objects an own key and no list of the names can be complete, so a
  * polluted `Object.prototype` is refused as a whole. A symbol key is not a name the driver reads.
  *
+ * It runs when the manager is built, when each client is built and in the tick that opens every socket,
+ * on the first connect and on every reconnect (the connector). It does not cover `Array.prototype`,
+ * `Function.prototype` or `Buffer`'s prototype, and a key planted after the last of those runs is still
+ * read by the objects the driver builds later (a command, a pipeline).
+ *
  * @throws {CacheException} `INVALID_OPTIONS` with the count of the keys, never a key or a value.
  */
 export function assertDriverUnshadowed(): void {

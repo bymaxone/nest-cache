@@ -12,6 +12,7 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import * as cacheExceptionModule from '../errors/cache.exception'
 import { CacheException } from '../errors/cache.exception'
 import { ConnectionManager } from './connection.manager'
+import { GuardedConnector } from './guarded-connector'
 
 import type { ResolvedOptions } from '../config/resolved-options'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
@@ -54,6 +55,7 @@ jest.mock('ioredis', () => {
     options: Record<string, unknown>
     quit = jest.fn().mockResolvedValue('OK')
     disconnect = jest.fn()
+    connector = { connect: jest.fn() }
     constructor(options: Record<string, unknown>) {
       super()
       this.options = options
@@ -73,7 +75,13 @@ jest.mock('ioredis', () => {
       clusterInstances.push(this)
     }
   }
-  return { __esModule: true, Redis: FakeRedis, Cluster: FakeCluster, default: FakeRedis }
+  return {
+    __esModule: true,
+    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
+    Redis: FakeRedis,
+    Cluster: FakeCluster,
+    default: FakeRedis
+  }
 })
 
 beforeEach(() => {
@@ -354,6 +362,7 @@ describe('ConnectionManager', () => {
         enableOfflineQueue: false,
         enableReadyCheck: true,
         redisOptions: {
+          Connector: GuardedConnector,
           connectTimeout: 10_000,
           commandTimeout: 5_000,
           maxRetriesPerRequest: 3,
@@ -375,6 +384,7 @@ describe('ConnectionManager', () => {
       expect(clusterInstances[0]?.options).toEqual({
         enableOfflineQueue: false,
         redisOptions: {
+          Connector: GuardedConnector,
           connectTimeout: 10_000,
           commandTimeout: 5_000,
           maxRetriesPerRequest: 3,

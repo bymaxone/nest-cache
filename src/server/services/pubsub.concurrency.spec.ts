@@ -16,7 +16,13 @@ import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options
 // subscriber connection share a working pub/sub bus without a socket.
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return {
+    __esModule: true,
+    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
+    Redis: Mock,
+    default: Mock,
+    Cluster: class FakeCluster {}
+  }
 })
 
 const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve))

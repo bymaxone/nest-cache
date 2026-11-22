@@ -38,6 +38,7 @@ import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
 import { copyClusterOptions } from './copy-cluster-options'
 import { assertDriverUnshadowed, withOwnKeys } from './driver-option-names'
+import { GuardedConnector, guardSentinelConnector } from './guarded-connector'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
@@ -301,7 +302,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       if (!sentinel) {
         throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode: 'sentinel' })
       }
-      return new Redis(withOwnKeys(readingOptions(() => this.sentinelOptions(sentinel, overrides))))
+      return guardSentinelConnector(
+        new Redis(withOwnKeys(readingOptions(() => this.sentinelOptions(sentinel, overrides))))
+      )
     }
     if (this.options.mode === 'cluster') {
       const cluster = this.options.cluster
@@ -322,6 +325,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
           enableOfflineQueue: overrides.enableOfflineQueue
         }),
         redisOptions: withOwnKeys({
+          Connector: GuardedConnector,
           connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
           commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
           maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
@@ -332,7 +336,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       return refusingDriverOptions(() => new Cluster(nodes, withOwnKeys(driverOptions)))
     }
     return new Redis(
-      withOwnKeys({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
+      withOwnKeys({
+        Connector: GuardedConnector,
+        ...this.#redisOptionsResolved,
+        ...overrides
+      } as OwnedRedisOptions)
     )
   }
 

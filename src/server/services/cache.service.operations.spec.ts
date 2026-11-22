@@ -14,7 +14,13 @@ import type { ScriptManagerService } from './script-manager.service'
 
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return {
+    __esModule: true,
+    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
+    Redis: Mock,
+    default: Mock,
+    Cluster: class FakeCluster {}
+  }
 })
 
 describe('CacheService operation outcomes', () => {

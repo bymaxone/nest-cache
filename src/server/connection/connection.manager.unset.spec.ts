@@ -38,6 +38,7 @@ jest.mock('ioredis', () => {
     options: Record<string, unknown>
     quit = jest.fn().mockResolvedValue('OK')
     disconnect = jest.fn()
+    connector = { connect: jest.fn() }
     constructor(options: Record<string, unknown>) {
       super()
       this.options = options
@@ -55,7 +56,13 @@ jest.mock('ioredis', () => {
       clusterInstances.push(this as unknown as Captured)
     }
   }
-  return { __esModule: true, Redis: FakeRedis, Cluster: FakeCluster, default: FakeRedis }
+  return {
+    __esModule: true,
+    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
+    Redis: FakeRedis,
+    Cluster: FakeCluster,
+    default: FakeRedis
+  }
 })
 
 beforeEach(() => {

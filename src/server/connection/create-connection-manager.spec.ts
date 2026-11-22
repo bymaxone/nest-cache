@@ -42,7 +42,13 @@ jest.mock('ioredis', () => {
     }
   }
   class FakeCluster extends FakeRedis {}
-  return { __esModule: true, Redis: FakeRedis, Cluster: FakeCluster, default: FakeRedis }
+  return {
+    __esModule: true,
+    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
+    Redis: FakeRedis,
+    Cluster: FakeCluster,
+    default: FakeRedis
+  }
 })
 
 /** What a throw carries, so two throws can be compared as the same error. */

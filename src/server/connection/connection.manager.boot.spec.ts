@@ -46,7 +46,13 @@ jest.mock('ioredis', () => {
       clusterInstances.push(this)
     }
   }
-  return { __esModule: true, Redis: FakeRedis, Cluster: FakeCluster, default: FakeRedis }
+  return {
+    __esModule: true,
+    AbstractConnector: jest.requireActual<typeof import('ioredis')>('ioredis').AbstractConnector,
+    Redis: FakeRedis,
+    Cluster: FakeCluster,
+    default: FakeRedis
+  }
 })
 
 beforeEach(() => {
