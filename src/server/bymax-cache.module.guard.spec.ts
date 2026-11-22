@@ -6,6 +6,8 @@
  * a built-in replaced after the library was imported, or a key planted on `Object.prototype`, would answer for
  * those reads. The guard on `Object.prototype` runs first, at `forRoot` and at the factory, and refuses.
  */
+import { types } from 'node:util'
+
 import type { Provider } from '@nestjs/common'
 
 import { findProvider } from '../test-helpers/provider.helpers'
@@ -104,6 +106,23 @@ describe('forRoot, with the check of a namespace blinded', () => {
     expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
     expect(clean?.code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
     expect(error?.details).toEqual({ reason: BUILTINS_REASON, count: 1 })
+  })
+})
+
+describe('forRoot, with util.types.isProxy replaced after the import', () => {
+  // Scenario: `isProxy` is replaced by a function that says yes, which sends every source to the branch that
+  // reads through a prototype.
+  // Rule: the guard refuses before an option is read.
+  it('refuses with the reason of built-ins', () => {
+    const original = types.isProxy
+    ;(types as unknown as Record<string, unknown>)['isProxy'] = () => true
+    try {
+      const error = thrownBy(() => BymaxCacheModule.forRoot(OPTIONS))
+
+      expect(error?.details).toEqual({ reason: BUILTINS_REASON, count: 1 })
+    } finally {
+      ;(types as unknown as Record<string, unknown>)['isProxy'] = original
+    }
   })
 })
 

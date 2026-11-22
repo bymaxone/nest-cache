@@ -10,6 +10,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { types } from 'node:util'
 
 import { BASELINE_BUILTINS } from './intrinsics'
 
@@ -26,7 +27,8 @@ const STATICS: Record<string, object> = {
   Buffer,
   JSON,
   Math,
-  String
+  String,
+  types
 }
 // The code holds no `Map`: the first one it holds adds `Map.prototype` to this list and its methods to the baseline.
 const PROTOTYPES: Array<[string, object]> = [
@@ -61,13 +63,13 @@ describe('the load baseline against the calls of the code it protects', () => {
   const code = sources().join('\n')
   const staticCalls = new Set<string>()
   for (const match of code.matchAll(
-    /\b(Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String)\.([A-Za-z]+)\(/g
+    /\b(Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String|types)\.([A-Za-z]+)\(/g
   )) {
     staticCalls.add(`${match[1]}.${match[2]}`)
   }
   const instanceCalls = new Set<string>()
   for (const match of code.matchAll(
-    /(?<!\b(?:Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String))\.([A-Za-z]+)\(/g
+    /(?<!\b(?:Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String|types))\.([A-Za-z]+)\(/g
   )) {
     instanceCalls.add(match[1] as string)
   }
@@ -83,6 +85,9 @@ describe('the load baseline against the calls of the code it protects', () => {
     // `Object.keys` and the like are in the baseline; a static the global does not have is not a built-in call.
     const target = STATICS[owner] as Record<string, unknown>
     if (typeof target[key] !== 'function') return
+    // A function that is neither writable nor configurable (`util.types.isKeyObject`) cannot be replaced.
+    const slot = Object.getOwnPropertyDescriptor(target, key)
+    if (slot !== undefined && slot.writable === false && slot.configurable === false) return
     expect(inBaseline(STATICS[owner] as object, key)).toBe(true)
   })
 
