@@ -458,6 +458,24 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
     }
   })
 
+  // Scenario: a JavaScript host passes a truthy value that is not a boolean for lazyConnect.
+  // Rule: it is lazy, as ioredis and the manager's own wait for readiness read it.
+  it('reads a truthy lazyConnect as lazy, as ioredis does', () => {
+    const spy = jest.spyOn(SentinelConnector.prototype, 'connect')
+    try {
+      const client = sentinelManager({ lazyConnect: 1 }).getClient() as unknown as {
+        disconnect: () => void
+        status: string
+      }
+      closers.push(() => client.disconnect())
+
+      expect(client.status).toBe('wait')
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('does not connect a sentinel client that is lazy', () => {
     const spy = jest.spyOn(SentinelConnector.prototype, 'connect')
     try {

@@ -11,6 +11,7 @@ import { resolveOptions } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ConnectionManager } from './connection.manager'
+import type * as DriverNames from './driver-option-names'
 import { STANDARD_KEYS } from './driver-option-names'
 
 const build = (): ConnectionManager =>
@@ -218,6 +219,116 @@ describe('a standard key of Object.prototype that was overwritten', () => {
     const error = overwritten('hasOwnProperty', copyOf, () => thrownBy(() => manager.getClient()))
 
     expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+})
+
+/**
+ * The error the guard of a copy of the module loaded while `name` is replaced throws when it runs, with the
+ * replacement still in place: the snapshot of that copy is the polluted state, so only the check of what the
+ * language gives the key can see it.
+ */
+function loadedUnder(
+  name: string,
+  replace: (original: PropertyDescriptor) => PropertyDescriptor
+): ReturnType<typeof thrownBy> {
+  return overwritten(name, replace, () => {
+    let guard: () => void = () => undefined
+    jest.isolateModules(() => {
+      guard = (require('./driver-option-names') as typeof DriverNames).assertDriverUnshadowed
+    })
+    return thrownBy(guard)
+  })
+}
+
+describe('a standard key that was already replaced when the module loaded', () => {
+  // Scenario: another dependency replaced a standard name before the library was imported, so the
+  // snapshot of the descriptors is the polluted state and sees no change.
+  // Rule: the guard refuses at every use, counting it, because the value is not what the language gives.
+  it.each([
+    ['hasOwnProperty', copyOf],
+    ['toString', copyOf],
+    [
+      'valueOf',
+      (o: PropertyDescriptor): PropertyDescriptor => ({ ...o, value: Object.prototype.toString })
+    ],
+    ['constructor', (o: PropertyDescriptor): PropertyDescriptor => ({ ...o, value: Array })],
+    [
+      '__proto__',
+      (o: PropertyDescriptor): PropertyDescriptor => ({
+        ...o,
+        get: function (this: unknown) {
+          return (o.get as () => unknown).call(this)
+        }
+      })
+    ]
+  ])('refuses when %s was replaced before the load', (name, replace) => {
+    const error = loadedUnder(name, replace)
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error?.details).toEqual({
+      reason: 'Object.prototype holds keys the driver would read as its own',
+      count: 1
+    })
+  })
+
+  // Scenario: the replacement is written in JavaScript and carries the name of the key it replaces.
+  // Rule: it is refused as well; the name alone does not make a function the one the language gives.
+  it.each(['hasOwnProperty', 'toString', 'valueOf'])(
+    'refuses a function of the right name written in JavaScript in place of %s',
+    (name) => {
+      const error = loadedUnder(name, (original) => ({
+        ...original,
+        value: {
+          [name](this: unknown, ...args: unknown[]): unknown {
+            return (original.value as (...a: unknown[]) => unknown).apply(this, args)
+          }
+        }[name]
+      }))
+
+      expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    }
+  )
+
+  it('refuses an accessor in place of a standard value before the load', () => {
+    const error = loadedUnder('toLocaleString', () => ({
+      get: () => undefined,
+      configurable: true
+    }))
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+
+  it('refuses when a standard key was deleted before the load', () => {
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, 'propertyIsEnumerable')
+    Reflect.deleteProperty(Object.prototype, 'propertyIsEnumerable')
+    let error: ReturnType<typeof thrownBy>
+    try {
+      let guard: () => void = () => undefined
+      jest.isolateModules(() => {
+        guard = (require('./driver-option-names') as typeof DriverNames).assertDriverUnshadowed
+      })
+      error = thrownBy(guard)
+    } finally {
+      Object.defineProperty(
+        Object.prototype,
+        'propertyIsEnumerable',
+        original as PropertyDescriptor
+      )
+    }
+
+    expect(error?.details).toEqual({
+      reason: 'Object.prototype holds keys the driver would read as its own',
+      count: 1
+    })
+  })
+
+  it('does not refuse a copy of the module loaded under an untouched prototype', () => {
+    let guard: () => void = () => undefined
+    jest.isolateModules(() => {
+      guard = (require('./driver-option-names') as typeof DriverNames).assertDriverUnshadowed
+    })
+
+    expect(thrownBy(guard)).toBeUndefined()
   })
 })
 

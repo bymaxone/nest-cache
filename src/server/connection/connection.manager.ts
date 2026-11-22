@@ -356,7 +356,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     overrides?: Partial<RedisOptions>
   ): Redis {
     const options = withOwnKeys(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
-    const lazy = options.lazyConnect === true
+    const lazy = Boolean(options.lazyConnect)
     options.lazyConnect = true
     const client = guardSentinelConnector(new Redis(options))
     if (!lazy) client.connect().catch(() => undefined)
