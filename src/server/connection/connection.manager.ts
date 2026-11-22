@@ -73,10 +73,12 @@ type OwnedClusterOptions = Omit<ClusterOptions, 'redisOptions'> & {
 /**
  * Builds a cluster client so that an option the driver refuses ends as `INVALID_OPTIONS`. ioredis throws
  * an error of its own for one it cannot use, and the message of `scaleReads` prints the value the host
- * gave. Everything the host wrote is read and copied before this call, so nothing of the host's runs
- * inside the driver's constructor, and whatever the constructor throws is dropped without being
- * inspected, with no `cause` (the exception the library makes for an error that echoes the host's
- * value): only the library's code and a fixed reason remain.
+ * gave. The values the host wrote are read and copied before this call, so a getter or a proxy of the
+ * host's that holds them is not read inside the driver's constructor; a function the host gave (a
+ * `dnsLookup`, a retry strategy) is still called by the driver, and a list kept as an entry is not
+ * copied. Whatever the constructor throws is dropped without being inspected, with no `cause` (the
+ * exception the library makes for an error that echoes the host's value): only the library's code and
+ * a fixed reason remain.
  *
  * @typeParam T - The client built.
  * @param build - The construction.
