@@ -107,14 +107,56 @@ describe('the connector, run by hand', () => {
   })
 
   it('connects to a unix socket when it has a path, ignoring the port', async () => {
-    const path = await listenOnPath(netServer(answer), 'own')
+    let connections = 0
+    const path = await listenOnPath(
+      netServer((socket) => {
+        connections += 1
+        socket.on('error', () => undefined)
+      }),
+      'own'
+    )
     const connector = new GuardedConnector({ path, port: 1, host: 'nowhere.invalid' })
 
     const { stream, error } = await settle(connector)
+    await new Promise<void>((resolve) => stream?.once('connect', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
     expect(error).toBeUndefined()
     expect(stream?.remoteAddress).toBeUndefined()
+    expect(connections).toBe(1)
     connector.disconnect()
+  })
+
+  // Scenario: the options hold a host, a port and a family, or hold null or nothing for some of them.
+  // Rule: Node is handed exactly the names the options hold, no more: a name held as null or undefined is
+  // not handed over at all.
+  it.each([
+    [
+      'all three',
+      { host: 'h.test', port: 123, family: 4 },
+      { host: 'h.test', port: 123, family: 4 }
+    ],
+    ['a null host and family', { host: null, port: 123, family: null }, { port: 123 }],
+    ['a null port', { host: 'h.test', port: null, family: 6 }, { host: 'h.test', family: 6 }],
+    ['nothing', {}, {}]
+  ])('hands Node %s: its options', async (_label, held, handed) => {
+    const netModule = require('node:net') as typeof import('node:net')
+    let seen: unknown
+    const spy = jest.spyOn(netModule, 'createConnection').mockImplementation(((
+      options: unknown
+    ) => {
+      seen = { ...(options as object) }
+      return new netModule.Socket()
+    }) as never)
+    try {
+      const connector = new GuardedConnector(held as never)
+      await connector.connect()
+      connector.disconnect()
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(seen).toEqual(handed)
   })
 
   it('connects over TLS with the options of the host', async () => {

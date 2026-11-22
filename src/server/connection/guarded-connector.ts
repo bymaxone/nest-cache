@@ -37,7 +37,7 @@ const CONNECTION_CLOSED_MESSAGE = 'Connection is closed.'
  */
 function sealListeners(stream: object): void {
   const table = (stream as { _events?: object })._events
-  if (table !== undefined && Reflect.getPrototypeOf(table) !== null) {
+  if (table !== undefined) {
     Reflect.setPrototypeOf(table, null)
   }
 }
@@ -120,11 +120,8 @@ export class GuardedConnector extends AbstractConnector {
     if (path) {
       target['path'] = path
     } else {
-      // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` port as an absent one (measured), so setting it always connects the same
       if (port != null) target['port'] = port
-      // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` host as an absent one (measured), so setting it always connects the same
       if (host != null) target['host'] = host
-      // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` family as an absent one (measured), so setting it always connects the same
       if (options.family != null) target['family'] = options.family
     }
     const { tls } = options

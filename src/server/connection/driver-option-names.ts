@@ -18,26 +18,16 @@ import { CacheException } from '../errors/cache.exception'
 import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS } from './copy-cluster-options'
 
 /**
- * The names a standalone or sentinel client reads and the typed key records of a cluster node leave out
- * (`ClusterRedisOptions` omits `port`, `host`, `path`, `sentinels`, `retryStrategy`, `enableOfflineQueue`,
- * `readOnly` and `himportFieldsets`), and `timeout`, which ioredis reads and does not type.
+ * The names a standalone or sentinel client reads and the typed key records leave out (`ClusterRedisOptions`
+ * omits `port`, `host`, `path`, `sentinels`, `retryStrategy` and `readOnly`), and `timeout`, which ioredis
+ * reads and does not type.
  */
-const UNTYPED = [
-  'enableOfflineQueue',
-  'himportFieldsets',
-  'host',
-  'path',
-  'port',
-  'readOnly',
-  'retryStrategy',
-  'sentinels',
-  'timeout'
-]
+const UNTYPED = ['host', 'path', 'port', 'readOnly', 'retryStrategy', 'sentinels', 'timeout']
 
 /** Every option name of a Redis client, a cluster and the options a cluster gives each node. */
 export const DRIVER_OPTION_NAMES: readonly string[] = [
   ...new Set([...Object.keys(CLUSTER_OPTION_KEYS), ...Object.keys(REDIS_OPTION_KEYS), ...UNTYPED])
-].sort()
+]
 
 /**
  * The string keys `Object.prototype` holds in every Node version the library supports. Anything else is a
@@ -79,6 +69,7 @@ interface IDescriptorFields {
 function fieldsOf(descriptor: PropertyDescriptor | undefined): IDescriptorFields | undefined {
   if (descriptor === undefined) return undefined
   const fields = Object.create(null) as Record<string, unknown>
+  // Stryker disable next-line StringLiteral: the comparison of `configurable` is disabled below, so a copy without that field compares the same
   for (const field of ['value', 'get', 'set', 'writable', 'enumerable', 'configurable']) {
     fields[field] = hasOwn(descriptor, field)
       ? (descriptor as unknown as Record<string, unknown>)[field]
@@ -106,7 +97,7 @@ function isNative(value: unknown): boolean {
   return (
     typeof value === 'function' &&
     !types.isProxy(value) &&
-    /\{\s*\[native code\]\s*\}\s*$/.test(fnToString.call(value))
+    fnToString.call(value).endsWith('{ [native code] }')
   )
 }
 

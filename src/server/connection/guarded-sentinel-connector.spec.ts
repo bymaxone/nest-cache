@@ -137,6 +137,20 @@ describe('the connector of a sentinel client', () => {
     }
   })
 
+  it('hands back a socket that has no table of listeners as it is', async () => {
+    const stream = { destroy: jest.fn() }
+    const spy = jest
+      .spyOn(SentinelConnector.prototype, 'connect')
+      .mockResolvedValue(stream as never)
+    try {
+      const result = await new GuardedSentinelConnector(SENTINEL_OPTIONS).connect(jest.fn())
+
+      expect(result).toBe(stream)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('is refused, and the connect it extends does not run, when a key is planted', async () => {
     const spy = jest.spyOn(SentinelConnector.prototype, 'connect')
     try {
@@ -211,7 +225,13 @@ describe('the connector of a sentinel client', () => {
 
     expect(probe.options['Connector']).toEqual(expect.any(Function))
     expect(Object.getPrototypeOf(probe.options['Connector'] as object)).toBe(GuardedConnector)
-    expect(Object.hasOwn(probe.options, 'socketTimeout')).toBe(true)
+    // `path` is a name ioredis does not set for a probe, so the library defines it.
+    expect(Object.getOwnPropertyDescriptor(probe.options, 'path')).toEqual({
+      value: undefined,
+      writable: true,
+      enumerable: true,
+      configurable: true
+    })
     expect(Object.hasOwn(probe.options, 'sentinelPassword')).toBe(true)
   })
 

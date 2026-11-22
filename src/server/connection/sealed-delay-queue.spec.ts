@@ -120,6 +120,19 @@ describe('a cluster client whose delay queue is sealed', () => {
     expect(ran).toHaveBeenCalledTimes(1)
   })
 
+  it('runs a push through the callback it was given, not the next tick', async () => {
+    const { client, queue } = cluster()
+    sealDelayQueue(client)
+    const ran = jest.fn()
+    const through = jest.fn((next: () => void) => next())
+
+    queue.push('failover', ran, { timeout: 1, callback: through })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(through).toHaveBeenCalledTimes(1)
+    expect(ran).toHaveBeenCalledTimes(1)
+  })
+
   it('has two tables without a prototype', () => {
     const { client, queue } = cluster()
     sealDelayQueue(client)

@@ -302,6 +302,23 @@ describe('a standard key that was already replaced when the module loaded', () =
     expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
   })
 
+  // Scenario: the replacement is written in JavaScript, has the right name, and carries the text a native
+  // function prints in the middle of its source.
+  // Rule: it is refused: only a source that ENDS with the text of a native function is one.
+  it('refuses a function whose source holds the text of a native function in the middle', () => {
+    const error = loadedUnder('hasOwnProperty', (original) => ({
+      ...original,
+      value: {
+        hasOwnProperty(this: unknown, ...args: unknown[]): unknown {
+          /* function () { [native code] } */
+          return (original.value as (...a: unknown[]) => unknown).apply(this, args)
+        }
+      }['hasOwnProperty']
+    }))
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+
   it('refuses an accessor in place of a standard value before the load', () => {
     const error = loadedUnder('toLocaleString', () => ({
       get: () => undefined,
