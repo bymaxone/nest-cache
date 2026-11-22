@@ -310,25 +310,30 @@ describe('cluster.options.scaleReads', () => {
   })
 
   // Scenario: the host spells scaleReads wrong or gives it a value of another kind.
-  // Rule: refused naming the option and the type only, never the driver's own message.
-  it.each(['masters', 5, null, {}])(
-    'refuses %p, naming the option and printing no value',
-    (value) => {
-      const error = (() => {
-        try {
-          resolve(cluster({ scaleReads: value }))
-        } catch (thrown) {
-          return thrown as { details: Record<string, unknown> }
-        }
-        throw new Error('not refused')
-      })()
+  // Rule: refused naming the option; `received` is the type of a string, null or an object, and a number
+  // as itself (a quantity, not a secret), never the driver's own message.
+  it.each([
+    ['masters', 'a string'],
+    [5, 5],
+    [null, 'null'],
+    [{}, 'an object']
+  ])('refuses %p, naming the option and reporting %p as received', (value, received) => {
+    const error = (() => {
+      try {
+        resolve(cluster({ scaleReads: value }))
+      } catch (thrown) {
+        return thrown as { details: Record<string, unknown> }
+      }
+      throw new Error('not refused')
+    })()
 
-      expect(error.details['reason']).toBe(
-        "cluster.options.scaleReads must be 'all', 'master', 'slave' or a function"
-      )
-      expect(JSON.stringify(error.details)).not.toContain('masters')
-    }
-  )
+    expect(error.details).toMatchObject({
+      reason: "cluster.options.scaleReads must be 'all', 'master', 'slave' or a function",
+      option: 'cluster.options.scaleReads',
+      received
+    })
+    expect(JSON.stringify(error.details)).not.toContain('masters')
+  })
 
   it.each(['all', 'master', 'slave', (): string => 'all'])('accepts %p', (value) => {
     expect(() => resolve(cluster({ scaleReads: value }))).not.toThrow()
