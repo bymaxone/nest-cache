@@ -16,12 +16,19 @@ import type { ConnectionOptions } from 'node:tls'
 import { AbstractConnector, SentinelConnector } from 'ioredis'
 
 import { assertDriverUnshadowed, DRIVER_OPTION_NAMES } from './driver-option-names'
+import {
+  assign,
+  createObject,
+  defineProperty,
+  freeze,
+  hasOwn,
+  nextTick,
+  NativePromise,
+  setPrototypeOf
+} from './intrinsics'
 
 /** The port ioredis gives a sentinel that names none. */
 const SENTINEL_PORT = 26379
-
-/** `Object.hasOwn` as it was when this module loaded. */
-const hasOwn = Object.hasOwn
 
 /** ioredis's own text for a connect attempt that was cancelled before the socket opened. */
 const CONNECTION_CLOSED_MESSAGE = 'Connection is closed.'
@@ -38,7 +45,7 @@ const CONNECTION_CLOSED_MESSAGE = 'Connection is closed.'
 function sealListeners(stream: object): void {
   const table = (stream as { _events?: object })._events
   if (table !== undefined) {
-    Reflect.setPrototypeOf(table, null)
+    setPrototypeOf(table, null)
   }
 }
 
@@ -47,7 +54,7 @@ function sealListeners(stream: object): void {
  * assigned: an assignment to an inherited key that is read-only throws, and a descriptor that inherits a
  * planted `get` or `set` is refused.
  */
-const SHADOW = Object.assign(Object.create(null) as PropertyDescriptor, {
+const SHADOW = assign(createObject(null) as PropertyDescriptor, {
   value: undefined,
   writable: true,
   enumerable: true,
@@ -112,10 +119,10 @@ export class GuardedConnector extends AbstractConnector {
     try {
       assertDriverUnshadowed()
     } catch (error) {
-      return Promise.reject(error)
+      return new NativePromise<Socket>((_resolve, reject) => reject(error))
     }
     this.connecting = true
-    const target = Object.create(null) as Record<string, unknown>
+    const target = createObject(null)
     const { path, host, port } = this.destinationOf(options)
     if (path) {
       target['path'] = path
@@ -125,10 +132,11 @@ export class GuardedConnector extends AbstractConnector {
       if (options.family != null) target['family'] = options.family
     }
     const { tls } = options
-    if (tls) Object.assign(target, tls)
+    // `Object.assign` ignores an `undefined` source, so a connector without tls options hands Node nothing of it.
+    assign(target, tls)
 
-    return new Promise<Socket>((resolve, reject) => {
-      process.nextTick(() => {
+    return new NativePromise<Socket>((resolve, reject) => {
+      nextTick(() => {
         if (!this.connecting) {
           reject(new Error(CONNECTION_CLOSED_MESSAGE))
           return
@@ -168,7 +176,7 @@ export function probeConnectorFor(endpoint: {
   host?: string
   port?: number
 }): typeof GuardedConnector {
-  const destination = Object.freeze({ host: endpoint.host, port: endpoint.port || SENTINEL_PORT })
+  const destination = freeze({ host: endpoint.host, port: endpoint.port || SENTINEL_PORT })
   return class ProbeConnector extends GuardedConnector {
     protected override destinationOf(): IDestination {
       return destination
@@ -209,8 +217,9 @@ export class GuardedSentinelConnector extends SentinelConnector {
         ...extra,
         Connector: probeConnectorFor(endpoint as { host?: string; port?: number })
       })
-      for (const name of DRIVER_OPTION_NAMES) {
-        if (!hasOwn(probe.options, name)) Object.defineProperty(probe.options, name, SHADOW)
+      for (let index = 0; index < DRIVER_OPTION_NAMES.length; index += 1) {
+        const name = DRIVER_OPTION_NAMES[index] as string
+        if (!hasOwn(probe.options, name)) defineProperty(probe.options, name, SHADOW)
       }
       return probe
     }

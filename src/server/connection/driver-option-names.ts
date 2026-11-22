@@ -11,11 +11,22 @@
  * value `undefined`, for every name the driver reads (`withOwnKeys`) makes the merged object keep it: a
  * key planted later, enumerable or not, is shadowed, and `undefined` is what an absent option is to the driver.
  */
-import { types } from 'node:util'
-
-import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
-import { CacheException } from '../errors/cache.exception'
+import type { CacheException } from '../errors/cache.exception'
 import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS } from './copy-cluster-options'
+import { guardRefusal } from './guard-refusal'
+import {
+  assign,
+  countReplacedBuiltins,
+  createObject,
+  functionToString,
+  getOwnPropertyDescriptor,
+  getOwnPropertyNames,
+  hasOwn,
+  objectPrototype,
+  isProxy,
+  objectIs,
+  stringEndsWith
+} from './intrinsics'
 
 /**
  * The names a standalone or sentinel client reads and the typed key records leave out (`ClusterRedisOptions`
@@ -33,7 +44,7 @@ export const DRIVER_OPTION_NAMES: readonly string[] = [
  * The string keys `Object.prototype` holds in every Node version the library supports. Anything else is a
  * key another part of the process planted there.
  */
-export const STANDARD_KEYS: ReadonlySet<string> = new Set([
+const STANDARD_NAMES: readonly string[] = [
   '__defineGetter__',
   '__defineSetter__',
   '__lookupGetter__',
@@ -46,10 +57,16 @@ export const STANDARD_KEYS: ReadonlySet<string> = new Set([
   'toLocaleString',
   'toString',
   'valueOf'
-])
+]
 
-/** `Object.hasOwn` as it was when this module loaded. */
-const hasOwn = Object.hasOwn
+/** The same names as a `Set`, for the rows that compare the allowlist with the runtime. */
+export const STANDARD_KEYS: ReadonlySet<string> = new Set(STANDARD_NAMES)
+
+/** A table that answers `true` for the standard names, in an object without a prototype. */
+const IS_STANDARD = createObject(null)
+for (let index = 0; index < STANDARD_NAMES.length; index += 1) {
+  IS_STANDARD[STANDARD_NAMES[index] as string] = true
+}
 
 /** The six fields of a property descriptor, each present (`undefined` when the descriptor lacks it). */
 interface IDescriptorFields {
@@ -61,6 +78,17 @@ interface IDescriptorFields {
   readonly configurable: unknown
 }
 
+/** The names of the fields of a descriptor. */
+const FIELD_NAMES: readonly string[] = [
+  'value',
+  'get',
+  'set',
+  'writable',
+  'enumerable',
+  // Stryker disable next-line StringLiteral: the comparison of `configurable` is disabled below, so a copy without that field compares the same
+  'configurable'
+]
+
 /**
  * Copies the fields a descriptor holds of its own into an object without a prototype. A descriptor is an
  * ordinary object, so reading `get`, `set` or `value` off a data descriptor would find, and run, an
@@ -68,9 +96,9 @@ interface IDescriptorFields {
  */
 function fieldsOf(descriptor: PropertyDescriptor | undefined): IDescriptorFields | undefined {
   if (descriptor === undefined) return undefined
-  const fields = Object.create(null) as Record<string, unknown>
-  // Stryker disable next-line StringLiteral: the comparison of `configurable` is disabled below, so a copy without that field compares the same
-  for (const field of ['value', 'get', 'set', 'writable', 'enumerable', 'configurable']) {
+  const fields = createObject(null)
+  for (let index = 0; index < FIELD_NAMES.length; index += 1) {
+    const field = FIELD_NAMES[index] as string
     fields[field] = hasOwn(descriptor, field)
       ? (descriptor as unknown as Record<string, unknown>)[field]
       : undefined
@@ -78,16 +106,12 @@ function fieldsOf(descriptor: PropertyDescriptor | undefined): IDescriptorFields
   return fields as unknown as IDescriptorFields
 }
 
-/** The property descriptors of the standard keys as they were when this module loaded. */
-const STANDARD_DESCRIPTORS: ReadonlyMap<string, IDescriptorFields | undefined> = new Map(
-  [...STANDARD_KEYS].map((name) => [
-    name,
-    fieldsOf(Object.getOwnPropertyDescriptor(Object.prototype, name))
-  ])
-)
-
-/** `Function.prototype.toString` as it was when this module loaded. */
-const fnToString = Function.prototype.toString
+/** The property descriptors of the standard keys as they were when this module loaded, by name. */
+const STANDARD_DESCRIPTORS = createObject(null) as Record<string, IDescriptorFields | undefined>
+for (let index = 0; index < STANDARD_NAMES.length; index += 1) {
+  const name = STANDARD_NAMES[index] as string
+  STANDARD_DESCRIPTORS[name] = fieldsOf(getOwnPropertyDescriptor(objectPrototype, name))
+}
 
 /**
  * Whether `value` is a function the engine implements, not one written in JavaScript and not a proxy,
@@ -96,8 +120,8 @@ const fnToString = Function.prototype.toString
 function isNative(value: unknown): boolean {
   return (
     typeof value === 'function' &&
-    !types.isProxy(value) &&
-    fnToString.call(value).endsWith('{ [native code] }')
+    !isProxy(value) &&
+    stringEndsWith(functionToString(value), '{ [native code] }')
   )
 }
 
@@ -116,22 +140,24 @@ function hasExpectedKind(name: string, descriptor: IDescriptorFields | undefined
 
 /**
  * The standard keys that were not what the language gives them when this module loaded: the process was
- * already polluted before the library was imported, which the snapshot below cannot see.
+ * already polluted before the library was imported, which the snapshot above cannot see.
  */
-const BASELINE_DEFECTS: ReadonlySet<string> = new Set(
-  [...STANDARD_KEYS].filter((name) => !hasExpectedKind(name, STANDARD_DESCRIPTORS.get(name)))
-)
+const BASELINE_DEFECTS = createObject(null)
+for (let index = 0; index < STANDARD_NAMES.length; index += 1) {
+  const name = STANDARD_NAMES[index] as string
+  BASELINE_DEFECTS[name] = !hasExpectedKind(name, STANDARD_DESCRIPTORS[name])
+}
 
 /**
  * Whether a standard key of `Object.prototype` is not what it was when this module loaded: replaced,
  * redefined as an accessor, made writable or enumerable, or deleted.
  */
 function isOverwritten(name: string): boolean {
-  const was = STANDARD_DESCRIPTORS.get(name)
-  const now = fieldsOf(Object.getOwnPropertyDescriptor(Object.prototype, name))
+  const was = STANDARD_DESCRIPTORS[name]
+  const now = fieldsOf(getOwnPropertyDescriptor(objectPrototype, name))
   if (was === undefined || now === undefined) return was !== now
   return (
-    !Object.is(was.value, now.value) ||
+    !objectIs(was.value, now.value) ||
     was.get !== now.get ||
     was.set !== now.set ||
     was.writable !== now.writable ||
@@ -165,18 +191,18 @@ function isOverwritten(name: string): boolean {
  * @throws {CacheException} `INVALID_OPTIONS` with the count of the keys, never a key or a value.
  */
 export function assertDriverUnshadowed(): void {
-  const added = Object.getOwnPropertyNames(Object.prototype).filter(
-    (name) => !STANDARD_KEYS.has(name)
-  )
-  const replaced = [...STANDARD_KEYS].filter(
-    (name) => BASELINE_DEFECTS.has(name) || isOverwritten(name)
-  )
-  const count = added.length + replaced.length
+  let count = 0
+  const names = getOwnPropertyNames(objectPrototype)
+  for (let index = 0; index < names.length; index += 1) {
+    if (IS_STANDARD[names[index] as string] !== true) count += 1
+  }
+  for (let index = 0; index < STANDARD_NAMES.length; index += 1) {
+    const name = STANDARD_NAMES[index] as string
+    if (BASELINE_DEFECTS[name] === true || isOverwritten(name)) count += 1
+  }
+  count += countReplacedBuiltins()
   if (count > 0) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      reason: 'Object.prototype holds keys the driver would read as its own',
-      count
-    })
+    throw guardRefusal(count)
   }
 }
 
@@ -188,9 +214,9 @@ export function assertDriverUnshadowed(): void {
  * @returns A prototype-less object: the options over an own `undefined` for every driver option name.
  */
 export function withOwnKeys<T extends object>(options: T): T {
-  const copy = Object.create(null) as Record<string, unknown>
-  for (const name of DRIVER_OPTION_NAMES) {
-    copy[name] = undefined
+  const copy = createObject(null)
+  for (let index = 0; index < DRIVER_OPTION_NAMES.length; index += 1) {
+    copy[DRIVER_OPTION_NAMES[index] as string] = undefined
   }
-  return Object.assign(copy, options) as T
+  return assign(copy, options) as T
 }

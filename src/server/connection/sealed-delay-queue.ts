@@ -9,6 +9,8 @@
  * can catch it and the process exits.
  */
 
+import { bindFunction, createObject, hasOwn } from './intrinsics'
+
 /** The fields of ioredis's `DelayQueue` that are used here. */
 interface IDelayQueue {
   queues: object
@@ -19,9 +21,6 @@ interface IDelayQueue {
     options: { timeout?: number | undefined; callback?: unknown }
   ) => void
 }
-
-/** `Object.hasOwn` as it was when this module loaded. */
-const hasOwn = Object.hasOwn
 
 /**
  * Gives the two tables of the delay queue of a cluster client no prototype, and makes every push pass options
@@ -37,11 +36,11 @@ export function sealDelayQueue<T extends object>(cluster: T): T {
   if (queue === undefined) {
     return cluster
   }
-  queue.queues = Object.create(null) as object
-  queue.timeouts = Object.create(null) as object
-  const push = queue.push.bind(queue)
+  queue.queues = createObject(null)
+  queue.timeouts = createObject(null)
+  const push = bindFunction(queue.push, queue) as IDelayQueue['push']
   queue.push = (bucket, item, options): void => {
-    const own = Object.create(null) as { timeout?: number | undefined; callback?: unknown }
+    const own = createObject(null) as { timeout?: number | undefined; callback?: unknown }
     own.timeout = options.timeout
     own.callback = hasOwn(options, 'callback') ? options.callback : undefined
     push(bucket, item, own)
