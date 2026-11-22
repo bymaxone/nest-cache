@@ -15,9 +15,8 @@ import util from 'node:util'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { assertDriverUnshadowed } from './driver-option-names'
+import { BUILTINS_REASON, KEYS_REASON } from './guard-refusal'
 import { BASELINE_BUILTINS } from './intrinsics'
-
-const REFUSAL_REASON = 'Object.prototype holds keys the driver would read as its own'
 
 type Thrown = { code?: string; details?: { reason?: string; count?: number } }
 
@@ -30,9 +29,6 @@ function guardThrows(): Thrown | undefined {
   }
   return undefined
 }
-
-/** How many the guard counts now: zero when it does not refuse. */
-const counted = (): number => guardThrows()?.details?.count ?? 0
 
 /** Runs `run` with `owner[name]` replaced by `replacement` (an assignment, which needs no built-in). */
 function replacing<T>(owner: object, name: string | symbol, replacement: unknown, run: () => T): T {
@@ -96,8 +92,7 @@ type HidingOf = [
 
 describe('a key planted on Object.prototype, with a built-in the guard calls replaced after the import', () => {
   // Scenario: the built-in is replaced by a function that hides the planted key.
-  // Rule: the guard counts the planted key all the same: with the key planted it counts one more than without
-  // it, whatever the replacement itself adds to the count.
+  // Rule: the guard counts the planted key all the same, with the reason of keys and a count of one.
   const hiding: Hiding[] = [
     ['Object.getOwnPropertyNames', Object, 'getOwnPropertyNames', () => []],
     ['Array.prototype.filter', Array.prototype, 'filter', () => []],
@@ -106,10 +101,9 @@ describe('a key planted on Object.prototype, with a built-in the guard calls rep
     ['Set.prototype[Symbol.iterator]', Set.prototype, ITERATOR, EMPTY_ITERATOR]
   ]
   it.each(hiding)('counts it when %s hides it', (_label, owner, name, replacement) => {
-    const without = replacing(owner, name, replacement, counted)
-    const withKey = withPlantedKey(() => replacing(owner, name, replacement, counted))
+    const error = withPlantedKey(() => replacing(owner, name, replacement, guardThrows))
 
-    expect(withKey).toBe(without + 1)
+    expect(error?.details).toEqual({ reason: KEYS_REASON, count: 1 })
   })
 })
 
@@ -133,11 +127,9 @@ describe('a standard key that was overwritten, with a built-in the guard calls r
   ]
   it.each(hidingOverwrite)('counts it when %s hides it', (_label, owner, name, make) => {
     const pristine = REAL_DESCRIPTOR(Object.prototype, 'hasOwnProperty') as PropertyDescriptor
-    const without = replacing(owner, name, make(pristine), counted)
+    const error = withOverwrittenKey(() => replacing(owner, name, make(pristine), guardThrows))
 
-    const withKey = withOverwrittenKey(() => replacing(owner, name, make(pristine), counted))
-
-    expect(withKey).toBe(without + 1)
+    expect(error?.details).toEqual({ reason: KEYS_REASON, count: 1 })
   })
 })
 
@@ -184,6 +176,8 @@ describe('the baseline of the built-ins the paths that read the options call', (
         'Function.prototype.bind',
         'String.prototype.replace',
         'String.prototype.trim',
+        'String.prototype.includes',
+        'String.prototype.Symbol(Symbol.iterator)',
         'RegExp.prototype.test',
         'RegExp.prototype.exec',
         'RegExp.prototype.Symbol(Symbol.replace)',
@@ -204,8 +198,28 @@ describe('the baseline of the built-ins the paths that read the options call', (
     const error = replacing(owner, name, () => undefined, guardThrows)
 
     expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-    expect(error?.details).toEqual({ reason: REFUSAL_REASON, count: 1 })
+    expect(error?.details).toEqual({ reason: BUILTINS_REASON, count: 1 })
     expect(error).toBeInstanceOf(CacheException)
+  })
+
+  // Rule: a planted key and a replaced built-in are refused with their own reasons, and the key comes first.
+  it('refuses a planted key with the reason of keys, whatever else was replaced', () => {
+    const error = withPlantedKey(() => replacing(Object, 'keys', () => undefined, guardThrows))
+
+    expect(error?.details).toEqual({ reason: KEYS_REASON, count: 1 })
+  })
+
+  it('refuses a replaced built-in with the reason of built-ins', () => {
+    const error = replacing(Object, 'keys', () => undefined, guardThrows)
+
+    expect(error?.details).toEqual({ reason: BUILTINS_REASON, count: 1 })
+  })
+
+  it('does not name the global Promise: a host may wrap it after the library loads', () => {
+    const labels = BASELINE_BUILTINS.map((entry) => labelOf(entry[0], entry[1]))
+
+    expect(labels).not.toContain('globalThis.Promise')
+    expect(replacing(globalThis, 'Promise', class Wrapped {}, guardThrows)).toBeUndefined()
   })
 
   it('does not refuse when none was replaced', () => {

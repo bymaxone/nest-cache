@@ -13,7 +13,7 @@
  */
 import type { CacheException } from '../errors/cache.exception'
 import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS } from './copy-cluster-options'
-import { guardRefusal } from './guard-refusal'
+import { BUILTINS_REASON, guardRefusal, KEYS_REASON } from './guard-refusal'
 import {
   assign,
   countReplacedBuiltins,
@@ -188,7 +188,8 @@ function isOverwritten(name: string): boolean {
  * `Function.prototype` or `Buffer`'s prototype, and a key planted after the last of those runs is still
  * read by the objects the driver builds later (a command, a pipeline).
  *
- * @throws {CacheException} `INVALID_OPTIONS` with the count of the keys, never a key or a value.
+ * @throws {CacheException} `INVALID_OPTIONS` with the count of the keys, or of the replaced built-ins, never a
+ *   key, a name or a value.
  */
 export function assertDriverUnshadowed(): void {
   let count = 0
@@ -200,10 +201,9 @@ export function assertDriverUnshadowed(): void {
     const name = STANDARD_NAMES[index] as string
     if (BASELINE_DEFECTS[name] === true || isOverwritten(name)) count += 1
   }
-  count += countReplacedBuiltins()
-  if (count > 0) {
-    throw guardRefusal(count)
-  }
+  if (count > 0) throw guardRefusal(KEYS_REASON, count)
+  const replaced = countReplacedBuiltins()
+  if (replaced > 0) throw guardRefusal(BUILTINS_REASON, replaced)
 }
 
 /**

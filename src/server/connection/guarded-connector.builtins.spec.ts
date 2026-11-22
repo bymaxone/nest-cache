@@ -103,7 +103,7 @@ describe('the connector, with a built-in replaced after the import', () => {
     connector.disconnect()
   })
 
-  it('refuses with its own promise when the global Promise is replaced', async () => {
+  it('still answers when the global Promise is replaced', async () => {
     const port = await listen(plainServer())
     const connector = new GuardedConnector({ host: '127.0.0.1', port })
     class Hollow {
@@ -112,14 +112,10 @@ describe('the connector, with a built-in replaced after the import', () => {
       }
     }
 
-    const outcome = await replacingUntilSettled(globalThis, 'Promise', Hollow, async () =>
-      connector.connect().then(
-        () => undefined,
-        (error: unknown) => error
-      )
-    )
+    const stream = await replacing(globalThis, 'Promise', Hollow, () => connector.connect())
 
-    expect((outcome as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(stream).toBeInstanceOf(Socket)
+    connector.disconnect()
   })
 })
 

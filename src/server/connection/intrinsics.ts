@@ -42,6 +42,7 @@ export const NativePromise = Promise
 
 const arrayIterator = getPrototypeOf([][Symbol.iterator]()) as object
 const setIterator = getPrototypeOf(new Set()[Symbol.iterator]()) as object
+const stringIterator = getPrototypeOf(''[Symbol.iterator]()) as object
 
 /**
  * The global bindings the paths name (`Object`, `Reflect`, ...): a call such as `Object.keys(x)` finds the
@@ -61,7 +62,6 @@ const GLOBAL_NAMES = [
   'Uint8Array',
   'Error',
   'Math',
-  'Promise',
   'Symbol',
   'RegExp'
 ]
@@ -109,6 +109,7 @@ export const BASELINE_BUILTINS: ReadonlyArray<readonly [object, string | symbol]
   [Set.prototype, 'has'],
   [Set.prototype, 'add'],
   [Set.prototype, 'delete'],
+  [Set.prototype, 'forEach'],
   [WeakSet.prototype, 'add'],
   [WeakSet.prototype, 'has'],
   [WeakSet.prototype, 'delete'],
@@ -117,6 +118,9 @@ export const BASELINE_BUILTINS: ReadonlyArray<readonly [object, string | symbol]
   [Function.prototype, 'bind'],
   [String.prototype, 'replace'],
   [String.prototype, 'trim'],
+  [String.prototype, 'includes'],
+  [String.prototype, Symbol.iterator],
+  [stringIterator, 'next'],
   [RegExp.prototype, 'test'],
   [RegExp.prototype, 'exec'],
   [RegExp.prototype, Symbol.replace],

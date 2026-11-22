@@ -19,7 +19,10 @@ import {
   setPrototypeOf
 } from './intrinsics'
 
-const REASON = 'Object.prototype holds keys the driver would read as its own'
+/** Why the guard refused when `Object.prototype` holds a key that is not a standard one. */
+export const KEYS_REASON = 'Object.prototype holds keys the driver would read as its own'
+/** Why the guard refused when a built-in the library relies on was replaced after it loaded. */
+export const BUILTINS_REASON = 'Built-ins the library relies on were replaced after it loaded'
 const CODE = CACHE_ERROR_CODES.INVALID_OPTIONS
 const MESSAGE = CACHE_ERROR_MESSAGES.get(CODE) ?? 'Cache error'
 
@@ -37,7 +40,7 @@ function dataDescriptor(
   return descriptor as PropertyDescriptor
 }
 
-const TEMPLATE = new CacheException(CODE, { reason: REASON, count: 0 })
+const TEMPLATE = new CacheException(CODE, { reason: KEYS_REASON, count: 0 })
 const FIELDS = getOwnPropertyNames(TEMPLATE)
 const PROTOTYPE = getPrototypeOf(TEMPLATE) as object
 const DESCRIPTORS = createObject(null)
@@ -50,16 +53,17 @@ for (let index = 0; index < FIELDS.length; index += 1) {
 /**
  * Builds the refusal of a guard that counted `count` keys or built-ins.
  *
+ * @param reason - {@link KEYS_REASON} or {@link BUILTINS_REASON}.
  * @param count - How many the guard counted.
  * @returns A {@link CacheException} with `INVALID_OPTIONS` and `{ reason, count }` as details.
  */
-export function guardRefusal(count: number): CacheException {
+export function guardRefusal(reason: string, count: number): CacheException {
   const error = createObject(null)
   for (let index = 0; index < FIELDS.length; index += 1) {
     const field = FIELDS[index] as string
     defineProperty(error, field, DESCRIPTORS[field] as PropertyDescriptor)
   }
-  const details = { reason: REASON, count }
+  const details = { reason, count }
   defineProperty(error, 'details', dataDescriptor(details, true, true))
   defineProperty(
     error,

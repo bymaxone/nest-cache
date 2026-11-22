@@ -6,7 +6,7 @@
  */
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
-import { guardRefusal } from './guard-refusal'
+import { BUILTINS_REASON, guardRefusal, KEYS_REASON } from './guard-refusal'
 
 describe('guardRefusal', () => {
   // Scenario: a refusal for a count of three.
@@ -18,7 +18,7 @@ describe('guardRefusal', () => {
     }
     const expected = new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, details)
 
-    const refusal = guardRefusal(3)
+    const refusal = guardRefusal(KEYS_REASON, 3)
 
     expect(refusal).toBeInstanceOf(CacheException)
     expect(refusal).toBeInstanceOf(Error)
@@ -32,7 +32,14 @@ describe('guardRefusal', () => {
 
   // Rule: each refusal carries its own count.
   it('carries the count of its own call', () => {
-    expect(guardRefusal(1).details).toEqual(expect.objectContaining({ count: 1 }))
-    expect(guardRefusal(7).details).toEqual(expect.objectContaining({ count: 7 }))
+    expect(guardRefusal(KEYS_REASON, 1).details).toEqual(expect.objectContaining({ count: 1 }))
+    expect(guardRefusal(BUILTINS_REASON, 7).details).toEqual(expect.objectContaining({ count: 7 }))
+  })
+
+  // Rule: the two reasons are different texts, so a host can tell a planted key from a replaced built-in.
+  it('names a different reason for a key and for a replaced built-in', () => {
+    expect(guardRefusal(KEYS_REASON, 1).details).toEqual({ reason: KEYS_REASON, count: 1 })
+    expect(guardRefusal(BUILTINS_REASON, 1).details).toEqual({ reason: BUILTINS_REASON, count: 1 })
+    expect(KEYS_REASON).not.toBe(BUILTINS_REASON)
   })
 })

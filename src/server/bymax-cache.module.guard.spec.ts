@@ -11,6 +11,7 @@ import type { Provider } from '@nestjs/common'
 import { findProvider } from '../test-helpers/provider.helpers'
 import { BYMAX_CACHE_OPTIONS } from './bymax-cache.constants'
 import { BymaxCacheModule } from './bymax-cache.module'
+import { BUILTINS_REASON } from './connection/guard-refusal'
 import { CACHE_ERROR_CODES } from './errors/cache-error-codes'
 
 const OPTIONS = { connection: { host: 'h', lazyConnect: true } }
@@ -50,6 +51,17 @@ function withReplacedBuiltin<T>(run: () => T): T {
   }
 }
 
+/** Runs `run` with `String.prototype.includes` saying no to everything, and puts it back. */
+function withBlindIncludes<T>(run: () => T): T {
+  const original = String.prototype.includes
+  ;(String.prototype as unknown as Record<string, unknown>)['includes'] = () => false
+  try {
+    return run()
+  } finally {
+    ;(String.prototype as unknown as Record<string, unknown>)['includes'] = original
+  }
+}
+
 /** The factory forRootAsync gives the resolved options. */
 function asyncFactory(): (raw: unknown) => unknown {
   const module = BymaxCacheModule.forRootAsync({ useFactory: () => OPTIONS })
@@ -72,6 +84,26 @@ describe('forRoot', () => {
     const error = withReplacedBuiltin(() => thrownBy(() => BymaxCacheModule.forRoot(OPTIONS)))
 
     expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+  })
+})
+
+describe('forRoot, with the check of a namespace blinded', () => {
+  // Scenario: `String.prototype.includes` is replaced after the import by a function that finds nothing, so
+  // the namespace `a:b` would pass the check that it holds the separator `:`.
+  // Rule: the guard refuses before the namespace is read.
+  it('refuses as a polluted process, where a clean one refuses the namespace itself', () => {
+    const options = {
+      namespace: 'a:b',
+      separator: ':',
+      connection: { host: 'h', lazyConnect: true }
+    }
+
+    const error = withBlindIncludes(() => thrownBy(() => BymaxCacheModule.forRoot(options)))
+    const clean = thrownBy(() => BymaxCacheModule.forRoot(options))
+
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(clean?.code).toBe(CACHE_ERROR_CODES.INVALID_NAMESPACE)
+    expect(error?.details).toEqual({ reason: BUILTINS_REASON, count: 1 })
   })
 })
 
