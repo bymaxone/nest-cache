@@ -240,3 +240,58 @@ describe('a hook planted on Object.prototype', () => {
     expect(resolved.events).toBeUndefined()
   })
 })
+
+/** Every plain object and list in a resolved tree, with the path it was found at. */
+function walk(value: unknown, path: string, found: Array<[string, object]>): void {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => walk(entry, `${path}[${index}]`, found))
+    return
+  }
+  if (typeof value === 'object' && value !== null) {
+    const proto: unknown = Reflect.getPrototypeOf(value)
+    if (proto === Object.prototype || proto === null) {
+      found.push([path, value])
+      for (const key of Object.keys(value)) {
+        walk((value as Raw)[key], `${path}.${key}`, found)
+      }
+    }
+  }
+}
+
+describe('the copies of the options', () => {
+  // Scenario: options with tls key and pfx entries, lists and every group.
+  // Rule: no plain object of the resolved tree inherits from Object.prototype, so a planted key is never
+  // an option the host left out, not even for the entry node:tls reads one field at a time.
+  it.each([
+    [
+      'standalone',
+      {
+        connection: {
+          host: 'h',
+          tls: { ca: 'x', key: [{ pem: 'k', passphrase: 'p' }], pfx: [{ buf: 'b' }] }
+        }
+      }
+    ],
+    [
+      'cluster',
+      {
+        mode: 'cluster',
+        cluster: {
+          nodes: [{ host: 'a', port: 7000 }],
+          options: {
+            redisOptions: { tls: { key: [{ pem: 'k' }] }, natMap: { 'a:1': { host: 'b' } } }
+          }
+        }
+      }
+    ]
+  ])('have no prototype, in the %s options', (_label, raw) => {
+    const resolved = resolveOptions(raw as unknown as BymaxCacheModuleOptions)
+    const found: Array<[string, object]> = []
+    for (const [key, value] of Object.entries(resolved)) {
+      walk(value, key, found)
+    }
+    const withPrototype = found.filter(([, object]) => Reflect.getPrototypeOf(object) !== null)
+
+    expect(withPrototype.map(([path]) => path)).toEqual([])
+  })
+})

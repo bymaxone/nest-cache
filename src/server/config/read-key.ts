@@ -35,18 +35,18 @@ export function readKey(source: object, key: string): unknown {
 }
 
 /**
- * Whether a value is an object made on this realm's root prototype: a literal, `{}` or
- * `Object.fromEntries`.
+ * Whether a value is a plain object: made on this realm's root prototype (a literal, `{}` or
+ * `Object.fromEntries`) or without any prototype (a copy the library already made).
  *
  * @param value - Any value.
  * @returns True for a plain object of this realm.
  */
 function isRootPlain(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    Reflect.getPrototypeOf(value) === Object.prototype
-  )
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const proto: unknown = Reflect.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
 }
 
 /**
@@ -75,6 +75,18 @@ export function bare(value: unknown): unknown {
     })
   }
   return copy
+}
+
+/**
+ * Copies an object's own enumerable keys into one without a prototype, one level deep: what the library
+ * hands to ioredis then holds only what the library set, and a key planted on `Object.prototype` is not
+ * inherited by the driver's reads.
+ *
+ * @param source - The object to copy.
+ * @returns A prototype-less shallow copy.
+ */
+export function shallowBare<T extends object>(source: T): T {
+  return Object.assign(Object.create(null) as T, source)
 }
 
 /** The hooks of `ICacheEvents`, the only names the library calls. */

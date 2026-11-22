@@ -18,6 +18,7 @@ import type { CacheEventName } from '../../shared/types/cache-event.types'
 import { BYMAX_CACHE_EVENTS, BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
 import { readingOptions } from '../config/default-options'
 import { isUnset } from '../config/is-unset'
+import { shallowBare } from '../config/read-key'
 import type { ResolvedOptions } from '../config/resolved-options'
 import {
   DEFAULT_COMMAND_TIMEOUT_MS,
@@ -314,17 +315,19 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         ...(overrides?.enableOfflineQueue !== undefined && {
           enableOfflineQueue: overrides.enableOfflineQueue
         }),
-        redisOptions: {
+        redisOptions: shallowBare({
           connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
           commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
           maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
           disconnectTimeout: DISCONNECT_TIMEOUT_MS,
           ...supplied.redisOptions
-        }
+        })
       } as OwnedClusterOptions
-      return refusingDriverOptions(() => new Cluster(nodes, driverOptions))
+      return refusingDriverOptions(() => new Cluster(nodes, shallowBare(driverOptions)))
     }
-    return new Redis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
+    return new Redis(
+      shallowBare({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
+    )
   }
 
   /**
@@ -338,7 +341,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     sentinel: NonNullable<ResolvedOptions['sentinel']>,
     overrides?: Partial<RedisOptions>
   ): OwnedRedisOptions {
-    return {
+    return shallowBare({
       ...this.#redisOptionsResolved,
       ...overrides,
       sentinels: sentinel.sentinels,
@@ -360,14 +363,15 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         enableTLSForSentinelMode: true,
         sentinelTLS: this.#redisOptionsResolved.tls
       })
-    } as OwnedRedisOptions
+    } as OwnedRedisOptions)
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */
   private buildRedisOptions(opts: ResolvedOptions): RedisOptions & { connectTimeout: number } {
-    const c = opts.connection ?? {}
+    const c: NonNullable<ResolvedOptions['connection']> =
+      opts.connection ?? shallowBare<NonNullable<ResolvedOptions['connection']>>({})
     const fromUrl = c.url ? parseRedisUrl(c.url) : {}
-    return {
+    return shallowBare({
       lazyConnect: c.lazyConnect ?? false,
       commandTimeout: c.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
       maxRetriesPerRequest: c.maxRetriesPerRequest ?? DEFAULT_MAX_RETRIES_PER_REQUEST,
@@ -388,7 +392,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       ...fromUrl,
       // After the URL, which names no timer, so the type says what is true: a number, always.
       connectTimeout: c.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
-    }
+    })
   }
 
   /** Forwards a lifecycle event to `events.onEvent`, swallowing consumer throws. */
