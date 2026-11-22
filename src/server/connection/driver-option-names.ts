@@ -38,7 +38,7 @@ export const DRIVER_OPTION_NAMES: readonly string[] = [
  * The string keys `Object.prototype` holds in every Node version the library supports. Anything else is a
  * key another part of the process planted there.
  */
-const STANDARD_KEYS: ReadonlySet<string> = new Set([
+export const STANDARD_KEYS: ReadonlySet<string> = new Set([
   '__defineGetter__',
   '__defineSetter__',
   '__lookupGetter__',

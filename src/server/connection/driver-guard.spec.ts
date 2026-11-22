@@ -11,6 +11,7 @@ import { resolveOptions } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ConnectionManager } from './connection.manager'
+import { STANDARD_KEYS } from './driver-option-names'
 
 const build = (): ConnectionManager =>
   new ConnectionManager(
@@ -92,5 +93,20 @@ describe('the manager with a key planted on Object.prototype', () => {
   it('is built when a symbol is planted and when nothing is planted', () => {
     expect(planted(Symbol('planted'), build)).toBeInstanceOf(ConnectionManager)
     expect(build()).toBeInstanceOf(ConnectionManager)
+  })
+})
+
+describe('the keys Object.prototype holds by default', () => {
+  // Scenario: this runtime (every Node major the package supports is run by CI) holds a string key on
+  // Object.prototype that the allowlist does not name, or lacks one it names.
+  // Rule: this fails, naming the difference, so that a future ECMAScript or V8 addition breaks CI and not
+  // the hosts that start the cache. The allowlist is the set of names, never a count.
+  it('are exactly the allowlist of the guard, by name', () => {
+    const held = Object.getOwnPropertyNames(Object.prototype).sort()
+    const allowed = [...STANDARD_KEYS].sort()
+
+    expect({ unlisted: held.filter((name) => !STANDARD_KEYS.has(name)) }).toEqual({ unlisted: [] })
+    expect({ missing: allowed.filter((name) => !held.includes(name)) }).toEqual({ missing: [] })
+    expect(held).toEqual(allowed)
   })
 })
