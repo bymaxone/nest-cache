@@ -8,7 +8,7 @@
  * password to a socket of the attacker. The stock connector of ioredis is run the same way as the control.
  */
 import { createServer as netServer } from 'node:net'
-import type { Server } from 'node:net'
+import type { Server, Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -18,7 +18,7 @@ import { resolveOptions } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ConnectionManager } from './connection.manager'
-import { GuardedConnector, GuardedSentinelConnector } from './guarded-connector'
+import { GuardedConnector, GuardedSentinelConnector, probeConnectorFor } from './guarded-connector'
 
 const closers: Array<() => void> = []
 
@@ -213,6 +213,64 @@ describe('the connector of a sentinel client', () => {
     expect(Object.getPrototypeOf(probe.options['Connector'] as object)).toBe(GuardedConnector)
     expect(Object.hasOwn(probe.options, 'socketTimeout')).toBe(true)
     expect(Object.hasOwn(probe.options, 'sentinelPassword')).toBe(true)
+  })
+
+  // Scenario: the connector of a probe is made for the sentinel the probe is built for, and its own options say
+  // another host, another port and a unix socket (ioredis copies keys into the options of a client while it
+  // builds them, and can leave one out).
+  // Rule: it connects to the sentinel it was made for, and to nothing its options name.
+  it('connects a probe to the endpoint it was made for, whatever its options say', async () => {
+    let hits = 0
+    const sentinel = netServer((socket: Socket) => {
+      hits += 1
+      socket.on('error', () => undefined)
+    })
+    await new Promise<void>((resolve) => sentinel.listen(0, '127.0.0.1', resolve))
+    closers.push(() => sentinel.close())
+    const port = (sentinel.address() as { port: number }).port
+    let attackerHits = 0
+    const attacker = await listenOnPath(
+      netServer((socket: Socket) => {
+        attackerHits += 1
+        socket.on('error', () => undefined)
+      }),
+      'destination'
+    )
+    const Probe = probeConnectorFor({ host: '127.0.0.1', port })
+    const connector = new Probe({ host: 'evil.invalid', port: 1, path: attacker } as never)
+
+    const stream = await connector.connect()
+    await new Promise<void>((resolve) => stream.once('connect', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    connector.disconnect()
+
+    expect(stream.remotePort).toBe(port)
+    expect(hits).toBe(1)
+    expect(attackerHits).toBe(0)
+  })
+
+  it('gives a probe the port ioredis gives a sentinel that names none, and keeps the one it names', async () => {
+    const seen: Array<{ host?: string; port?: number }> = []
+    const netModule = require('node:net') as typeof import('node:net')
+    const spy = jest.spyOn(netModule, 'createConnection').mockImplementation(((options: {
+      host?: string
+      port?: number
+    }) => {
+      seen.push(options)
+      return new netModule.Socket()
+    }) as never)
+    try {
+      for (const endpoint of [{ host: '127.0.0.1' }, { host: '127.0.0.1', port: 26380 }]) {
+        const Probe = probeConnectorFor(endpoint)
+        const connector = new Probe({} as never)
+        await connector.connect()
+        connector.disconnect()
+      }
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(seen.map((options) => options.port)).toEqual([26379, 26380])
   })
 
   // Scenario: a key naming the attacker's unix socket is planted while the connect waits for a slow sentinel,

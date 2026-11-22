@@ -17,6 +17,9 @@ import { AbstractConnector, SentinelConnector } from 'ioredis'
 
 import { assertDriverUnshadowed, DRIVER_OPTION_NAMES } from './driver-option-names'
 
+/** The port ioredis gives a sentinel that names none. */
+const SENTINEL_PORT = 26379
+
 /** `Object.hasOwn` as it was when this module loaded. */
 const hasOwn = Object.hasOwn
 
@@ -51,6 +54,13 @@ const SHADOW = Object.assign(Object.create(null) as PropertyDescriptor, {
   configurable: true
 })
 
+/** Where a connector sends its socket. */
+interface IDestination {
+  readonly path?: string | undefined
+  readonly host?: string | undefined
+  readonly port?: number | undefined
+}
+
 /** The options of a client, as far as the connector reads them. */
 interface IConnectorOptions {
   readonly disconnectTimeout?: number | undefined
@@ -75,13 +85,14 @@ export class GuardedConnector extends AbstractConnector {
   }
 
   /**
-   * The unix socket the options name, when the connector may connect to one.
+   * Where the socket goes: a unix socket path, or a host and a port. The options of the client say it, unless a
+   * subclass knows better.
    *
    * @param options - The options ioredis built the client with.
-   * @returns The path, or `undefined`.
+   * @returns The destination.
    */
-  protected pathOf(options: IConnectorOptions): string | undefined {
-    return options.path
+  protected destinationOf(options: IConnectorOptions): IDestination {
+    return { path: options.path, host: options.host, port: options.port }
   }
 
   /**
@@ -105,14 +116,14 @@ export class GuardedConnector extends AbstractConnector {
     }
     this.connecting = true
     const target = Object.create(null) as Record<string, unknown>
-    const path = this.pathOf(options)
+    const { path, host, port } = this.destinationOf(options)
     if (path) {
       target['path'] = path
     } else {
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` port as an absent one (measured), so setting it always connects the same
-      if (options.port != null) target['port'] = options.port
+      if (port != null) target['port'] = port
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` host as an absent one (measured), so setting it always connects the same
-      if (options.host != null) target['host'] = options.host
+      if (host != null) target['host'] = host
       // Stryker disable next-line ConditionalExpression: Node reads an own `undefined` or `null` family as an absent one (measured), so setting it always connects the same
       if (options.family != null) target['family'] = options.family
     }
@@ -145,15 +156,26 @@ export class GuardedConnector extends AbstractConnector {
 }
 
 /**
- * The connector of the probe clients of a sentinel client. A probe connects to the address of a sentinel,
- * never to a unix socket, and ioredis copies an enumerable key it can see on `Object.prototype` into the
- * options of a client as an own key while it builds them, in a step that a guard looking at the prototype
- * afterwards cannot see: a `path` that was there for that step only (an accessor that removes itself)
- * would send the probe, and the sentinel password, to a socket of its own. A probe ignores `path`.
+ * The connector of one probe client of a sentinel client, made for the endpoint the probe is built for. A probe
+ * connects to the address of a sentinel, never to a unix socket and never to what its options say: ioredis
+ * copies an enumerable key it can see on `Object.prototype` into the options of a client as an own key while it
+ * builds them, in a step that a guard looking at the prototype afterwards cannot see, and the same step can
+ * leave an option out (an accessor that returns another value on every read). A `path`, a `host` or a `port` that
+ * was there for that step only would send the probe, and the sentinel password, to another socket. The
+ * destination is the endpoint, with the port ioredis gives a sentinel that names none.
+ *
+ * @param endpoint - The sentinel the probe is for.
+ * @returns A connector class for that probe.
  */
-class ProbeConnector extends GuardedConnector {
-  protected override pathOf(): undefined {
-    return undefined
+export function probeConnectorFor(endpoint: {
+  host?: string
+  port?: number
+}): typeof GuardedConnector {
+  const destination = Object.freeze({ host: endpoint.host, port: endpoint.port || SENTINEL_PORT })
+  return class ProbeConnector extends GuardedConnector {
+    protected override destinationOf(): IDestination {
+      return destination
+    }
   }
 }
 
@@ -186,7 +208,10 @@ export class GuardedSentinelConnector extends SentinelConnector {
     }
     const original = self.connectToSentinel.bind(this)
     self.connectToSentinel = (endpoint, extra): IProbeClient => {
-      const probe = original(endpoint, { ...extra, Connector: ProbeConnector })
+      const probe = original(endpoint, {
+        ...extra,
+        Connector: probeConnectorFor(endpoint as { host?: string; port?: number })
+      })
       for (const name of DRIVER_OPTION_NAMES) {
         if (!hasOwn(probe.options, name)) Object.defineProperty(probe.options, name, SHADOW)
       }
