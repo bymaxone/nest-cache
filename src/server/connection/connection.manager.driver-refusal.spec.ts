@@ -45,6 +45,8 @@ describe.each([
 
     expect(error).toBeInstanceOf(CacheException)
     expect(error.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error.details).toEqual({ reason: 'the driver refused an option of the cluster' })
+    expect(error.cause).toBeUndefined()
     for (const rendered of [
       JSON.stringify(error),
       String(error.message),
@@ -52,5 +54,37 @@ describe.each([
     ]) {
       expect(rendered).not.toContain('HOSTSECRET')
     }
+  })
+})
+
+describe('an option that cannot be read while the cluster client is built', () => {
+  // Scenario: the host's `cluster.nodes` getter throws when the client is built, after validation read it.
+  // Rule: the library's own refusal (reason 'option could not be read', the host's error on the cause) passes
+  // through the wrap as it is, and is not replaced by the fixed driver reason.
+  it('keeps its own refusal and its cause', () => {
+    const raw = {
+      mode: 'cluster',
+      cluster: { nodes: [{ host: '127.0.0.1', port: 1 }], options: { lazyConnect: true } }
+    } as unknown as BymaxCacheModuleOptions
+    validateOptions(raw)
+    const resolved = applyDefaults(raw)
+    const failure = new Error('HOSTSECRET-getter')
+    Object.defineProperty(resolved.cluster, 'nodes', {
+      get: () => {
+        throw failure
+      }
+    })
+
+    let error: CacheException | undefined
+    try {
+      new ConnectionManager(resolved).getClient()
+    } catch (thrown) {
+      error = thrown as CacheException
+    }
+
+    expect(error).toBeInstanceOf(CacheException)
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error?.details).toEqual({ reason: 'option could not be read' })
+    expect(error?.cause).toBe(failure)
   })
 })
