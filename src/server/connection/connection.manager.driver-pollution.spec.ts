@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path'
 import { resolveOptions } from '../config/default-options'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ConnectionManager } from './connection.manager'
-import { DRIVER_OPTION_NAMES } from './driver-option-names'
+import { DRIVER_INSTANCE_NAMES, DRIVER_OPTION_NAMES } from './driver-option-names'
 
 type Raw = Record<string, unknown>
 
@@ -61,19 +61,24 @@ describe.each(Object.keys(SHAPES))('a real ioredis client of the %s options', (s
 
   // Scenario: another part of the process plants a driver option the library did not set.
   // Rule: the driver holds exactly what it holds without it.
-  it.each(DRIVER_OPTION_NAMES)('holds the same options when %s is planted', (name) => {
-    const base = held(make)
-    Object.defineProperty(Object.prototype, name, {
-      value: 'PLANTED',
-      configurable: true,
-      writable: true
-    })
-    try {
-      expect([name, held(make)]).toEqual([name, base])
-    } finally {
-      Reflect.deleteProperty(Object.prototype, name)
+  // A name that is also read off an object the driver creates is refused by the manager when it is
+  // planted (see driver-instance-names.spec.ts), so it is not built here.
+  it.each(DRIVER_OPTION_NAMES.filter((name) => !DRIVER_INSTANCE_NAMES.includes(name)))(
+    'holds the same options when %s is planted',
+    (name) => {
+      const base = held(make)
+      Object.defineProperty(Object.prototype, name, {
+        value: 'PLANTED',
+        configurable: true,
+        writable: true
+      })
+      try {
+        expect([name, held(make)]).toEqual([name, base])
+      } finally {
+        Reflect.deleteProperty(Object.prototype, name)
+      }
     }
-  })
+  )
 })
 
 /** Every `.js` file under `directory`. */

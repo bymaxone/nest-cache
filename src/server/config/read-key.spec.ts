@@ -138,6 +138,22 @@ describe('bare', () => {
     expect(tree['nothing']).toBeNull()
   })
 
+  // Scenario: the library or the driver changes a copied option later (a default applied, a value set).
+  // Rule: the copy's keys are ordinary data properties: enumerable, writable and configurable.
+  it('copies each key as an ordinary data property', () => {
+    const tree = bare({ a: 1 }) as Record<string, unknown>
+
+    expect(Object.getOwnPropertyDescriptor(tree, 'a')).toEqual({
+      value: 1,
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
+    tree['a'] = 2
+    expect(tree['a']).toBe(2)
+    expect(delete tree['a']).toBe(true)
+  })
+
   it('keeps an own __proto__ key as a plain key', () => {
     const parsed = JSON.parse('{"__proto__":{"x":1},"a":2}') as object
     const tree = bare(parsed) as Record<string, unknown>
@@ -168,6 +184,17 @@ describe('readHooks', () => {
 
     expect(events.seen).toEqual(['ready'])
     expect(Object.getPrototypeOf(hooks)).toBeNull()
+  })
+
+  it('holds each hook as an ordinary data property', () => {
+    const hooks = readHooks({ onEvent: 'text' }) as Record<string, unknown>
+
+    expect(Object.getOwnPropertyDescriptor(hooks, 'onEvent')).toEqual({
+      value: 'text',
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
   })
 
   it('holds only the hooks the host put, never one planted on Object.prototype', () => {

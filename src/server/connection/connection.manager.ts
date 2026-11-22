@@ -37,7 +37,7 @@ import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
 import { copyClusterOptions } from './copy-cluster-options'
-import { withOwnKeys } from './driver-option-names'
+import { assertDriverUnshadowed, withOwnKeys } from './driver-option-names'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
@@ -145,6 +145,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
     @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
   ) {
+    assertDriverUnshadowed()
     this.#redisOptionsResolved = readingOptions(() => this.buildRedisOptions(options))
     // Read here, once, with the client options: a cluster takes its timers from
     // `cluster.options.redisOptions`, every other mode from `connection`.
