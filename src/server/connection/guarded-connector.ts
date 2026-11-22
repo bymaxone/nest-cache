@@ -21,33 +21,20 @@ import { assertDriverUnshadowed } from './driver-option-names'
 const CONNECTION_CLOSED_MESSAGE = 'Connection is closed.'
 
 /**
- * Events Node emits on a socket that ioredis does not listen to. `emit` finds the listeners of an event with
- * a plain property read, so a string planted on `Object.prototype` under one of these names after the
- * guard ran is read as the listener and throws in the event loop, where nothing can catch it. A listener
- * of its own makes the read find the socket's.
- */
-const UNHEARD_EVENTS = [
-  'connect',
-  'lookup',
-  'connectionAttempt',
-  'connectionAttemptFailed',
-  'connectionAttemptTimeout',
-  'ready'
-] as const
-
-/**
- * Gives a socket a no-op listener for each event of `UNHEARD_EVENTS`.
+ * Gives the table of listeners of a socket no prototype. Node finds the listeners of an event with a plain
+ * property read of that table, which inherits `Object.prototype`, so a string planted there under the name
+ * of an event after the guard ran (`lookup`, `connectionAttempt`, `ready`, `resume`, and any other) is read as
+ * the listener and throws in the event loop, where nothing can catch it. A list of names can never be
+ * complete; a table with no prototype finds only the socket's own listeners, which keep working.
  *
  * @param stream - A socket that was just created.
  */
-function hearUnheardEvents(stream: { on: (event: string, listener: () => void) => unknown }): void {
-  for (const event of UNHEARD_EVENTS) {
-    stream.on(event, noop)
+function sealListeners(stream: object): void {
+  const table = (stream as { _events?: object })._events
+  if (table !== undefined && Reflect.getPrototypeOf(table) !== null) {
+    Reflect.setPrototypeOf(table, null)
   }
 }
-
-/** A listener that does nothing. */
-function noop(): void {}
 
 /** The options of a client, as far as the connector reads them. */
 interface IConnectorOptions {
@@ -111,7 +98,7 @@ export class GuardedConnector extends AbstractConnector {
           reject(error)
           return
         }
-        hearUnheardEvents(this.stream)
+        sealListeners(this.stream)
         this.stream.once('error', (error) => {
           this.firstError = error
         })
@@ -149,7 +136,7 @@ export function guardSentinelConnector<T extends object>(client: T): T {
       ;(stream as { destroy: () => void }).destroy()
       throw error
     }
-    hearUnheardEvents(stream as Parameters<typeof hearUnheardEvents>[0])
+    sealListeners(stream as object)
     return stream
   }
   return client

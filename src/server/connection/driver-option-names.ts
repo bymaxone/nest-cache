@@ -1,15 +1,43 @@
 /**
- * The guard on `Object.prototype` that stands in front of every ioredis client the library builds.
+ * The option names ioredis reads off the options object it was given, and the guard on `Object.prototype`.
  *
- * Layer: server. ioredis reads names off objects it creates itself, and `for...in` over the options it is
- * given visits an enumerable key planted on `Object.prototype` and copies its value into any option that
- * holds `undefined`, so no shape of the options object protects a client: the library refuses to build
- * or connect one while `Object.prototype` holds a key it does not hold by default.
+ * Layer: server. Two defences, for two moments. The guard (`assertDriverUnshadowed`) refuses to build or
+ * connect a client while `Object.prototype` holds a key it does not hold by default: ioredis copies an
+ * enumerable key planted before the build into any option left `undefined`, whatever the shape of the
+ * options object, so only a refusal protects that moment. A key planted AFTER the build is another
+ * matter: ioredis merges the options it is given into an ordinary object of its own and then reads names
+ * it was not given from that object (`socketTimeout` on every command, `tls`, `path` and the rest on a
+ * reconnect), so a planted name would configure a live client. Giving the options an own key, with the
+ * value `undefined`, for every name the driver reads (`withOwnKeys`) makes the merged object keep it: a
+ * key planted later, enumerable or not, is shadowed, and `undefined` is what an absent option is to the driver.
  */
 import { types } from 'node:util'
 
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import { CLUSTER_OPTION_KEYS, REDIS_OPTION_KEYS } from './copy-cluster-options'
+
+/**
+ * The names a standalone or sentinel client reads and the typed key records of a cluster node leave out
+ * (`ClusterRedisOptions` omits `port`, `host`, `path`, `sentinels`, `retryStrategy`, `enableOfflineQueue`,
+ * `readOnly` and `himportFieldsets`), and `timeout`, which ioredis reads and does not type.
+ */
+const UNTYPED = [
+  'enableOfflineQueue',
+  'himportFieldsets',
+  'host',
+  'path',
+  'port',
+  'readOnly',
+  'retryStrategy',
+  'sentinels',
+  'timeout'
+]
+
+/** Every option name of a Redis client, a cluster and the options a cluster gives each node. */
+export const DRIVER_OPTION_NAMES: readonly string[] = [
+  ...new Set([...Object.keys(CLUSTER_OPTION_KEYS), ...Object.keys(REDIS_OPTION_KEYS), ...UNTYPED])
+].sort()
 
 /**
  * The string keys `Object.prototype` holds in every Node version the library supports. Anything else is a
@@ -157,4 +185,19 @@ export function assertDriverUnshadowed(): void {
       count
     })
   }
+}
+
+/**
+ * Copies options into an object without a prototype that holds every driver option name as an own key,
+ * `undefined` for each one the options leave out.
+ *
+ * @param options - The options built for ioredis.
+ * @returns A prototype-less object: the options over an own `undefined` for every driver option name.
+ */
+export function withOwnKeys<T extends object>(options: T): T {
+  const copy = Object.create(null) as Record<string, unknown>
+  for (const name of DRIVER_OPTION_NAMES) {
+    copy[name] = undefined
+  }
+  return Object.assign(copy, options) as T
 }

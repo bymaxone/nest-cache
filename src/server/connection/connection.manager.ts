@@ -37,7 +37,7 @@ import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
 import { copyClusterOptions } from './copy-cluster-options'
-import { assertDriverUnshadowed } from './driver-option-names'
+import { assertDriverUnshadowed, withOwnKeys } from './driver-option-names'
 import { GuardedConnector, guardSentinelConnector } from './guarded-connector'
 
 /** The two client flavors this manager can produce. */
@@ -322,22 +322,24 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         ...(overrides?.enableOfflineQueue !== undefined && {
           enableOfflineQueue: overrides.enableOfflineQueue
         }),
-        redisOptions: {
+        redisOptions: withOwnKeys({
           Connector: GuardedConnector,
           connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
           commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
           maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
           disconnectTimeout: DISCONNECT_TIMEOUT_MS,
           ...supplied.redisOptions
-        }
+        })
       } as OwnedClusterOptions
-      return refusingDriverOptions(() => new Cluster(nodes, driverOptions))
+      return refusingDriverOptions(() => new Cluster(nodes, withOwnKeys(driverOptions)))
     }
-    return new Redis({
-      Connector: GuardedConnector,
-      ...this.#redisOptionsResolved,
-      ...overrides
-    } as OwnedRedisOptions)
+    return new Redis(
+      withOwnKeys({
+        Connector: GuardedConnector,
+        ...this.#redisOptionsResolved,
+        ...overrides
+      } as OwnedRedisOptions)
+    )
   }
 
   /**
@@ -353,7 +355,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     sentinel: NonNullable<ResolvedOptions['sentinel']>,
     overrides?: Partial<RedisOptions>
   ): Redis {
-    const options = readingOptions(() => this.sentinelOptions(sentinel, overrides))
+    const options = withOwnKeys(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
     const lazy = Boolean(options.lazyConnect)
     options.lazyConnect = true
     const client = guardSentinelConnector(new Redis(options))
@@ -377,9 +379,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       ...overrides,
       sentinels: sentinel.sentinels,
       name: sentinel.name,
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(sentinel.sentinelPassword) && {
         sentinelPassword: sentinel.sentinelPassword
       }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(sentinel.password) && { password: sentinel.password }),
       // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
       // wire level; our public interface accepts 'replica' per Redis 7 naming.
@@ -414,11 +418,15 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       keepAlive: c.keepAlive ?? DEFAULT_KEEP_ALIVE_MS,
       noDelay: c.noDelay ?? true,
       family: c.family ?? 4,
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.host) && { host: c.host }),
       ...(!isUnset(c.port) && { port: c.port }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.password) && { password: c.password }),
       ...(!isUnset(c.db) && { db: c.db }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.username) && { username: c.username }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.tls) && { tls: c.tls }),
       ...fromUrl,
       // After the URL, which names no timer, so the type says what is true: a number, always.

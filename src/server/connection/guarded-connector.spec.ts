@@ -8,8 +8,8 @@
  * trusted. The guard of the manager runs at build time only, so the connector runs it again, in the tick
  * that opens the socket.
  */
-import { createServer as netServer } from 'node:net'
-import type { Server, Socket } from 'node:net'
+import { createServer as netServer, Socket } from 'node:net'
+import type { Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer as tlsServer } from 'node:tls'
@@ -207,20 +207,33 @@ describe('the connector, run by hand', () => {
   })
 })
 
-const UNHEARD = [
-  'connect',
-  'connectionAttempt',
-  'connectionAttemptFailed',
-  'connectionAttemptTimeout',
-  'lookup',
-  'ready'
-]
+/**
+ * The `Object.prototype` that the table of listeners of a socket of Node inherits. Node's own code runs in the
+ * main realm, which is not the realm of a spec, so a key planted on the `Object.prototype` of the spec is never
+ * read by it; the prototype of the table of a fresh socket is the one that is.
+ */
+const socketRealmPrototype = (): object =>
+  Reflect.getPrototypeOf((new Socket() as unknown as { _events: object })._events) as object
 
-describe('the events Node emits on the socket that nothing listens to', () => {
-  // Scenario: a string is planted on Object.prototype under the name of one of those events after the guard
-  // ran; Node reads the listeners of an event with a plain property read and calls the string.
-  // Rule: the socket has a listener of its own for each of them, so the read finds it.
-  it('has a listener for each of them, on a plain and on a TLS socket', async () => {
+/** Plants a string under each of `names` on `target`, runs `run`, and takes them off with a delete. */
+function plantedOn<T>(target: object, names: string[], run: () => T): T {
+  for (const name of names) {
+    Object.defineProperty(target, name, { value: 'PLANTED', configurable: true, enumerable: true })
+  }
+  try {
+    return run()
+  } finally {
+    for (const name of names) Reflect.deleteProperty(target, name)
+  }
+}
+
+describe('the table of listeners of the socket', () => {
+  // Scenario: a string is planted on Object.prototype under the name of an event after the guard ran; Node
+  // reads the listeners of an event with a plain property read of a table that inherits Object.prototype,
+  // finds the string, calls it and throws in the event loop.
+  // Rule: the table of the socket has no prototype, on a plain and on a TLS socket, so only its own listeners
+  // are found: the planted names are inert and a listener of the host's still fires.
+  it('has no prototype, on a plain and on a TLS socket, and keeps it', async () => {
     const plain = await listenOnPort(netServer(answer))
     const secure = await listenOnPort(tlsServer({ key, cert: certificate }, answer))
     const connectors = [
@@ -234,15 +247,51 @@ describe('the events Node emits on the socket that nothing listens to', () => {
 
     for (const connector of connectors) {
       const { stream } = await settle(connector)
-      for (const event of UNHEARD) {
-        expect(stream?.listenerCount(event)).toBeGreaterThan(0)
-      }
+      const table = (): object | null =>
+        Reflect.getPrototypeOf((stream as unknown as { _events: object })._events)
+      expect(table()).toBeNull()
+      stream?.on('anything', () => undefined)
+      expect(table()).toBeNull()
+      stream?.removeAllListeners('anything')
+      expect(table()).toBeNull()
       connector.disconnect()
     }
   })
 
-  // A string planted from a spec lands on the Object.prototype of the spec's realm, not on the one the socket
-  // code of Node reads, so the rows pin the listeners and a child process reproduces the read itself.
+  it('finds no listener in a string planted under resume, pause, drain or any other event name', async () => {
+    const port = await listenOnPort(netServer(answer))
+    const connector = new GuardedConnector({ host: '127.0.0.1', port })
+    const { stream } = await settle(connector)
+    const fired: string[] = []
+    stream?.on('arbitrary-event', () => fired.push('arbitrary-event'))
+    const names = ['resume', 'pause', 'drain', 'lookup', 'ready', 'arbitrary-other-event']
+
+    const emitted = plantedOn(socketRealmPrototype(), names, () => {
+      const results = names.map((name) => stream?.emit(name))
+      stream?.emit('arbitrary-event')
+      return results
+    })
+
+    expect(emitted).toEqual(names.map(() => false))
+    expect(fired).toEqual(['arbitrary-event'])
+    connector.disconnect()
+  })
+
+  it('would throw on the same planted names when the table keeps its prototype', () => {
+    const socket = new Socket()
+    const names = ['resume', 'lookup', 'ready']
+
+    const thrown = plantedOn(socketRealmPrototype(), names, () => {
+      try {
+        socket.emit('lookup')
+        return undefined
+      } catch (error) {
+        return error
+      }
+    })
+
+    expect((thrown as Error).name).toBe('TypeError')
+  })
 })
 
 describe('the connector with a key planted on Object.prototype after the client was built', () => {
@@ -508,15 +557,15 @@ describe('the guard on the connector a sentinel client builds for itself', () =>
   })
 
   // Scenario: the socket a sentinel connector opened is handed back to ioredis.
-  // Rule: it carries a listener for each event Node emits on it that ioredis does not listen to.
-  it('gives the socket of a sentinel client a listener for each unheard event', async () => {
-    const stream = { destroy: jest.fn(), on: jest.fn() }
+  // Rule: its table of listeners has no prototype, as the socket of the library's own connector has.
+  it('seals the table of listeners of the socket of a sentinel client', async () => {
+    const stream = { destroy: jest.fn(), _events: { close: undefined } }
     const client = { connector: { connect: jest.fn().mockResolvedValue(stream) } }
     guardSentinelConnector(client)
 
     await (client.connector.connect as unknown as () => Promise<unknown>)()
 
-    expect(stream.on.mock.calls.map(([event]: [string]) => event).sort()).toEqual(UNHEARD)
+    expect(Reflect.getPrototypeOf(stream._events)).toBeNull()
   })
 
   it('is on the connector of a client the manager builds in sentinel mode', async () => {
