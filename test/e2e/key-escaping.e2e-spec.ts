@@ -14,7 +14,7 @@ import type { TestingModule } from '@nestjs/testing'
 // Swap real ioredis for the in-memory mock so the apps boot without a socket.
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: Mock }
+  return require('../../src/test-helpers/ioredis-module').ioredisModule(Mock, Mock)
 })
 
 describe('keyEscaping E2E (ioredis-mock)', () => {
