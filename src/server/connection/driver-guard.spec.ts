@@ -12,6 +12,7 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ConnectionManager } from './connection.manager'
 import type * as DriverNames from './driver-option-names'
+import { assertDriverUnshadowed } from './driver-option-names'
 import { STANDARD_KEYS } from './driver-option-names'
 
 const build = (): ConnectionManager =>
@@ -342,6 +343,52 @@ describe('a standard key that was already replaced when the module loaded', () =
 
     expect(thrownBy(guard)).toBeUndefined()
   })
+})
+
+const DESCRIPTOR_FIELDS = ['get', 'set', 'value', 'writable', 'enumerable', 'configurable']
+
+/**
+ * Runs `run` while a throwing accessor named `field` is planted on `Object.prototype`, and returns how
+ * many times the accessor ran and what `run` threw. The accessor is taken off with a delete, which reads no
+ * descriptor, so the restoration cannot trip on it.
+ */
+function withThrowingAccessor(
+  field: string,
+  run: () => ReturnType<typeof thrownBy>
+): { called: number; error: ReturnType<typeof thrownBy> } {
+  const seen = { called: 0 }
+  Reflect.defineProperty(Object.prototype, field, {
+    get() {
+      seen.called += 1
+      throw new Error('PLANTED-ACCESSOR-RAN')
+    },
+    configurable: true
+  })
+  try {
+    const error = run()
+    return { called: seen.called, error }
+  } finally {
+    Reflect.deleteProperty(Object.prototype, field)
+  }
+}
+
+describe('an accessor planted under the name of a descriptor field', () => {
+  // Scenario: a descriptor is an ordinary object, so a `get`, `set` or `value` read off a data descriptor
+  // finds an accessor planted on Object.prototype and runs it, throwing its error in place of the library's.
+  // Rule: the guard reads only the fields a descriptor holds of its own: the accessor never runs and the
+  // library's count-only error is what comes out.
+  it.each(DESCRIPTOR_FIELDS)('does not run an accessor planted as %s', (field) => {
+    const { called, error } = withThrowingAccessor(field, () => thrownBy(assertDriverUnshadowed))
+
+    expect(called).toBe(0)
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error?.details).toEqual({
+      reason: 'Object.prototype holds keys the driver would read as its own',
+      count: 1
+    })
+  })
+  // The same copy of the fields is taken at load and at check, so these rows cover both; a copy of the
+  // module cannot be loaded under such an accessor, because its compiled prologue reads it.
 })
 
 describe('the keys Object.prototype holds by default', () => {

@@ -55,9 +55,41 @@ export const STANDARD_KEYS: ReadonlySet<string> = new Set([
   'valueOf'
 ])
 
+/** `Object.hasOwn` as it was when this module loaded. */
+const hasOwn = Object.hasOwn
+
+/** The six fields of a property descriptor, each present (`undefined` when the descriptor lacks it). */
+interface IDescriptorFields {
+  readonly value: unknown
+  readonly get: unknown
+  readonly set: unknown
+  readonly writable: unknown
+  readonly enumerable: unknown
+  readonly configurable: unknown
+}
+
+/**
+ * Copies the fields a descriptor holds of its own into an object without a prototype. A descriptor is an
+ * ordinary object, so reading `get`, `set` or `value` off a data descriptor would find, and run, an
+ * accessor planted on `Object.prototype` under that name.
+ */
+function fieldsOf(descriptor: PropertyDescriptor | undefined): IDescriptorFields | undefined {
+  if (descriptor === undefined) return undefined
+  const fields = Object.create(null) as Record<string, unknown>
+  for (const field of ['value', 'get', 'set', 'writable', 'enumerable', 'configurable']) {
+    fields[field] = hasOwn(descriptor, field)
+      ? (descriptor as unknown as Record<string, unknown>)[field]
+      : undefined
+  }
+  return fields as unknown as IDescriptorFields
+}
+
 /** The property descriptors of the standard keys as they were when this module loaded. */
-const STANDARD_DESCRIPTORS: ReadonlyMap<string, PropertyDescriptor | undefined> = new Map(
-  [...STANDARD_KEYS].map((name) => [name, Object.getOwnPropertyDescriptor(Object.prototype, name)])
+const STANDARD_DESCRIPTORS: ReadonlyMap<string, IDescriptorFields | undefined> = new Map(
+  [...STANDARD_KEYS].map((name) => [
+    name,
+    fieldsOf(Object.getOwnPropertyDescriptor(Object.prototype, name))
+  ])
 )
 
 /** `Function.prototype.toString` as it was when this module loaded. */
@@ -79,7 +111,7 @@ function isNative(value: unknown): boolean {
  * Whether what a standard key holds is what the language gives it: a native function with the key's own
  * name (`constructor` holds `Object`), and for `__proto__` a native getter and setter.
  */
-function hasExpectedKind(name: string, descriptor: PropertyDescriptor | undefined): boolean {
+function hasExpectedKind(name: string, descriptor: IDescriptorFields | undefined): boolean {
   if (descriptor === undefined) return false
   if (name === '__proto__') return isNative(descriptor.get) && isNative(descriptor.set)
   const expectedName = name === 'constructor' ? 'Object' : name
@@ -100,7 +132,7 @@ const BASELINE_DEFECTS: ReadonlySet<string> = new Set(
  */
 function isOverwritten(name: string): boolean {
   const was = STANDARD_DESCRIPTORS.get(name)
-  const now = Object.getOwnPropertyDescriptor(Object.prototype, name)
+  const now = fieldsOf(Object.getOwnPropertyDescriptor(Object.prototype, name))
   if (was === undefined || now === undefined) return was !== now
   return (
     !Object.is(was.value, now.value) ||
