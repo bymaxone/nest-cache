@@ -90,10 +90,53 @@ describe('the manager with a key planted on Object.prototype', () => {
     })
   })
 
-  // Scenario: a symbol key, which is no name the driver reads (the test runner plants one).
-  // Rule: it is not refused.
-  it('is built when a symbol is planted and when nothing is planted', () => {
-    expect(planted(Symbol('planted'), build)).toBeInstanceOf(ConnectionManager)
+  // Scenario: a symbol is planted on Object.prototype: `Symbol.iterator` makes any object that is spread,
+  // destructured or iterated yield what the plant yields.
+  // Rule: it is refused and counted, enumerable or not, whatever its description.
+  it.each([
+    ['an ordinary symbol', (): symbol => Symbol('planted')],
+    ['Symbol.iterator', (): symbol => Symbol.iterator],
+    ['a symbol of another registry key', (): symbol => Symbol.for('$$another-registry-key')],
+    [
+      'an unregistered symbol with the description Jest uses',
+      (): symbol => Symbol('$$jest-protect-from-deletion')
+    ]
+  ])('refuses to be built when %s is planted', (_label, make) => {
+    const symbol = make()
+
+    for (const enumerable of [false, true]) {
+      const error = planted(symbol, () => thrownBy(build), enumerable)
+
+      expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+      expect(error?.details).toEqual({
+        reason: 'Object.prototype holds keys the driver would read as its own',
+        count: 1
+      })
+    }
+  })
+
+  // Scenario: the test runner keeps Symbol.for('$$jest-protect-from-deletion') on Object.prototype, hidden.
+  // Rule: that exact key is not counted while it is not enumerable, and is counted when it is enumerable.
+  it('is built with the symbol the test runner keeps, and refuses it once it is enumerable', () => {
+    const key = Symbol.for('$$jest-protect-from-deletion')
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, key)
+    expect(original?.enumerable).toBe(false)
+    expect(build()).toBeInstanceOf(ConnectionManager)
+
+    Object.defineProperty(Object.prototype, key, { ...original, enumerable: true })
+    try {
+      const error = thrownBy(build)
+
+      expect(error?.details).toEqual({
+        reason: 'Object.prototype holds keys the driver would read as its own',
+        count: 1
+      })
+    } finally {
+      Object.defineProperty(Object.prototype, key, original as PropertyDescriptor)
+    }
+  })
+
+  it('is built when nothing is planted', () => {
     expect(build()).toBeInstanceOf(ConnectionManager)
   })
 })

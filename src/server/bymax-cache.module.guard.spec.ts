@@ -126,6 +126,33 @@ describe('forRoot, with util.types.isProxy replaced after the import', () => {
   })
 })
 
+describe('forRoot, with an iterator planted on Object.prototype', () => {
+  // Scenario: a generator that yields one value is planted under Symbol.iterator, and the host wrote a
+  // `tls.ca` of three entries (the plant used to decide that one survived).
+  // Rule: the guard refuses the process before the entries are copied.
+  it('refuses, counting the symbol', () => {
+    Object.defineProperty(Object.prototype, Symbol.iterator, {
+      value: function* (): Generator<number> {
+        yield 1
+      },
+      configurable: true,
+      writable: true
+    })
+    try {
+      const error = thrownBy(() =>
+        BymaxCacheModule.forRoot({
+          connection: { host: 'h', tls: { ca: ['a', 'b', 'c'] } }
+        } as never)
+      )
+
+      expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+      expect(error?.details).toEqual(expect.objectContaining({ count: 1 }))
+    } finally {
+      Reflect.deleteProperty(Object.prototype, Symbol.iterator)
+    }
+  })
+})
+
 describe('the factory of forRootAsync', () => {
   it('resolves the options on a clean process', () => {
     expect(asyncFactory()(OPTIONS)).toBeDefined()

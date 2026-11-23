@@ -321,7 +321,9 @@ function copyList(
   if (length > MAX_LIST_ENTRIES) {
     refuseOption(option, 'has too many entries', length, { max: MAX_LIST_ENTRIES })
   }
-  return Array.from({ length }, (_, index) => copy(list[index], index))
+  const copied: unknown[] = []
+  for (let index = 0; index < length; index += 1) copied[index] = copy(list[index], index)
+  return copied
 }
 
 /**

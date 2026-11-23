@@ -23,8 +23,12 @@ const uncurryThis = bind.bind(call) as <A extends unknown[], R>(
 
 /** `Object.prototype`, read when the library loads. */
 export const objectPrototype = Object.prototype
+/** The symbol Jest keeps, non-enumerable, on `Object.prototype` of every test realm. */
+export const JEST_PROTECT_SYMBOL = Symbol.for('$$jest-protect-from-deletion')
 /** `Object.getOwnPropertyNames`, as it was when the library loaded. */
 export const getOwnPropertyNames = Object.getOwnPropertyNames
+/** `Object.getOwnPropertySymbols`, as it was when the library loaded. */
+export const getOwnPropertySymbols = Object.getOwnPropertySymbols
 /** `Object.getOwnPropertyDescriptor`, as it was when the library loaded. */
 export const getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor
 /** `Object.defineProperty`, as it was when the library loaded. */
@@ -108,7 +112,6 @@ export const BASELINE_BUILTINS: ReadonlyArray<readonly [object, string | symbol]
   [Reflect, 'getPrototypeOf'],
   [Reflect, 'setPrototypeOf'],
   [Array, 'isArray'],
-  [Array, 'from'],
   [ArrayBuffer, 'isView'],
   [Number, 'isInteger'],
   [Number, 'isFinite'],

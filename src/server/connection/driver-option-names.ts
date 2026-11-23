@@ -21,9 +21,11 @@ import {
   functionToString,
   getOwnPropertyDescriptor,
   getOwnPropertyNames,
+  getOwnPropertySymbols,
   hasOwn,
   objectPrototype,
   isProxy,
+  JEST_PROTECT_SYMBOL,
   objectIs,
   stringEndsWith
 } from './intrinsics'
@@ -168,6 +170,24 @@ function isOverwritten(name: string): boolean {
 }
 
 /**
+ * Counts the symbols `Object.prototype` holds, enumerable or not: `Object.prototype[Symbol.iterator]` is read
+ * by any object that is spread, destructured or iterated. The one symbol Jest keeps on the prototype of
+ * every test realm, found by its registered key and only while it is not enumerable, is not counted.
+ *
+ * @returns How many symbols are planted.
+ */
+function countPlantedSymbols(): number {
+  const symbols = getOwnPropertySymbols(objectPrototype)
+  let count = 0
+  for (let index = 0; index < symbols.length; index += 1) {
+    const symbol = symbols[index] as symbol
+    const descriptor = getOwnPropertyDescriptor(objectPrototype, symbol)
+    if (symbol !== JEST_PROTECT_SYMBOL || descriptor?.enumerable === true) count += 1
+  }
+  return count
+}
+
+/**
  * Refuses to go on while `Object.prototype` holds a string key it does not hold by default, or a
  * standard key that is not what the language gives it, or not what it was when this module loaded.
  *
@@ -201,6 +221,7 @@ export function assertDriverUnshadowed(): void {
     const name = STANDARD_NAMES[index] as string
     if (BASELINE_DEFECTS[name] === true || isOverwritten(name)) count += 1
   }
+  count += countPlantedSymbols()
   if (count > 0) throw guardRefusal(KEYS_REASON, count)
   const replaced = countReplacedBuiltins()
   if (replaced > 0) throw guardRefusal(BUILTINS_REASON, replaced)
