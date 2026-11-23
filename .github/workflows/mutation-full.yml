@@ -33,20 +33,19 @@ jobs:
   full:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
-      # The ceiling is per shard job: about twice the expected time of the heaviest shard, because a
-      # mutant costs the tests that cover it and the shards are not equal in cost. A run the ceiling
-      # cancels leaves no score and no baseline for the week, and an over-wide ceiling costs only the
-      # minutes it uses. Module-level tables and the baseline of built-ins are static mutants, and each one
-      # reruns the whole suite (about 16 s with overhead): the four files that hold them have 324 static mutants
-      # of 417. A heaviest shard is measured at about 53 minutes, and the ceiling leaves room for a plan that
-      # is not balanced.
-      timeout-minutes: 80
+      # The ceiling is per shard job. A run the ceiling cancels leaves no score and no baseline for the
+      # week, and an over-wide ceiling costs only the minutes it uses. Module-level tables and the baseline
+      # of built-ins are static mutants, and each one reruns the whole suite (about 16 s with overhead): the
+      # four files that hold them have 324 static mutants of 417. With two shards, a cold run was cancelled
+      # at an 80-minute ceiling on both, so a shard of that size takes more than 80 minutes; the ceiling here
+      # is 150 for a third of the work per shard.
+      timeout-minutes: 150
       # A unit test the cold run did not run fails the job: it would never be held to killing a
       # mutant, and the score cannot notice. The tooling specs that reach no source are listed in
       # scripts/mutation-inventory.exempt.json.
       inventory: enforce
-      # Two shards of four workers each. A worker grows to several GiB over a long run, so the workers
+      # Three shards of four workers each. A worker grows to several GiB over a long run, so the workers
       # of one shard must fit one runner. The count and the concurrency are passed here, not written
       # into stryker.config.json, which the per-push incremental job and local runs share.
-      shards: 2
+      shards: 3
       concurrency: 4
