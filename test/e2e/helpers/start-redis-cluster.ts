@@ -21,11 +21,10 @@ import type { ClusterNode } from 'ioredis'
 /** Client ports of the three masters. */
 const CLUSTER_PORTS = [7200, 7201, 7202] as const
 
-/** Redis major under test; the same variable the standalone container reads. */
-// A floating tag on purpose: CI runs the newest Redis of each major so an upstream change that breaks
-// cluster boot shows up here (Redis 8.12 did, see BUS_PORT_FLAG) instead of in a consumer. A pinned
-// digest would hide the next one, so the boot script tolerates the change and fails fast when a node
-// does not start.
+// The tag floats on purpose: a pinned digest would hide an upstream change to cluster boot until a
+// consumer hit it. The boot script tolerates the known differences between Redis versions and fails
+// fast when a node does not start.
+/** Redis image under test; `REDIS_IMAGE` overrides it, as for the standalone container. */
 const DEFAULT_IMAGE = 'redis:8-alpine'
 
 /** One `redis-server` flag set; `$p` is the node's client port. */
@@ -44,7 +43,7 @@ const SERVER_FLAGS = [
 
 /**
  * Redis 8.12 refuses to start a cluster node whose bus port is unprotected unless the operator
- * acknowledges it with this flag (the bus stays on loopback inside the container). A Redis before
+ * acknowledges it with this flag (the bus ports are not published to the host). A Redis before
  * 8.12 does not know the directive and exits, so the boot script retries without it.
  */
 const BUS_PORT_FLAG = '--cluster-bus-port-protected-mode no'
