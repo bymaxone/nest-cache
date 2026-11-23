@@ -128,8 +128,9 @@ describe('forRoot, with util.types.isProxy replaced after the import', () => {
 
 describe('forRoot, with an iterator planted on Object.prototype', () => {
   // Scenario: a generator that yields one value is planted under Symbol.iterator, and the host wrote a
-  // `tls.ca` of three entries (the plant used to decide that one survived).
-  // Rule: the guard refuses the process before the entries are copied.
+  // `tls.ca` of three entries.
+  // Rule: the guard refuses the process before the entries are copied, so a planted iterator cannot decide
+  // which of them are kept.
   it('refuses, counting the symbol', () => {
     Object.defineProperty(Object.prototype, Symbol.iterator, {
       value: function* (): Generator<number> {
