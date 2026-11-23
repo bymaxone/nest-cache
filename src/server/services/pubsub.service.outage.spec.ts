@@ -15,7 +15,7 @@ import { PubSubService } from './pubsub.service'
 // Swap real ioredis for the in-memory mock so no socket is opened.
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return require('../../test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
 })
 
 const TIMEOUT = 'Command timed out'

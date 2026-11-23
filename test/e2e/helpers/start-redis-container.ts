@@ -45,7 +45,11 @@ export async function startRedisContainer(options: StartRedisOptions = {}): Prom
     .withCommand(['redis-server', '--save', ''])
     .start()
 
-  const host = container.getHost()
+  // Testcontainers reports `localhost`, which resolves to ::1 first on a machine that listens on IPv6
+  // loopback: another process bound to [::1] on the same port could answer in place of the container,
+  // whose port is published on IPv4. Only `localhost` is mapped; any other host is the one reported.
+  const reported = container.getHost()
+  const host = reported === 'localhost' ? '127.0.0.1' : reported
   const port = container.getMappedPort(6379)
   return { container, url: `redis://${host}:${port}` }
 }

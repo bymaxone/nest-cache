@@ -18,6 +18,7 @@ import type { CacheEventName } from '../../shared/types/cache-event.types'
 import { BYMAX_CACHE_EVENTS, BYMAX_CACHE_OPTIONS } from '../bymax-cache.constants'
 import { readingOptions } from '../config/default-options'
 import { isUnset } from '../config/is-unset'
+import { shallowBare } from '../config/read-key'
 import type { ResolvedOptions } from '../config/resolved-options'
 import {
   DEFAULT_COMMAND_TIMEOUT_MS,
@@ -36,6 +37,13 @@ import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
 import { copyClusterOptions } from './copy-cluster-options'
+import { assertDriverUnshadowed, withOwnKeys } from './driver-option-names'
+import {
+  bindSentinelEmitter,
+  GuardedConnector,
+  GuardedSentinelConnector
+} from './guarded-connector'
+import { sealDelayQueue } from './sealed-delay-queue'
 
 /** The two client flavors this manager can produce. */
 type AnyRedis = Redis | Cluster
@@ -71,10 +79,12 @@ type OwnedClusterOptions = Omit<ClusterOptions, 'redisOptions'> & {
 /**
  * Builds a cluster client so that an option the driver refuses ends as `INVALID_OPTIONS`. ioredis throws
  * an error of its own for one it cannot use, and the message of `scaleReads` prints the value the host
- * gave. Everything the host wrote is read and copied before this call, so nothing of the host's runs
- * inside the driver's constructor, and whatever the constructor throws is dropped without being
- * inspected, with no `cause` (the exception the library makes for an error that echoes the host's
- * value): only the library's code and a fixed reason remain.
+ * gave. The values the host wrote are read and copied before this call, so a getter or a proxy of the
+ * host's that holds them is not read inside the driver's constructor; a function the host gave (a
+ * `dnsLookup`, a retry strategy) is still called by the driver, and a list kept as an entry is not
+ * copied. Whatever the constructor throws is dropped without being inspected, with no `cause` (the
+ * exception the library makes for an error that echoes the host's value): only the library's code and
+ * a fixed reason remain.
  *
  * @typeParam T - The client built.
  * @param build - The construction.
@@ -143,6 +153,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     @Inject(BYMAX_CACHE_OPTIONS) private readonly options: ResolvedOptions,
     @Optional() @Inject(BYMAX_CACHE_EVENTS) private readonly events?: ICacheEvents
   ) {
+    assertDriverUnshadowed()
     this.#redisOptionsResolved = readingOptions(() => this.buildRedisOptions(options))
     // Read here, once, with the client options: a cluster takes its timers from
     // `cluster.options.redisOptions`, every other mode from `connection`.
@@ -289,12 +300,14 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
    *   `enableOfflineQueue` applies, at the cluster level.
    */
   private createClient(overrides?: Partial<RedisOptions>): AnyRedis {
+    // Again here: a name can be planted between the construction of the manager and the build of a client.
+    assertDriverUnshadowed()
     if (this.options.mode === 'sentinel') {
       const sentinel = this.options.sentinel
       if (!sentinel) {
         throw new CacheException(CACHE_ERROR_CODES.SENTINEL_MISCONFIGURED, { mode: 'sentinel' })
       }
-      return new Redis(readingOptions(() => this.sentinelOptions(sentinel, overrides)))
+      return this.createSentinelClient(sentinel, overrides)
     }
     if (this.options.mode === 'cluster') {
       const cluster = this.options.cluster
@@ -314,17 +327,48 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         ...(overrides?.enableOfflineQueue !== undefined && {
           enableOfflineQueue: overrides.enableOfflineQueue
         }),
-        redisOptions: {
+        redisOptions: withOwnKeys({
+          Connector: GuardedConnector,
           connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
           commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
           maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
           disconnectTimeout: DISCONNECT_TIMEOUT_MS,
           ...supplied.redisOptions
-        }
+        })
       } as OwnedClusterOptions
-      return refusingDriverOptions(() => new Cluster(nodes, driverOptions))
+      return refusingDriverOptions(() =>
+        sealDelayQueue(new Cluster(nodes, withOwnKeys(driverOptions)))
+      )
     }
-    return new Redis({ ...this.#redisOptionsResolved, ...overrides } as OwnedRedisOptions)
+    return new Redis(
+      withOwnKeys({
+        Connector: GuardedConnector,
+        ...this.#redisOptionsResolved,
+        ...overrides
+      } as OwnedRedisOptions)
+    )
+  }
+
+  /**
+   * Builds a sentinel-mode client on the connector of the library, which runs the guard in every connect,
+   * the first one included (ioredis starts it inside its constructor), and on its probe clients too.
+   *
+   * @param sentinel - The resolved sentinel block.
+   * @param overrides - Extra `RedisOptions` merged over the resolved defaults.
+   * @returns The client.
+   */
+  private createSentinelClient(
+    sentinel: NonNullable<ResolvedOptions['sentinel']>,
+    overrides?: Partial<RedisOptions>
+  ): Redis {
+    return bindSentinelEmitter(
+      new Redis(
+        withOwnKeys({
+          Connector: GuardedSentinelConnector,
+          ...readingOptions(() => this.sentinelOptions(sentinel, overrides))
+        } as OwnedRedisOptions)
+      )
+    )
   }
 
   /**
@@ -338,14 +382,16 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     sentinel: NonNullable<ResolvedOptions['sentinel']>,
     overrides?: Partial<RedisOptions>
   ): OwnedRedisOptions {
-    return {
+    return shallowBare({
       ...this.#redisOptionsResolved,
       ...overrides,
       sentinels: sentinel.sentinels,
       name: sentinel.name,
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(sentinel.sentinelPassword) && {
         sentinelPassword: sentinel.sentinelPassword
       }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(sentinel.password) && { password: sentinel.password }),
       // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
       // wire level; our public interface accepts 'replica' per Redis 7 naming.
@@ -360,14 +406,15 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         enableTLSForSentinelMode: true,
         sentinelTLS: this.#redisOptionsResolved.tls
       })
-    } as OwnedRedisOptions
+    } as OwnedRedisOptions)
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */
   private buildRedisOptions(opts: ResolvedOptions): RedisOptions & { connectTimeout: number } {
-    const c = opts.connection ?? {}
+    const c: NonNullable<ResolvedOptions['connection']> =
+      opts.connection ?? shallowBare<NonNullable<ResolvedOptions['connection']>>({})
     const fromUrl = c.url ? parseRedisUrl(c.url) : {}
-    return {
+    return shallowBare({
       lazyConnect: c.lazyConnect ?? false,
       commandTimeout: c.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS,
       maxRetriesPerRequest: c.maxRetriesPerRequest ?? DEFAULT_MAX_RETRIES_PER_REQUEST,
@@ -379,16 +426,20 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       keepAlive: c.keepAlive ?? DEFAULT_KEEP_ALIVE_MS,
       noDelay: c.noDelay ?? true,
       family: c.family ?? 4,
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.host) && { host: c.host }),
       ...(!isUnset(c.port) && { port: c.port }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.password) && { password: c.password }),
       ...(!isUnset(c.db) && { db: c.db }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.username) && { username: c.username }),
+      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.tls) && { tls: c.tls }),
       ...fromUrl,
       // After the URL, which names no timer, so the type says what is true: a number, always.
       connectTimeout: c.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT_MS
-    }
+    })
   }
 
   /** Forwards a lifecycle event to `events.onEvent`, swallowing consumer throws. */

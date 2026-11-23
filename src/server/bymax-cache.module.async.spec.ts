@@ -44,7 +44,7 @@ jest.mock('ioredis', () => {
     quit = jest.fn().mockResolvedValue('OK')
     disconnect = jest.fn()
   }
-  return { __esModule: true, Redis: FakeRedis, Cluster: FakeRedis, default: FakeRedis }
+  return require('../test-helpers/ioredis-module').ioredisModule(FakeRedis, FakeRedis)
 })
 
 import { findProvider } from '../test-helpers/provider.helpers'
@@ -224,7 +224,10 @@ describe('BymaxCacheModule.forRootAsync', () => {
       ]
     }).compile()
 
-    expect(moduleRef.get(BYMAX_CACHE_EVENTS)).toBe(events)
+    const provided = moduleRef.get<ICacheEvents>(BYMAX_CACHE_EVENTS)
+    provided.onEvent?.('ready', {})
+    expect(events.onEvent).toHaveBeenCalledWith('ready', {})
+    expect(Object.getPrototypeOf(provided)).toBeNull()
     expect(moduleRef.get(BYMAX_CACHE_SERIALIZER)).toBe(serializer)
 
     await moduleRef.close()

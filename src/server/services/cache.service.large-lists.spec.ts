@@ -18,7 +18,7 @@ import type { Redis } from 'ioredis'
 
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return require('../../test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
 })
 
 /** More elements than the call stack takes as arguments of one call. */

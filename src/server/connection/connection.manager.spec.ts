@@ -12,6 +12,7 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import * as cacheExceptionModule from '../errors/cache.exception'
 import { CacheException } from '../errors/cache.exception'
 import { ConnectionManager } from './connection.manager'
+import { GuardedConnector } from './guarded-connector'
 
 import type { ResolvedOptions } from '../config/resolved-options'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
@@ -54,6 +55,8 @@ jest.mock('ioredis', () => {
     options: Record<string, unknown>
     quit = jest.fn().mockResolvedValue('OK')
     disconnect = jest.fn()
+    connector = { connect: jest.fn() }
+    connect = jest.fn().mockResolvedValue(undefined)
     constructor(options: Record<string, unknown>) {
       super()
       this.options = options
@@ -73,7 +76,7 @@ jest.mock('ioredis', () => {
       clusterInstances.push(this)
     }
   }
-  return { __esModule: true, Redis: FakeRedis, Cluster: FakeCluster, default: FakeRedis }
+  return require('../../test-helpers/ioredis-module').ioredisModule(FakeRedis, FakeCluster)
 })
 
 beforeEach(() => {
@@ -298,8 +301,7 @@ describe('ConnectionManager', () => {
       expect(redisInstances[0]?.options['role']).toBe('slave')
     })
 
-    // A sentinel block WITHOUT the optional secrets/role covers the false side of
-    // the three conditional spreads — those keys must be absent.
+    // WITHOUT the optional secrets/role, the three conditional spreads hand the driver no value.
     it('creates a sentinel client without optional fields', () => {
       const manager = makeManager({
         mode: 'sentinel',
@@ -309,13 +311,10 @@ describe('ConnectionManager', () => {
       manager.getClient()
       const opts = redisInstances[0]?.options ?? {}
       expect(opts['name']).toBe('mymaster')
-      expect('sentinelPassword' in opts).toBe(false)
-      // Pins the ConditionalExpression on the `password` spread (mutant L172):
-      // `→ true` would always spread `{ password: undefined }`, adding the key.
-      expect(opts).not.toHaveProperty('password')
-      expect('role' in opts).toBe(false)
-      // Same for the natMap spread — absent when not supplied.
-      expect(opts).not.toHaveProperty('natMap')
+      expect(opts['sentinelPassword']).toBeUndefined()
+      expect(opts['password']).toBeUndefined()
+      expect(opts['role']).toBeUndefined()
+      expect(opts['natMap']).toBeUndefined()
     })
 
     // Sentinel mode with a missing sentinel block (forced past validation) must
@@ -354,6 +353,7 @@ describe('ConnectionManager', () => {
         enableOfflineQueue: false,
         enableReadyCheck: true,
         redisOptions: {
+          Connector: GuardedConnector,
           connectTimeout: 10_000,
           commandTimeout: 5_000,
           maxRetriesPerRequest: 3,
@@ -375,6 +375,7 @@ describe('ConnectionManager', () => {
       expect(clusterInstances[0]?.options).toEqual({
         enableOfflineQueue: false,
         redisOptions: {
+          Connector: GuardedConnector,
           connectTimeout: 10_000,
           commandTimeout: 5_000,
           maxRetriesPerRequest: 3,
@@ -706,7 +707,7 @@ describe('ConnectionManager', () => {
     })
 
     // A host-only connection must take every default — the right side of every
-    // `??` and the false side of each conditional spread (optional keys absent).
+    // `??` and the false side of each conditional spread (optional keys unset: own and undefined).
     it('applies defaults for an unspecified connection', () => {
       const manager = makeManager({ connection: { host: 'h' } })
 
@@ -721,10 +722,10 @@ describe('ConnectionManager', () => {
       expect(opts['keepAlive']).toBe(30_000)
       expect(opts['noDelay']).toBe(true)
       expect(opts['family']).toBe(4)
-      expect('password' in opts).toBe(false)
-      expect('db' in opts).toBe(false)
-      expect('username' in opts).toBe(false)
-      expect('tls' in opts).toBe(false)
+      expect(opts['password']).toBeUndefined()
+      expect(opts['db']).toBeUndefined()
+      expect(opts['username']).toBeUndefined()
+      expect(opts['tls']).toBeUndefined()
     })
 
     // When a url and discrete fields conflict, the URL must win (spec §11.3) —
@@ -766,7 +767,7 @@ describe('ConnectionManager', () => {
       const opts = redisInstances[0]?.options ?? {}
       expect(opts['lazyConnect']).toBe(false)
       expect(opts['connectTimeout']).toBe(10_000)
-      expect('host' in opts).toBe(false)
+      expect(opts['host']).toBeUndefined()
     })
 
     // The default retryStrategy must grow 50ms per attempt and cap at 2000ms —

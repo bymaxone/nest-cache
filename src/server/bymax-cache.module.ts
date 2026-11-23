@@ -29,6 +29,7 @@ import { ConfigurableModuleClass, MODULE_OPTIONS_TOKEN } from './bymax-cache.mod
 import { resolveOptions } from './config/default-options'
 import type { ResolvedOptions } from './config/resolved-options'
 import { ConnectionManager } from './connection/connection.manager'
+import { assertDriverUnshadowed } from './connection/driver-option-names'
 import type { ICacheEvents } from './interfaces/cache-events.interface'
 import type { BymaxCacheModuleOptions } from './interfaces/cache-module-options.interface'
 import type { ISerializer } from './interfaces/serializer.interface'
@@ -49,6 +50,8 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
    *   fail bootstrap validation (e.g. missing connection, misconfigured mode).
    */
   static override forRoot(options: typeof OPTIONS_TYPE): DynamicModule {
+    // Before the first option is read: the paths that read them call built-ins a polluted process may have replaced.
+    assertDriverUnshadowed()
     const resolved = resolveOptions(options)
 
     const providers: Provider[] = [
@@ -117,7 +120,10 @@ export class BymaxCacheModule extends ConfigurableModuleClass {
     return [
       {
         provide: BYMAX_CACHE_OPTIONS,
-        useFactory: (raw: BymaxCacheModuleOptions): ResolvedOptions => resolveOptions(raw),
+        useFactory: (raw: BymaxCacheModuleOptions): ResolvedOptions => {
+          assertDriverUnshadowed()
+          return resolveOptions(raw)
+        },
         inject: [MODULE_OPTIONS_TOKEN]
       },
       {

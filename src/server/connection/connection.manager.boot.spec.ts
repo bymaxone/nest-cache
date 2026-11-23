@@ -46,7 +46,7 @@ jest.mock('ioredis', () => {
       clusterInstances.push(this)
     }
   }
-  return { __esModule: true, Redis: FakeRedis, Cluster: FakeCluster, default: FakeRedis }
+  return require('../../test-helpers/ioredis-module').ioredisModule(FakeRedis, FakeCluster)
 })
 
 beforeEach(() => {

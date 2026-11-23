@@ -26,7 +26,7 @@ import type { Redis } from 'ioredis'
 // the jest.mock hoisting scope (top-level imports cannot be referenced here).
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return require('../../test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
 })
 
 /** Builds a fresh ISerializer whose methods can be spied for selection tests. */

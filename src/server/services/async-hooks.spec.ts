@@ -17,7 +17,7 @@ import type { Redis } from 'ioredis'
 
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return require('../../test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
 })
 
 /** A hook that is async and rejects, as an `async` arrow handed to a `=> void` slot does. */

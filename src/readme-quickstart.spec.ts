@@ -17,7 +17,7 @@ import { BymaxCacheModule, CacheService } from '@bymax-one/nest-cache'
 // parsing, the defaults) runs for real and only the socket is replaced.
 jest.mock('ioredis', () => {
   const Mock = require('ioredis-mock')
-  return { __esModule: true, Redis: Mock, default: Mock, Cluster: class FakeCluster {} }
+  return require('./test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
 })
 
 interface Profile {

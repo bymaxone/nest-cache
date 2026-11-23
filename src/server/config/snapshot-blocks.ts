@@ -19,6 +19,7 @@ import type {
   BymaxCacheStandaloneConnection
 } from '../interfaces/cache-module-options.interface'
 import type { IScriptDefinition } from '../interfaces/script-definition.interface'
+import { readKey } from './read-key'
 import { refuseOption } from './refuse-option'
 
 // Stryker disable BooleanLiteral: only the keys of the records below are read, so flipping a `true` value changes nothing
@@ -45,7 +46,7 @@ export const STANDALONE_KEYS: Readonly<Record<keyof BymaxCacheStandaloneConnecti
 }
 
 /** Every key of the sentinel block, as a complete record. */
-const SENTINEL_KEYS: Readonly<Record<keyof BymaxCacheSentinelConnection, true>> = {
+export const SENTINEL_KEYS: Readonly<Record<keyof BymaxCacheSentinelConnection, true>> = {
   sentinels: true,
   name: true,
   sentinelPassword: true,
@@ -110,15 +111,18 @@ export const TLS_KEYS: Readonly<Record<keyof TlsConnectionOptions | 'profile', t
 const MAX_LIST_ENTRIES = 1000
 
 /** Every key of a script definition, as a complete record. */
-const SCRIPT_KEYS: Readonly<Record<keyof IScriptDefinition, true>> = { name: true, lua: true }
+export const SCRIPT_KEYS: Readonly<Record<keyof IScriptDefinition, true>> = {
+  name: true,
+  lua: true
+}
 
 /** What an entry of `sentinels`, `cluster.nodes` or a `natMap` names, read by name. */
-const ENTRY_KEYS = { host: true, port: true, family: true } satisfies Partial<
+export const ENTRY_KEYS = { host: true, port: true, family: true } satisfies Partial<
   Record<keyof SentinelAddress, true>
 >
 
 /** Every key of the cluster block, as a complete record. */
-const CLUSTER_KEYS: Readonly<Record<keyof BymaxCacheClusterConnection, true>> = {
+export const CLUSTER_KEYS: Readonly<Record<keyof BymaxCacheClusterConnection, true>> = {
   nodes: true,
   options: true
 }
@@ -141,8 +145,11 @@ function isObject(value: unknown): value is object {
  */
 function readPlain(value: unknown, keys: Readonly<Record<string, true>>): unknown {
   return isObject(value) && !Array.isArray(value)
-    ? Object.fromEntries(
-        Object.entries(readSet(value, keys)).filter(([, copied]) => copied !== undefined)
+    ? Object.assign(
+        Object.create(null) as Record<string, unknown>,
+        Object.fromEntries(
+          Object.entries(readSet(value, keys)).filter(([, copied]) => copied !== undefined)
+        )
       )
     : value
 }
@@ -220,11 +227,11 @@ function copyKeyEntry(entry: unknown, option: string, field: string, index: numb
   if (Object.keys(entry).some((name) => name !== field && name !== 'passphrase')) {
     refuseOption(where, `has a key that is not ${field} or passphrase`, entry)
   }
-  const passphrase: unknown = Reflect.get(entry, 'passphrase')
+  const passphrase: unknown = readKey(entry, 'passphrase')
   if (passphrase !== undefined && typeof passphrase !== 'string') {
     refuseOption(`${where}.passphrase`, 'must be a string', passphrase)
   }
-  const bytes: unknown = Reflect.get(entry, field)
+  const bytes: unknown = readKey(entry, field)
   if (bytes === undefined) {
     refuseOption(where, `has no ${field}`, entry)
   }
@@ -314,7 +321,17 @@ function copyList(
   if (length > MAX_LIST_ENTRIES) {
     refuseOption(option, 'has too many entries', length, { max: MAX_LIST_ENTRIES })
   }
-  return Array.from({ length }, (_, index) => copy(list[index], index))
+  const copied: unknown[] = []
+  for (let index = 0; index < length; index += 1) {
+    // A data property of its own, which runs no setter inherited from `Array.prototype`.
+    Object.defineProperty(copied, index, {
+      value: copy(list[index], index),
+      writable: true,
+      enumerable: true,
+      configurable: true
+    })
+  }
+  return copied
 }
 
 /**
@@ -355,9 +372,9 @@ function copyFieldset(entry: unknown, index: number): unknown {
     return entry
   }
   return {
-    name: copyBytes(Reflect.get(entry, 'name')),
+    name: copyBytes(readKey(entry, 'name')),
     fields: copyList(
-      Reflect.get(entry, 'fields'),
+      readKey(entry, 'fields'),
       'cluster.options.himportFieldsets[].fields',
       (field, at) =>
         field === undefined
