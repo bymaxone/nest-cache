@@ -195,7 +195,7 @@ function countPlantedSymbols(): number {
  * command, a subscriber) that those objects do not hold when they are built, through `this`, through an
  * alias of `this` and through other objects, so a key planted on `Object.prototype` is what the read
  * finds. The library cannot give those objects an own key and no list of the names can be complete, so a
- * polluted `Object.prototype` is refused as a whole. A symbol key is not a name the driver reads. A
+ * polluted `Object.prototype` is refused as a whole. A symbol counts too (`countPlantedSymbols`), except the one Jest keeps hidden. A
  * standard name that was overwritten (`hasOwnProperty`, `toString`, `constructor`) counts as planted: the
  * names are an allowlist, so a replaced value would otherwise keep the count at zero, and so does a standard
  * name that was already replaced when this module loaded (not a native function with its own name, or

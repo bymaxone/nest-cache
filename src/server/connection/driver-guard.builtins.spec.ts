@@ -10,11 +10,11 @@
  * read the options call (`BASELINE_BUILTINS`) is compared by identity inside the guard: the last rows replace
  * each of them and expect a refusal, and on a clean realm, none.
  */
-import util from 'node:util'
+import util, { types } from 'node:util'
 
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
-import { assertDriverUnshadowed } from './driver-option-names'
+import { assertDriverUnshadowed, DRIVER_OPTION_NAMES, withOwnKeys } from './driver-option-names'
 import { BUILTINS_REASON, KEYS_REASON } from './guard-refusal'
 import { BASELINE_BUILTINS } from './intrinsics'
 
@@ -147,6 +147,7 @@ describe('the baseline of the built-ins the paths that read the options call', (
     [Buffer, 'Buffer'],
     [JSON, 'JSON'],
     [util, 'util'],
+    [types, 'util.types'],
     [Array.prototype, 'Array.prototype'],
     [Set.prototype, 'Set.prototype'],
     [WeakSet.prototype, 'WeakSet.prototype'],
@@ -159,6 +160,86 @@ describe('the baseline of the built-ins the paths that read the options call', (
       if (candidate === owner) return `${label}.${String(name)}`
     return `iterator.${String(name)}`
   }
+
+  // Rule: the baseline is exactly this list. A row generated from the list itself cannot see a name that was
+  // changed in it, so the list is written out here, and a change to it is a change to this row.
+  it('holds exactly the built-ins this list names', () => {
+    const labels = BASELINE_BUILTINS.map((entry) => labelOf(entry[0], entry[1]))
+
+    expect([...labels].sort()).toEqual([
+      'Array.isArray',
+      'Array.prototype.Symbol(Symbol.iterator)',
+      'Array.prototype.filter',
+      'Array.prototype.forEach',
+      'Array.prototype.includes',
+      'Array.prototype.join',
+      'Array.prototype.map',
+      'Array.prototype.push',
+      'Array.prototype.slice',
+      'Array.prototype.some',
+      'ArrayBuffer.isView',
+      'Buffer.from',
+      'Function.prototype.apply',
+      'Function.prototype.bind',
+      'Function.prototype.call',
+      'JSON.stringify',
+      'Math.min',
+      'Number.isFinite',
+      'Number.isInteger',
+      'Object.assign',
+      'Object.create',
+      'Object.defineProperty',
+      'Object.entries',
+      'Object.freeze',
+      'Object.fromEntries',
+      'Object.getOwnPropertyDescriptor',
+      'Object.getOwnPropertyNames',
+      'Object.hasOwn',
+      'Object.is',
+      'Object.keys',
+      'Object.values',
+      'Reflect.get',
+      'Reflect.getPrototypeOf',
+      'Reflect.set',
+      'Reflect.setPrototypeOf',
+      'RegExp.prototype.Symbol(Symbol.replace)',
+      'RegExp.prototype.exec',
+      'RegExp.prototype.test',
+      'Set.prototype.Symbol(Symbol.iterator)',
+      'Set.prototype.add',
+      'Set.prototype.delete',
+      'Set.prototype.forEach',
+      'Set.prototype.has',
+      'String.prototype.Symbol(Symbol.iterator)',
+      'String.prototype.includes',
+      'String.prototype.replace',
+      'String.prototype.trim',
+      'WeakSet.prototype.add',
+      'WeakSet.prototype.delete',
+      'WeakSet.prototype.has',
+      'globalThis.Array',
+      'globalThis.ArrayBuffer',
+      'globalThis.Buffer',
+      'globalThis.Error',
+      'globalThis.JSON',
+      'globalThis.Math',
+      'globalThis.Number',
+      'globalThis.Object',
+      'globalThis.Reflect',
+      'globalThis.RegExp',
+      'globalThis.Set',
+      'globalThis.SharedArrayBuffer',
+      'globalThis.String',
+      'globalThis.Symbol',
+      'globalThis.Uint8Array',
+      'globalThis.WeakSet',
+      'iterator.next',
+      'iterator.next',
+      'iterator.next',
+      'util.types',
+      'util.types.isProxy'
+    ])
+  })
 
   it('has built-ins in it, each with an owner and a name', () => {
     expect(BASELINE_BUILTINS.length).toBeGreaterThan(30)
@@ -224,5 +305,16 @@ describe('the baseline of the built-ins the paths that read the options call', (
 
   it('does not refuse when none was replaced', () => {
     expect(guardThrows()).toBeUndefined()
+  })
+})
+
+describe('withOwnKeys', () => {
+  // Rule: the options come back with an own key for every driver name and for nothing else.
+  it('holds exactly the driver names as own keys', () => {
+    const copy = withOwnKeys({ host: 'h' } as never) as unknown as Record<string, unknown>
+
+    expect(Object.getOwnPropertyNames(copy).sort()).toEqual([...DRIVER_OPTION_NAMES].sort())
+    expect(copy['host']).toBe('h')
+    expect(Object.hasOwn(copy, 'undefined')).toBe(false)
   })
 })

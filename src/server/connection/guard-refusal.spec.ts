@@ -42,4 +42,31 @@ describe('guardRefusal', () => {
     expect(guardRefusal(BUILTINS_REASON, 1).details).toEqual({ reason: BUILTINS_REASON, count: 1 })
     expect(KEYS_REASON).not.toBe(BUILTINS_REASON)
   })
+
+  // Rule: the reasons are these texts, which a host's log shows.
+  it('says what it refused in these words', () => {
+    expect(KEYS_REASON).toBe('Object.prototype holds keys the driver would read as its own')
+    expect(BUILTINS_REASON).toBe('Built-ins the library relies on were replaced after it loaded')
+  })
+
+  // Rule: every own field of the refusal is defined like the field of an exception built the ordinary way
+  // (writable, enumerable, configurable), so a log, a serializer and a spread see the same thing.
+  it('defines its own fields like the constructor does', () => {
+    const expected = Object.getOwnPropertyDescriptors(
+      new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, { reason: KEYS_REASON, count: 2 })
+    )
+    const refusal = Object.getOwnPropertyDescriptors(guardRefusal(KEYS_REASON, 2))
+
+    expect(Object.keys(refusal).sort()).toEqual(Object.keys(expected).sort())
+    for (const field of Object.keys(expected)) {
+      const want = expected[field] as PropertyDescriptor
+      const got = refusal[field] as PropertyDescriptor
+      expect({ field, w: got.writable, e: got.enumerable, c: got.configurable }).toEqual({
+        field,
+        w: want.writable,
+        e: want.enumerable,
+        c: want.configurable
+      })
+    }
+  })
 })

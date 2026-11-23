@@ -59,53 +59,101 @@ function sources(): string[] {
 const inBaseline = (owner: object, key: string): boolean =>
   BASELINE_BUILTINS.some((entry) => entry[0] === owner && entry[1] === key)
 
+// What the code calls today, by name. The rows below are named after these lists, never after what a scan
+// finds, so a run over instrumented sources (Stryker) runs the same tests under the same names.
+const KNOWN_STATIC_CALLS = [
+  'Array.isArray',
+  'ArrayBuffer.isView',
+  'Buffer.from',
+  'Math.min',
+  'Number.isFinite',
+  'Number.isInteger',
+  'Object.assign',
+  'Object.create',
+  'Object.defineProperty',
+  'Object.entries',
+  'Object.freeze',
+  'Object.fromEntries',
+  'Object.getOwnPropertyDescriptor',
+  'Object.hasOwn',
+  'Object.keys',
+  'Object.values',
+  'Reflect.get',
+  'Reflect.getPrototypeOf',
+  'Reflect.set',
+  'types.isKeyObject',
+  'types.isProxy'
+]
+const KNOWN_BUILTIN_METHODS = [
+  'add',
+  'bind',
+  'delete',
+  'filter',
+  'forEach',
+  'has',
+  'includes',
+  'join',
+  'map',
+  'replace',
+  'some',
+  'test',
+  'trim'
+]
+
+/** The built-in prototypes that have a method of this name. */
+const prototypesWith = (name: string): Array<[string, object]> =>
+  PROTOTYPES.filter(([, prototype]) => Object.hasOwn(prototype, name))
+
 describe('the load baseline against the calls of the code it protects', () => {
   const code = sources().join('\n')
   // Under Stryker the sources hold every mutant variant of the file next to the original, so the names a
-  // scan finds are not the names the code calls: the scan is meaningful on the plain sources only.
+  // scan finds are not the names the code calls: the scan test is meaningful on the plain sources only.
   const instrumented = code.includes('stryMutAct_')
-  const staticCalls = new Set<string>()
-  for (const match of code.matchAll(
-    /\b(Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String|types)\.([A-Za-z]+)\(/g
-  )) {
-    staticCalls.add(`${match[1]}.${match[2]}`)
-  }
-  const instanceCalls = new Set<string>()
-  for (const match of code.matchAll(
-    /(?<!\b(?:Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String|types))\.([A-Za-z]+)\(/g
-  )) {
-    instanceCalls.add(match[1] as string)
-  }
 
-  it('finds calls to check', () => {
+  // Rule: a call to a built-in that the lists above do not name fails here, so the list, the baseline and the
+  // code move together.
+  it('finds no call to a built-in that the lists do not name', () => {
     if (instrumented) return
-    expect(staticCalls.size).toBeGreaterThan(10)
-    expect(instanceCalls.size).toBeGreaterThan(10)
+    const unknown: string[] = []
+    for (const match of code.matchAll(
+      /\b(Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String|types)\.([A-Za-z]+)\(/g
+    )) {
+      const call = `${match[1]}.${match[2]}`
+      const target = STATICS[match[1] as string] as Record<string, unknown>
+      if (typeof target[match[2] as string] === 'function' && !KNOWN_STATIC_CALLS.includes(call)) {
+        unknown.push(call)
+      }
+    }
+    for (const match of code.matchAll(
+      /(?<!\b(?:Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String|types))\.([A-Za-z]+)\(/g
+    )) {
+      const name = match[1] as string
+      if (prototypesWith(name).length > 0 && !KNOWN_BUILTIN_METHODS.includes(name))
+        unknown.push(name)
+    }
+
+    expect(unknown).toEqual([])
   })
 
-  it.each(instrumented ? ['skipped'] : [...staticCalls].sort())(
-    'holds the static call %s',
-    (call) => {
-      if (instrumented) return
-      const [owner, key] = call.split('.') as [string, string]
+  it.each(KNOWN_STATIC_CALLS)('holds the static call %s', (call) => {
+    const [owner, key] = call.split('.') as [string, string]
+    const target = STATICS[owner] as Record<string, unknown>
+    // A function that is neither writable nor configurable (`util.types.isKeyObject`) cannot be replaced.
+    const slot = Object.getOwnPropertyDescriptor(target, key)
+    if (slot !== undefined && slot.writable === false && slot.configurable === false) return
 
-      // `Object.keys` and the like are in the baseline; a static the global does not have is not a built-in call.
-      const target = STATICS[owner] as Record<string, unknown>
-      if (typeof target[key] !== 'function') return
-      // A function that is neither writable nor configurable (`util.types.isKeyObject`) cannot be replaced.
-      const slot = Object.getOwnPropertyDescriptor(target, key)
-      if (slot !== undefined && slot.writable === false && slot.configurable === false) return
-      expect(inBaseline(STATICS[owner] as object, key)).toBe(true)
-    }
-  )
+    expect(typeof target[key]).toBe('function')
+    expect(inBaseline(STATICS[owner] as object, key)).toBe(true)
+  })
 
-  it.each(instrumented ? ['skipped'] : [...instanceCalls].sort())(
+  it.each(KNOWN_BUILTIN_METHODS)(
     'holds every built-in prototype that has the method %s',
     (name) => {
-      const missing = PROTOTYPES.filter(
-        ([, prototype]) => Object.hasOwn(prototype, name) && !inBaseline(prototype, name)
-      ).map(([label]) => `${label}.${name}`)
+      const missing = prototypesWith(name)
+        .filter(([, prototype]) => !inBaseline(prototype, name))
+        .map(([label]) => `${label}.${name}`)
 
+      expect(prototypesWith(name).length).toBeGreaterThan(0)
       expect(missing).toEqual([])
     }
   )

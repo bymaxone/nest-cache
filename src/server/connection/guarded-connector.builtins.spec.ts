@@ -144,6 +144,8 @@ describe('the probe clients of a sentinel connector, with a built-in replaced af
     probe.on('error', () => undefined)
     closers.push(() => probe.disconnect())
 
+    // Every driver name and nothing else: a loop that reads one past the names would define `undefined`.
+    expect(Object.hasOwn(probe.options, 'undefined')).toBe(false)
     expect(Object.getOwnPropertyDescriptor(probe.options, 'path')).toEqual({
       value: undefined,
       writable: true,

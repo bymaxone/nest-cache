@@ -154,6 +154,7 @@ export const BASELINE_BUILTINS: ReadonlyArray<readonly [object, string | symbol]
 ]
 
 /** What each of them was when the library loaded, in the same order. */
+// Stryker disable next-line ArrayDeclaration: the loop below assigns every index from 0, so the initial content never survives
 const BASELINE_VALUES: unknown[] = []
 for (let index = 0; index < BASELINE_BUILTINS.length; index += 1) {
   const entry = BASELINE_BUILTINS[index] as readonly [object, string | symbol]

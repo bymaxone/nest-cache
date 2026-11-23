@@ -39,6 +39,7 @@ function dataDescriptor(
   return descriptor as PropertyDescriptor
 }
 
+// Stryker disable next-line ObjectLiteral: the details of the template are replaced by the details of each refusal, so they never reach a refusal
 const TEMPLATE = new CacheException(CODE, { reason: KEYS_REASON, count: 0 })
 const MESSAGE = TEMPLATE.message
 const FIELDS = getOwnPropertyNames(TEMPLATE)

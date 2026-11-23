@@ -53,20 +53,25 @@ describe('the manager with a key planted on Object.prototype', () => {
   // Scenario: another part of the process plants a key, whatever its name: one the driver reads off its own
   // objects (manuallyClosing, preferKey, length), one it reads through an alias, one nobody has listed.
   // Rule: the manager refuses to be built, reporting how many keys are planted and none of them.
-  it.each(['manuallyClosing', 'preferKey', 'length', 'keys', 'stream', 'aNameNoListHolds'])(
-    'refuses to be built when %s is planted',
-    (name) => {
-      const error = planted(name, () => thrownBy(build))
+  it.each([
+    'manuallyClosing',
+    'preferKey',
+    'length',
+    'keys',
+    'stream',
+    'aNameNoListHolds',
+    'undefined'
+  ])('refuses to be built when %s is planted', (name) => {
+    const error = planted(name, () => thrownBy(build))
 
-      expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
-      expect(error?.details).toEqual({
-        reason: 'Object.prototype holds keys the driver would read as its own',
-        count: 1
-      })
-      expect(JSON.stringify(error)).not.toContain('PLANTED-VALUE')
-      expect(error?.details).not.toHaveProperty('name')
-    }
-  )
+    expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(error?.details).toEqual({
+      reason: 'Object.prototype holds keys the driver would read as its own',
+      count: 1
+    })
+    expect(JSON.stringify(error)).not.toContain('PLANTED-VALUE')
+    expect(error?.details).not.toHaveProperty('name')
+  })
 
   it('refuses a key that is enumerable as well, and counts every planted key', () => {
     const error = planted('plantedOne', () => planted('plantedTwo', () => thrownBy(build), true))
