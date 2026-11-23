@@ -61,6 +61,9 @@ const inBaseline = (owner: object, key: string): boolean =>
 
 describe('the load baseline against the calls of the code it protects', () => {
   const code = sources().join('\n')
+  // Under Stryker the sources hold every mutant variant of the file next to the original, so the names a
+  // scan finds are not the names the code calls: the scan is meaningful on the plain sources only.
+  const instrumented = code.includes('stryMutAct_')
   const staticCalls = new Set<string>()
   for (const match of code.matchAll(
     /\b(Object|Reflect|Array|ArrayBuffer|Number|Buffer|JSON|Math|String|types)\.([A-Za-z]+)\(/g
@@ -75,23 +78,28 @@ describe('the load baseline against the calls of the code it protects', () => {
   }
 
   it('finds calls to check', () => {
+    if (instrumented) return
     expect(staticCalls.size).toBeGreaterThan(10)
     expect(instanceCalls.size).toBeGreaterThan(10)
   })
 
-  it.each([...staticCalls].sort())('holds the static call %s', (call) => {
-    const [owner, key] = call.split('.') as [string, string]
+  it.each(instrumented ? ['skipped'] : [...staticCalls].sort())(
+    'holds the static call %s',
+    (call) => {
+      if (instrumented) return
+      const [owner, key] = call.split('.') as [string, string]
 
-    // `Object.keys` and the like are in the baseline; a static the global does not have is not a built-in call.
-    const target = STATICS[owner] as Record<string, unknown>
-    if (typeof target[key] !== 'function') return
-    // A function that is neither writable nor configurable (`util.types.isKeyObject`) cannot be replaced.
-    const slot = Object.getOwnPropertyDescriptor(target, key)
-    if (slot !== undefined && slot.writable === false && slot.configurable === false) return
-    expect(inBaseline(STATICS[owner] as object, key)).toBe(true)
-  })
+      // `Object.keys` and the like are in the baseline; a static the global does not have is not a built-in call.
+      const target = STATICS[owner] as Record<string, unknown>
+      if (typeof target[key] !== 'function') return
+      // A function that is neither writable nor configurable (`util.types.isKeyObject`) cannot be replaced.
+      const slot = Object.getOwnPropertyDescriptor(target, key)
+      if (slot !== undefined && slot.writable === false && slot.configurable === false) return
+      expect(inBaseline(STATICS[owner] as object, key)).toBe(true)
+    }
+  )
 
-  it.each([...instanceCalls].sort())(
+  it.each(instrumented ? ['skipped'] : [...instanceCalls].sort())(
     'holds every built-in prototype that has the method %s',
     (name) => {
       const missing = PROTOTYPES.filter(

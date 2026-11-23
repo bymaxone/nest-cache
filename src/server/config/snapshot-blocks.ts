@@ -322,7 +322,15 @@ function copyList(
     refuseOption(option, 'has too many entries', length, { max: MAX_LIST_ENTRIES })
   }
   const copied: unknown[] = []
-  for (let index = 0; index < length; index += 1) copied[index] = copy(list[index], index)
+  for (let index = 0; index < length; index += 1) {
+    // A data property of its own, which runs no setter inherited from `Array.prototype`.
+    Object.defineProperty(copied, index, {
+      value: copy(list[index], index),
+      writable: true,
+      enumerable: true,
+      configurable: true
+    })
+  }
   return copied
 }
 

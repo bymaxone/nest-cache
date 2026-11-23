@@ -30,3 +30,29 @@ describe('snapshotBlocks, with an iterator planted on Object.prototype', () => {
     }
   })
 })
+
+describe('snapshotBlocks, with a setter planted on Array.prototype', () => {
+  // Scenario: an accessor with a setter that stores nothing is planted under the index 0 of every array.
+  // Rule: the copy creates each entry as a data property of its own, so the setter never runs and every
+  // entry is kept.
+  it('keeps every entry of a list of three as an own property', () => {
+    const original = Object.getOwnPropertyDescriptor(Array.prototype, '0')
+    Object.defineProperty(Array.prototype, '0', {
+      configurable: true,
+      set(): void {
+        // stores nothing
+      }
+    })
+    try {
+      const copied = snapshotBlocks({
+        connection: { host: 'h', tls: { ca: ['a', 'b', 'c'] } }
+      } as never) as unknown as { connection: { tls: { ca: unknown[] } } }
+
+      expect(Object.hasOwn(copied.connection.tls.ca, '0')).toBe(true)
+      expect(copied.connection.tls.ca.length).toBe(3)
+    } finally {
+      Reflect.deleteProperty(Array.prototype, '0')
+      if (original !== undefined) Object.defineProperty(Array.prototype, '0', original)
+    }
+  })
+})
