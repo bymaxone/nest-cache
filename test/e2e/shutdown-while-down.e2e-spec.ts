@@ -9,14 +9,15 @@ import { execFileSync } from 'node:child_process'
 import { PubSubService } from '@bymax-one/nest-cache'
 
 import { bootCacheApp } from './fixtures/test-cache-app.module'
-import { getFreePort } from './helpers/free-port'
 import { startRedisContainer, type StartedRedis } from './helpers/start-redis-container'
 
 describe('Shutdown while Redis is down (real Redis)', () => {
   let redis: StartedRedis
 
   beforeAll(async () => {
-    redis = await startRedisContainer({ hostPort: await getFreePort() })
+    // The container's port is published by Testcontainers, which allocates it at the moment it binds it: the
+    // spec stops the container and never restarts it, so no fixed host port is needed.
+    redis = await startRedisContainer()
   }, 60_000)
 
   afterAll(async () => {
