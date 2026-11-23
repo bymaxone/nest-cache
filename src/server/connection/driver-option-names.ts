@@ -99,6 +99,7 @@ const FIELD_NAMES: readonly string[] = [
 function fieldsOf(descriptor: PropertyDescriptor | undefined): IDescriptorFields | undefined {
   if (descriptor === undefined) return undefined
   const fields = createObject(null)
+  // Stryker disable next-line EqualityOperator: one pass more only records the field name undefined as false, the same in the snapshot and in the comparison
   for (let index = 0; index < FIELD_NAMES.length; index += 1) {
     const field = FIELD_NAMES[index] as string
     fields[field] = hasOwn(descriptor, field)
@@ -110,6 +111,7 @@ function fieldsOf(descriptor: PropertyDescriptor | undefined): IDescriptorFields
 
 /** The property descriptors of the standard keys as they were when this module loaded, by name. */
 const STANDARD_DESCRIPTORS = createObject(null) as Record<string, IDescriptorFields | undefined>
+// Stryker disable next-line EqualityOperator: one pass more only stores a value under the name undefined, which no lookup asks for (the lookups use the standard names)
 for (let index = 0; index < STANDARD_NAMES.length; index += 1) {
   const name = STANDARD_NAMES[index] as string
   STANDARD_DESCRIPTORS[name] = fieldsOf(getOwnPropertyDescriptor(objectPrototype, name))
@@ -145,6 +147,7 @@ function hasExpectedKind(name: string, descriptor: IDescriptorFields | undefined
  * already polluted before the library was imported, which the snapshot above cannot see.
  */
 const BASELINE_DEFECTS = createObject(null)
+// Stryker disable next-line EqualityOperator: one pass more only stores a flag under the name undefined, which no lookup asks for (the lookups use the standard names)
 for (let index = 0; index < STANDARD_NAMES.length; index += 1) {
   const name = STANDARD_NAMES[index] as string
   BASELINE_DEFECTS[name] = !hasExpectedKind(name, STANDARD_DESCRIPTORS[name])

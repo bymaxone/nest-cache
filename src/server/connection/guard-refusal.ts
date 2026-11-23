@@ -26,15 +26,11 @@ export const BUILTINS_REASON = 'Built-ins the library relies on were replaced af
 const CODE = CACHE_ERROR_CODES.INVALID_OPTIONS
 
 /** A data descriptor of its own fields only: `defineProperty` reads `get` and `set` through a prototype. */
-function dataDescriptor(
-  value: unknown,
-  writable: boolean,
-  enumerable: boolean
-): PropertyDescriptor {
+function dataDescriptor(value: unknown): PropertyDescriptor {
   const descriptor = createObject(null)
   descriptor['value'] = value
-  descriptor['writable'] = writable
-  descriptor['enumerable'] = enumerable
+  descriptor['writable'] = true
+  descriptor['enumerable'] = true
   descriptor['configurable'] = true
   return descriptor as PropertyDescriptor
 }
@@ -48,7 +44,7 @@ const DESCRIPTORS = createObject(null)
 for (let index = 0; index < FIELDS.length; index += 1) {
   const field = FIELDS[index] as string
   const original = getOwnPropertyDescriptor(TEMPLATE, field) as PropertyDescriptor
-  DESCRIPTORS[field] = dataDescriptor(original.value, true, original.enumerable === true)
+  DESCRIPTORS[field] = dataDescriptor(original.value)
 }
 
 /**
@@ -65,11 +61,11 @@ export function guardRefusal(reason: string, count: number): CacheException {
     defineProperty(error, field, DESCRIPTORS[field] as PropertyDescriptor)
   }
   const details = { reason, count }
-  defineProperty(error, 'details', dataDescriptor(details, true, true))
+  defineProperty(error, 'details', dataDescriptor(details))
   defineProperty(
     error,
     'response',
-    dataDescriptor({ error: { code: CODE, message: MESSAGE, details } }, true, true)
+    dataDescriptor({ error: { code: CODE, message: MESSAGE, details } })
   )
   setPrototypeOf(error, PROTOTYPE)
   captureStackTrace(error, guardRefusal)
