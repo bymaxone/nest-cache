@@ -8,6 +8,7 @@
 import { resolveOptions } from '../config/default-options'
 import type { BymaxCacheModuleOptions } from '../interfaces/cache-module-options.interface'
 import { ConnectionManager } from './connection.manager'
+import { assertDriverUnshadowed } from './driver-option-names'
 
 /**
  * Builds a {@link ConnectionManager} from the same options `BymaxCacheModule.forRoot`
@@ -42,6 +43,8 @@ import { ConnectionManager } from './connection.manager'
  * ```
  */
 export function createConnectionManager(options: BymaxCacheModuleOptions): ConnectionManager {
+  // Before the first option is read, as at `forRoot`: the manager's own check comes after the options are read.
+  assertDriverUnshadowed()
   const resolved = resolveOptions(options)
   return new ConnectionManager(resolved, resolved.events)
 }

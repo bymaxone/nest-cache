@@ -154,6 +154,28 @@ describe('forRoot, with an iterator planted on Object.prototype', () => {
   })
 })
 
+describe('forRoot and the factory, with a plain value planted under get or set', () => {
+  // Scenario: a plain value is planted under `get`, and under `set`, which a descriptor literal in the
+  // reading of the options would inherit and the driver of the language would refuse with a TypeError.
+  // Rule: the guard refuses first, with its own typed refusal and the reason of keys.
+  it.each(['get', 'set'])('refuses with the reason of keys when %s is planted', (name) => {
+    Object.defineProperty(Object.prototype, name, { value: 1, configurable: true, writable: true })
+    try {
+      const options = { connection: { host: 'h', tls: { ca: ['a', 'b', 'c'] } } } as never
+      const factory = asyncFactory()
+      const fromRoot = thrownBy(() => BymaxCacheModule.forRoot(options))
+      const fromFactory = thrownBy(() => factory(options))
+
+      for (const error of [fromRoot, fromFactory]) {
+        expect(error?.code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+        expect(error?.details).toEqual(expect.objectContaining({ count: 1 }))
+      }
+    } finally {
+      Reflect.deleteProperty(Object.prototype, name)
+    }
+  })
+})
+
 describe('the factory of forRootAsync', () => {
   it('resolves the options on a clean process', () => {
     expect(asyncFactory()(OPTIONS)).toBeDefined()
