@@ -22,6 +22,10 @@ import type { ClusterNode } from 'ioredis'
 const CLUSTER_PORTS = [7200, 7201, 7202] as const
 
 /** Redis major under test; the same variable the standalone container reads. */
+// A floating tag on purpose: CI runs the newest Redis of each major so an upstream change that breaks
+// cluster boot shows up here (Redis 8.12 did, see BUS_PORT_FLAG) instead of in a consumer. A pinned
+// digest would hide the next one, so the boot script tolerates the change and fails fast when a node
+// does not start.
 const DEFAULT_IMAGE = 'redis:8-alpine'
 
 /** One `redis-server` flag set; `$p` is the node's client port. */
@@ -38,10 +42,17 @@ const SERVER_FLAGS = [
   '--daemonize yes'
 ].join(' ')
 
+/**
+ * Redis 8.12 refuses to start a cluster node whose bus port is unprotected unless the operator
+ * acknowledges it with this flag (the bus stays on loopback inside the container). A Redis before
+ * 8.12 does not know the directive and exits, so the boot script retries without it.
+ */
+const BUS_PORT_FLAG = '--cluster-bus-port-protected-mode no'
+
 /** Starts the masters, waits for each to answer, then forms the cluster. */
 const BOOT_SCRIPT = [
-  `for p in ${CLUSTER_PORTS.join(' ')}; do redis-server ${SERVER_FLAGS}; done`,
-  `for p in ${CLUSTER_PORTS.join(' ')}; do until redis-cli -p $p ping > /dev/null 2>&1; do sleep 0.2; done; done`,
+  `for p in ${CLUSTER_PORTS.join(' ')}; do redis-server ${SERVER_FLAGS} ${BUS_PORT_FLAG} || redis-server ${SERVER_FLAGS}; done`,
+  `for p in ${CLUSTER_PORTS.join(' ')}; do n=0; until redis-cli -p $p ping > /dev/null 2>&1; do n=$((n+1)); [ $n -gt 150 ] && { echo "node $p did not answer"; exit 1; }; sleep 0.2; done; done`,
   `redis-cli --cluster create ${CLUSTER_PORTS.map((port) => `127.0.0.1:${String(port)}`).join(' ')} --cluster-yes`,
   'exec tail -f /dev/null'
 ].join('\n')
