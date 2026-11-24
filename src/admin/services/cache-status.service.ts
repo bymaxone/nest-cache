@@ -11,7 +11,8 @@ import {
   BYMAX_CACHE_SERIALIZER,
   CacheService,
   DEFAULT_REDIS_PORT,
-  settleWithin
+  settleWithin,
+  pinned
 } from '@bymax-one/nest-cache'
 import type { ISerializer, ResolvedOptions } from '@bymax-one/nest-cache'
 
@@ -63,7 +64,7 @@ async function raceDeadline<T>(
   work: Promise<T>,
   timeoutMs: number
 ): Promise<T | typeof PROBE_TIMEOUT> {
-  const settlement = await settleWithin(work, timeoutMs)
+  const settlement = await pinned(settleWithin(work, timeoutMs))
   if (settlement.kind === 'error') throw settlement.error
   // `settleWithin` asserts the intrinsics last, and only microtasks run between that check and this return.
   return settlement.kind === 'timeout' ? PROBE_TIMEOUT : (settlement.value as T)
@@ -189,7 +190,7 @@ export class CacheStatusService {
    */
   async health(): Promise<CacheHealth> {
     return {
-      ...(await this.probe()),
+      ...(await pinned(this.probe())),
       mode: this.options.mode,
       isScanSupported: this.options.mode !== SCAN_UNSUPPORTED_MODE,
       degradedAboveMs: this.adminOptions.degradedAboveMs
@@ -202,7 +203,7 @@ export class CacheStatusService {
    * @returns The parsed statistics, stamped with the reading host's clock.
    */
   async stats(): Promise<RedisStats> {
-    return readRedisStats(await this.cache.info(), new Date())
+    return readRedisStats(await pinned(this.cache.info()), new Date())
   }
 
   /**
@@ -239,7 +240,7 @@ export class CacheStatusService {
     const started = performance.now()
     let reply: string | typeof PROBE_TIMEOUT
     try {
-      reply = await raceDeadline(this.cache.ping(), this.adminOptions.probeTimeoutMs)
+      reply = await pinned(raceDeadline(this.cache.ping(), this.adminOptions.probeTimeoutMs))
     } catch (error) {
       return { status: 'down', reason: 'error', code: readErrorCode(error) }
     }

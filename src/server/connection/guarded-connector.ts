@@ -15,6 +15,7 @@ import type { ConnectionOptions } from 'node:tls'
 
 import { AbstractConnector, SentinelConnector } from 'ioredis'
 
+import { pinned } from '../utils/settle'
 import { assertDriverUnshadowed, DRIVER_OPTION_NAMES } from './driver-option-names'
 import {
   assign,
@@ -237,7 +238,7 @@ export class GuardedSentinelConnector extends SentinelConnector {
     eventEmitter: Parameters<SentinelConnector['connect']>[0]
   ): ReturnType<SentinelConnector['connect']> {
     assertDriverUnshadowed()
-    const stream = await super.connect(eventEmitter)
+    const stream = await pinned(super.connect(eventEmitter))
     try {
       assertDriverUnshadowed()
     } catch (error) {

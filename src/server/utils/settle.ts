@@ -19,6 +19,7 @@ import {
   getOwnPropertyDescriptor,
   getPrototypeOf,
   hasOwn,
+  NativePromise,
   objectPrototype
 } from '../connection/intrinsics'
 
@@ -26,12 +27,8 @@ import {
 export const PROMISE_REASON =
   'Promise built-ins the library relies on were replaced after it loaded'
 
-/** The intrinsic `Promise`, read from an async function's promise; the global binding may be a wrapper. */
-export const IntrinsicPromise = (
-  getPrototypeOf((async (): Promise<undefined> => undefined)()) as {
-    constructor: PromiseConstructor
-  }
-).constructor
+/** The intrinsic `Promise`, checked against the language when the library loads (see `NativePromise`). */
+export const IntrinsicPromise = NativePromise
 const PROMISE_PROTOTYPE = IntrinsicPromise.prototype
 const ARRAY_PROTOTYPE = Array.prototype
 const FUNCTION_PROTOTYPE = Function.prototype
@@ -109,6 +106,21 @@ export function isNativePromise(value: unknown): value is Promise<unknown> {
   return false
 }
 
+/**
+ * Gives a promise an own `constructor` before it is awaited, and hands it back, so the `await` never reads
+ * `Promise.prototype.constructor` or the `then` behind it: a host call that planted accessors there, which
+ * restore themselves when read, would otherwise answer for the promise. A value that is not a native promise
+ * is returned as it is.
+ *
+ * @param value - The operand of an `await`.
+ * @returns `value`, pinned when it is a native promise.
+ * @throws {CacheException} `INVALID_OPTIONS` when the promise cannot take the property.
+ */
+export function pinned<T>(value: T): T {
+  if (isNativePromise(value)) pinConstructor(value)
+  return value
+}
+
 /** How a settlement ended: the value, the rejection, or the deadline. Never has a prototype. */
 export interface Settlement<T> {
   readonly kind: 'value' | 'error' | 'timeout'
@@ -162,7 +174,7 @@ export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Prom
   const inner = (async (): Promise<void> => {
     try {
       assertPromiseIntrinsics()
-      finish(box('value', await awaited))
+      finish(box('value', await pinned(awaited)))
     } catch (error) {
       finish(box<T>('error', undefined, error))
     }
@@ -170,7 +182,7 @@ export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Prom
   ignoreRejection(inner)
   const timer = setTimeout(() => finish(box<T>('timeout')), timeoutMs)
   assertPromiseIntrinsics()
-  const settlement = await outcome
+  const settlement = await pinned(outcome)
   clearTimeout(timer)
   assertPromiseIntrinsics()
   return settlement
@@ -219,7 +231,7 @@ export function absorbCall(call: () => unknown, onFailure: () => void): void {
   onRejection(
     (async (): Promise<void> => {
       try {
-        await call()
+        await pinned(call())
       } catch {
         onFailure()
       }
@@ -256,7 +268,7 @@ export async function awaitAll<T>(promises: readonly Promise<T>[]): Promise<T[]>
   const values: T[] = []
   for (let index = 0; index < awaited.length; index += 1) {
     assertPromiseIntrinsics()
-    values.push(await (awaited[index] as Promise<T>))
+    values.push(await pinned(awaited[index] as Promise<T>))
   }
   assertPromiseIntrinsics()
   return values

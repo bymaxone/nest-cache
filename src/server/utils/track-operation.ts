@@ -10,7 +10,7 @@ import type {
 } from '../../shared/types/cache-event.types'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import { callHook } from './call-hook'
-import { assertPromiseIntrinsics, ignoreRejection } from './settle'
+import { assertPromiseIntrinsics, ignoreRejection, pinned } from './settle'
 
 /** The outcome of a command that completed and has no absence to report. */
 export const completed = (): CacheOperationOutcome => 'ok'
@@ -70,14 +70,14 @@ export async function trackOperation<T>(
   ignoreRejection(pending)
   if (!isObserved(events)) {
     assertPromiseIntrinsics()
-    const value = await pending
+    const value = await pinned(pending)
     assertPromiseIntrinsics()
     return value
   }
   let result: T
   try {
     assertPromiseIntrinsics()
-    result = await pending
+    result = await pinned(pending)
   } catch (error) {
     reportOperation(events, operation, 'error')
     throw error

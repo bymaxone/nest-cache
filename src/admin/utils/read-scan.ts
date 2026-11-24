@@ -7,6 +7,8 @@
  * read is never reported as everything there is, and an unreadable first page is not a deleted key.
  */
 
+import { pinned } from '@bymax-one/nest-cache'
+
 import { REVEAL_SCAN_CALLS_LIMIT } from '../constants/admin-defaults'
 
 /** One page of a scan: the cursor to continue from and what the page held. */
@@ -67,7 +69,7 @@ export async function scanUpTo(
   let cursor = '0'
   let isReadable = true
   for (let call = 0; call < REVEAL_SCAN_CALLS_LIMIT; call += 1) {
-    const page = readScanPage(await fetch(cursor), paired)
+    const page = readScanPage(await pinned(fetch(cursor)), paired)
     // A name already seen keeps its first value, and the new ones follow in the order they came.
     found = new Map([...found, ...page.entries.filter(([name]) => !found.has(name))])
     cursor = page.cursor

@@ -5,7 +5,7 @@
  * is bounded as a whole and not per channel.
  */
 
-import { absorbCall } from './settle'
+import { absorbCall, pinned } from './settle'
 
 const noop = (): void => undefined
 
@@ -67,7 +67,7 @@ export class HandlerGate {
     // A throw before the promise exists frees the slot the same way a rejection does.
     absorbCall(async () => {
       try {
-        await run()
+        await pinned(run())
       } finally {
         free()
       }

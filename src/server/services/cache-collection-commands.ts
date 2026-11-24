@@ -13,6 +13,7 @@ import type { ConnectionManager } from '../connection/connection.manager'
 import type { ReadOptions } from '../interfaces/read-options.interface'
 import type { ISerializer } from '../interfaces/serializer.interface'
 import type { KeyBuilder } from '../utils/key-builder'
+import { pinned } from '../utils/settle'
 import { found } from '../utils/track-operation'
 
 /**
@@ -91,12 +92,12 @@ export abstract class CacheCollectionCommands {
       'hget',
       async () => {
         const key = this.keyBuilder.build(prefix, id)
-        const raw = await this.client().hget(key, field)
+        const raw = await pinned(this.client().hget(key, field))
         if (raw === null) {
           return null
         }
         present = true
-        return await this.decode<T>(raw, options)
+        return await pinned(this.decode<T>(raw, options))
       },
       () => found(present)
     )
@@ -116,7 +117,7 @@ export abstract class CacheCollectionCommands {
   async hset<T>(prefix: string, id: string, field: string, value: T): Promise<number> {
     return await this.track('hset', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return await this.client().hset(key, field, this.serializer.serialize(value))
+      return await pinned(this.client().hset(key, field, this.serializer.serialize(value)))
     })
   }
 
@@ -141,12 +142,12 @@ export abstract class CacheCollectionCommands {
       'hgetall',
       async () => {
         const key = this.keyBuilder.build(prefix, id)
-        const all = await this.client().hgetall(key)
+        const all = await pinned(this.client().hgetall(key))
         // Build the record via fromEntries rather than a dynamic `result[field] = …`
         // write — the latter is a flagged object-injection sink (security plugin).
         const entries: Array<[string, T]> = []
         for (const [field, raw] of Object.entries(all)) {
-          entries.push([field, await this.decode<T>(raw, options, { field })])
+          entries.push([field, await pinned(this.decode<T>(raw, options, { field }))])
         }
         return Object.fromEntries(entries)
       },
@@ -169,7 +170,7 @@ export abstract class CacheCollectionCommands {
     }
     return await this.track('hdel', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return await this.client().hdel(key, ...fields)
+      return await pinned(this.client().hdel(key, ...fields))
     })
   }
 
@@ -191,7 +192,7 @@ export abstract class CacheCollectionCommands {
       return 0
     }
     return await this.track('sadd', async () => {
-      return await this.client().sadd(this.keyBuilder.build(prefix, id), ...members)
+      return await pinned(this.client().sadd(this.keyBuilder.build(prefix, id), ...members))
     })
   }
 
@@ -208,7 +209,7 @@ export abstract class CacheCollectionCommands {
       return 0
     }
     return await this.track('srem', async () => {
-      return await this.client().srem(this.keyBuilder.build(prefix, id), ...members)
+      return await pinned(this.client().srem(this.keyBuilder.build(prefix, id), ...members))
     })
   }
 
@@ -223,7 +224,7 @@ export abstract class CacheCollectionCommands {
     return await this.track(
       'smembers',
       async () => {
-        return await this.client().smembers(this.keyBuilder.build(prefix, id))
+        return await pinned(this.client().smembers(this.keyBuilder.build(prefix, id)))
       },
       (members) => found(members.length > 0)
     )
@@ -241,7 +242,9 @@ export abstract class CacheCollectionCommands {
     return await this.track(
       'sismember',
       async () => {
-        const result = await this.client().sismember(this.keyBuilder.build(prefix, id), member)
+        const result = await pinned(
+          this.client().sismember(this.keyBuilder.build(prefix, id), member)
+        )
         return result === 1
       },
       found
@@ -257,7 +260,7 @@ export abstract class CacheCollectionCommands {
    */
   async scard(prefix: string, id: string): Promise<number> {
     return await this.track('scard', async () => {
-      return await this.client().scard(this.keyBuilder.build(prefix, id))
+      return await pinned(this.client().scard(this.keyBuilder.build(prefix, id)))
     })
   }
 }

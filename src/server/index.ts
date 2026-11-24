@@ -18,7 +18,7 @@ export { KeyBuilder } from './utils/key-builder'
 // Marked `@internal`: the build strips it from the declarations, so it is not part of the public API.
 /** @internal */
 export { guardClient } from './utils/guard-client'
-export { absorbCall, awaitAll, onRejection, settleWithin } from './utils/settle'
+export { absorbCall, awaitAll, onRejection, pinned, settleWithin } from './utils/settle'
 export type { Settlement } from './utils/settle'
 
 // Cache service + default serializer

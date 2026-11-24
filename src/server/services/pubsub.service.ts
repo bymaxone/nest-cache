@@ -43,7 +43,8 @@ import {
   assertPromiseIntrinsics,
   ignoreRejection,
   isNativePromise,
-  onRejection
+  onRejection,
+  pinned
 } from '../utils/settle'
 import { validateRead } from '../utils/validate-read'
 
@@ -157,7 +158,7 @@ export class PubSubService implements OnApplicationShutdown {
   async publish<T>(channel: string, message: T): Promise<number> {
     const fullChannel = this.keyBuilder.applyNamespace(channel)
     const raw = this.serializer.serialize(message)
-    return await guardClient(this.connection.getClient()).publish(fullChannel, raw)
+    return await pinned(guardClient(this.connection.getClient()).publish(fullChannel, raw))
   }
 
   /**
@@ -185,8 +186,10 @@ export class PubSubService implements OnApplicationShutdown {
   ): Promise<Unsubscribe> {
     const fullChannel = this.keyBuilder.applyNamespace(channel)
     const subscriber = this.ensureSubscriber()
-    const ref = await this.retainSubscription(this.channelRefs, fullChannel, () =>
-      subscriber.subscribe(fullChannel)
+    const ref = await pinned(
+      this.retainSubscription(this.channelRefs, fullChannel, () =>
+        subscriber.subscribe(fullChannel)
+      )
     )
 
     const entry = this.makeEntry<T>(options, (message, incoming) => handler(message, incoming))
@@ -217,8 +220,10 @@ export class PubSubService implements OnApplicationShutdown {
   ): Promise<Unsubscribe> {
     const fullPattern = this.keyBuilder.applyNamespace(pattern)
     const subscriber = this.ensureSubscriber()
-    const ref = await this.retainSubscription(this.patternRefs, fullPattern, () =>
-      subscriber.psubscribe(fullPattern)
+    const ref = await pinned(
+      this.retainSubscription(this.patternRefs, fullPattern, () =>
+        subscriber.psubscribe(fullPattern)
+      )
     )
 
     const entry = this.makeEntry<T>(options, (message, channel) =>
@@ -249,7 +254,7 @@ export class PubSubService implements OnApplicationShutdown {
       return
     }
     this.#subscriber = null
-    await closeClient(subscriber, this.shutdownTimeoutMs, () => this.emitForcedDisconnect())
+    await pinned(closeClient(subscriber, this.shutdownTimeoutMs, () => this.emitForcedDisconnect()))
   }
 
   // ─── Private ───────────────────────────────────────────────────────────────
@@ -325,12 +330,12 @@ export class PubSubService implements OnApplicationShutdown {
     const execute = async (channel: string, raw: string): Promise<void> => {
       try {
         await undefined
-        const result = invoke(await this.decode<T>(raw, options), channel)
+        const result = invoke(await pinned(this.decode<T>(raw, options)), channel)
         // A rejection of the handler's promise is handled even when the check below refuses.
         if (isNativePromise(result)) ignoreRejection(result)
         // Checked after the handler ran and immediately before its result is awaited.
         assertPromiseIntrinsics()
-        await result
+        await pinned(result)
       } catch (error) {
         this.emitHandlerError(channel, error)
       }
@@ -397,7 +402,7 @@ export class PubSubService implements OnApplicationShutdown {
       ref = created
     }
     ref.count += 1
-    await ref.ready
+    await pinned(ref.ready)
     return ref
   }
 
@@ -423,7 +428,7 @@ export class PubSubService implements OnApplicationShutdown {
     ref.count -= 1
     if (ref.count === 0) {
       refs.delete(target)
-      await unsubscribe()
+      await pinned(unsubscribe())
     }
   }
 
@@ -443,7 +448,7 @@ export class PubSubService implements OnApplicationShutdown {
       }
       released = true
       detach()
-      await release()
+      await pinned(release())
     }
   }
 
@@ -457,7 +462,9 @@ export class PubSubService implements OnApplicationShutdown {
    */
   private async decode<T>(raw: string, options: ReadOptions<T> | undefined): Promise<T> {
     const message = this.serializer.deserialize<T>(raw)
-    return options?.validate === undefined ? message : await validateRead(message, options.validate)
+    return options?.validate === undefined
+      ? message
+      : await pinned(validateRead(message, options.validate))
   }
 
   /**

@@ -23,7 +23,7 @@ import { CacheException } from '../errors/cache.exception'
 import { MAX_EVAL_ARGUMENTS } from '../utils/chunk'
 import { describeError } from '../utils/describe-error'
 import { guardClient } from '../utils/guard-client'
-import { awaitAll } from '../utils/settle'
+import { awaitAll, pinned } from '../utils/settle'
 
 /** The `SCRIPT LOAD` subcommand keyword. */
 const SCRIPT_LOAD = 'LOAD'
@@ -100,7 +100,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     if (readingOptions(() => this.options.connection?.lazyConnect)) {
       return
     }
-    await awaitAll([...this.scripts.keys()].map((name) => this.load(name)))
+    await pinned(awaitAll([...this.scripts.keys()].map((name) => this.load(name))))
   }
 
   /**
@@ -133,7 +133,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     if (!entry.sha) {
       const client = guardClient(this.connection.getClient())
       // SCRIPT LOAD always returns the 40-char SHA1 per Redis protocol.
-      entry.sha = (await client.script(SCRIPT_LOAD, entry.lua)) as string
+      entry.sha = (await pinned(client.script(SCRIPT_LOAD, entry.lua))) as string
     }
     return entry.sha
   }
@@ -187,14 +187,14 @@ export class ScriptManagerService implements OnApplicationBootstrap {
         })
       }
       try {
-        return await client.eval(entry.lua, keys.length, ...keys, ...args)
+        return await pinned(client.eval(entry.lua, keys.length, ...keys, ...args))
       } catch (err) {
         throw scriptFailure(name, err)
       }
     }
     try {
-      const sha = entry.sha ?? (await this.load(name))
-      return await client.evalsha(sha, keys.length, ...keys, ...args)
+      const sha = entry.sha ?? (await pinned(this.load(name)))
+      return await pinned(client.evalsha(sha, keys.length, ...keys, ...args))
     } catch (err) {
       if (!describeError(err).includes(NOSCRIPT_MARKER)) {
         throw scriptFailure(name, err)
@@ -204,9 +204,9 @@ export class ScriptManagerService implements OnApplicationBootstrap {
       // surfacing SCRIPT_EXECUTION_FAILED holds even if the reload itself fails.
       try {
         // SCRIPT LOAD always returns the 40-char SHA1 per Redis protocol.
-        const reloadedSha = (await client.script(SCRIPT_LOAD, entry.lua)) as string
+        const reloadedSha = (await pinned(client.script(SCRIPT_LOAD, entry.lua))) as string
         entry.sha = reloadedSha
-        return await client.evalsha(reloadedSha, keys.length, ...keys, ...args)
+        return await pinned(client.evalsha(reloadedSha, keys.length, ...keys, ...args))
       } catch (retryErr) {
         throw scriptFailure(name, retryErr)
       }

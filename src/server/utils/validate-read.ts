@@ -13,6 +13,7 @@ import type {
   StandardSchemaLike,
   StandardSchemaResult
 } from '../interfaces/read-options.interface'
+import { pinned } from './settle'
 
 /** Fixed `details.error` of a value that does not satisfy the rule. */
 const MISMATCH = 'the stored value does not match the expected shape'
@@ -77,7 +78,7 @@ async function checkSchema<T>(
 ): Promise<T> {
   let result: StandardSchemaResult<T>
   try {
-    result = await schema['~standard'].validate(value)
+    result = await pinned(schema['~standard'].validate(value))
   } catch (error) {
     throw failure(UNDECIDED, location, error)
   }
@@ -112,5 +113,5 @@ export async function validateRead<T>(
   // would return the data, never `true`, and refuse every value.
   return isPredicate(validate)
     ? checkPredicate(value, validate, location)
-    : await checkSchema(value, validate, location)
+    : await pinned(checkSchema(value, validate, location))
 }

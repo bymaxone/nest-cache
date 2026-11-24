@@ -4,10 +4,12 @@
  *
  * Layer: admin.
  */
+import { plantSelfRestoring, restoreBuiltins } from '../../test-helpers/forge-promise'
 import { applyDefaults } from '../../server/config/default-options'
 import { ConnectionManager } from '../../server/connection/connection.manager'
 import { CacheService } from '../../server/services/cache.service'
 import { KeyBuilder } from '../../server/utils/key-builder'
+import { pinned } from '../../server/utils/settle'
 import { resolveAdminOptions } from '../config/resolved-admin-options'
 import { CacheStatusService } from './cache-status.service'
 
@@ -109,5 +111,47 @@ describe('CacheStatusService.health with the real cache under a then replaced ac
     await connection.onApplicationShutdown()
 
     expect(health.status).toBe('down')
+  })
+})
+
+describe('CacheStatusService.health when the probe plants a self-restoring then', () => {
+  // The ping plants accessors that answer PONG to the first await that reads them, then returns a rejection.
+  it('reports down, never the PONG the planted then answers with', async () => {
+    const probe = {
+      ping: jest.fn().mockImplementation(() => {
+        plantSelfRestoring('PONG')
+        return new Promise((_resolve, reject) =>
+          setTimeout(() => reject(new Error('ECONNRESET')), 5)
+        )
+      }),
+      info: jest.fn()
+    }
+    const service = new CacheStatusService(
+      probe,
+      applyDefaults({ connection: { host: 'h' } }),
+      resolveAdminOptions({
+        scopes: [
+          {
+            id: 'cache',
+            label: 'Cache',
+            pattern: 'app:*',
+            isReadable: true,
+            origin: 'the namespace'
+          }
+        ]
+      }),
+      new JsonLike()
+    )
+
+    let status: unknown
+    try {
+      status = (await pinned(service.health())).status
+    } catch (error) {
+      status = error
+    } finally {
+      restoreBuiltins()
+    }
+
+    expect(status).not.toBe('up')
   })
 })

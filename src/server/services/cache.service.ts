@@ -35,6 +35,7 @@ import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
+import { pinned } from '../utils/settle'
 import { found, reportOperation, trackOperation } from '../utils/track-operation'
 import { assertTtlSeconds, MIN_WRITE_TTL_SECONDS } from '../utils/ttl'
 import { validateRead } from '../utils/validate-read'
@@ -132,7 +133,8 @@ export class CacheService extends CacheCollectionCommands {
     run: () => Promise<T>,
     classify?: (result: T) => CacheOperationOutcome
   ): Promise<T> {
-    return trackOperation(this.options.events, operation, run, classify)
+    // Pinned here once, so no caller's `await` of the result reads `Promise.prototype.constructor`.
+    return pinned(trackOperation(this.options.events, operation, run, classify))
   }
 
   // ─── String / value commands ───────────────────────────────────────────────
@@ -157,12 +159,12 @@ export class CacheService extends CacheCollectionCommands {
       'get',
       async () => {
         const key = this.keyBuilder.build(prefix, id)
-        const raw = await this.client().get(key)
+        const raw = await pinned(this.client().get(key))
         if (raw === null) {
           return null
         }
         present = true
-        return await this.decode<T>(raw, options)
+        return await pinned(this.decode<T>(raw, options))
       },
       () => found(present)
     )
@@ -179,7 +181,7 @@ export class CacheService extends CacheCollectionCommands {
     return await this.track(
       'getRaw',
       async () => {
-        return await this.client().get(this.keyBuilder.build(prefix, id))
+        return await pinned(this.client().get(this.keyBuilder.build(prefix, id)))
       },
       (value) => found(value !== null)
     )
@@ -204,9 +206,9 @@ export class CacheService extends CacheCollectionCommands {
       const raw = this.serializer.serialize(value)
       if (ttlSeconds !== undefined) {
         assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
-        await this.client().set(key, raw, 'EX', ttlSeconds)
+        await pinned(this.client().set(key, raw, 'EX', ttlSeconds))
       } else {
-        await this.client().set(key, raw)
+        await pinned(this.client().set(key, raw))
       }
     })
   }
@@ -227,9 +229,9 @@ export class CacheService extends CacheCollectionCommands {
       const key = this.keyBuilder.build(prefix, id)
       if (ttlSeconds !== undefined) {
         assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
-        await this.client().set(key, value, 'EX', ttlSeconds)
+        await pinned(this.client().set(key, value, 'EX', ttlSeconds))
       } else {
-        await this.client().set(key, value)
+        await pinned(this.client().set(key, value))
       }
     })
   }
@@ -254,8 +256,8 @@ export class CacheService extends CacheCollectionCommands {
       if (ttlSeconds !== undefined) assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
       const result =
         ttlSeconds !== undefined
-          ? await this.client().set(key, raw, 'EX', ttlSeconds, 'NX')
-          : await this.client().set(key, raw, 'NX')
+          ? await pinned(this.client().set(key, raw, 'EX', ttlSeconds, 'NX'))
+          : await pinned(this.client().set(key, raw, 'NX'))
       return result === 'OK'
     })
   }
@@ -269,7 +271,7 @@ export class CacheService extends CacheCollectionCommands {
    */
   async del(prefix: string, id: string): Promise<number> {
     return await this.track('del', async () => {
-      return await this.client().del(this.keyBuilder.build(prefix, id))
+      return await pinned(this.client().del(this.keyBuilder.build(prefix, id)))
     })
   }
 
@@ -288,7 +290,7 @@ export class CacheService extends CacheCollectionCommands {
       const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
       let removed = 0
       for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
-        removed += await this.client().del(...part)
+        removed += await pinned(this.client().del(...part))
       }
       return removed
     })
@@ -305,7 +307,7 @@ export class CacheService extends CacheCollectionCommands {
     return await this.track(
       'exists',
       async () => {
-        const count = await this.client().exists(this.keyBuilder.build(prefix, id))
+        const count = await pinned(this.client().exists(this.keyBuilder.build(prefix, id)))
         return count > 0
       },
       found
@@ -326,7 +328,9 @@ export class CacheService extends CacheCollectionCommands {
   async incr(prefix: string, id: string, by = 1): Promise<number> {
     return await this.track('incr', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return by === 1 ? await this.client().incr(key) : await this.client().incrby(key, by)
+      return by === 1
+        ? await pinned(this.client().incr(key))
+        : await pinned(this.client().incrby(key, by))
     })
   }
 
@@ -342,7 +346,9 @@ export class CacheService extends CacheCollectionCommands {
   async decr(prefix: string, id: string, by = 1): Promise<number> {
     return await this.track('decr', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return by === 1 ? await this.client().decr(key) : await this.client().decrby(key, by)
+      return by === 1
+        ? await pinned(this.client().decr(key))
+        : await pinned(this.client().decrby(key, by))
     })
   }
 
@@ -361,7 +367,9 @@ export class CacheService extends CacheCollectionCommands {
   async expire(prefix: string, id: string, ttlSeconds: number): Promise<boolean> {
     return await this.track('expire', async () => {
       assertTtlSeconds(ttlSeconds, undefined)
-      const result = await this.client().expire(this.keyBuilder.build(prefix, id), ttlSeconds)
+      const result = await pinned(
+        this.client().expire(this.keyBuilder.build(prefix, id), ttlSeconds)
+      )
       return result === 1
     })
   }
@@ -376,7 +384,7 @@ export class CacheService extends CacheCollectionCommands {
    */
   async ttl(prefix: string, id: string): Promise<number> {
     return await this.track('ttl', async () => {
-      return await this.client().ttl(this.keyBuilder.build(prefix, id))
+      return await pinned(this.client().ttl(this.keyBuilder.build(prefix, id)))
     })
   }
 
@@ -390,7 +398,7 @@ export class CacheService extends CacheCollectionCommands {
    */
   async persist(prefix: string, id: string): Promise<boolean> {
     return await this.track('persist', async () => {
-      const result = await this.client().persist(this.keyBuilder.build(prefix, id))
+      const result = await pinned(this.client().persist(this.keyBuilder.build(prefix, id)))
       return result === 1
     })
   }
@@ -425,13 +433,15 @@ export class CacheService extends CacheCollectionCommands {
         const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
         const values: Array<string | null> = []
         for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
-          values.push(...(await this.client().mget(...part)))
+          values.push(...(await pinned(this.client().mget(...part))))
         }
         present = values.some((value) => value !== null)
         const decoded: Array<T | null> = []
         // One at a time, in order, so the element a failure names is the first bad one.
         for (const [index, value] of values.entries()) {
-          decoded.push(value === null ? null : await this.decode<T>(value, options, { index }))
+          decoded.push(
+            value === null ? null : await pinned(this.decode<T>(value, options, { index }))
+          )
         }
         return decoded
       },
@@ -458,14 +468,14 @@ export class CacheService extends CacheCollectionCommands {
         pairs.push(this.keyBuilder.build(prefix, id), this.serializer.serialize(value))
       }
       if (pairs.length <= MAX_COMMAND_ARGUMENTS) {
-        await this.client().mset(...pairs)
+        await pinned(this.client().mset(...pairs))
         return
       }
       const transaction = this.client().multi()
       for (const part of chunkOf(pairs, MAX_COMMAND_ARGUMENTS)) {
         transaction.mset(...part)
       }
-      await execTransaction(transaction)
+      await pinned(execTransaction(transaction))
     })
   }
 
@@ -495,7 +505,7 @@ export class CacheService extends CacheCollectionCommands {
       if (!isScannableClient(client)) {
         throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'keys' })
       }
-      return await client.keys(fullPattern)
+      return await pinned(client.keys(fullPattern))
     })
   }
 
@@ -639,7 +649,7 @@ export class CacheService extends CacheCollectionCommands {
       for await (const chunk of stream) {
         const keys = chunk as string[] // ScanStream pushes string[] batches — ioredis internal contract
         if (keys.length > 0) {
-          total += await client.unlink(...keys)
+          total += await pinned(client.unlink(...keys))
         }
       }
       return total
@@ -677,7 +687,7 @@ export class CacheService extends CacheCollectionCommands {
         throw new CacheException(CACHE_ERROR_CODES.SCRIPT_REGISTRY_MISSING)
       }
       const namespacedKeys = keys.map((key) => this.keyBuilder.applyNamespace(key))
-      return await this.scriptRegistry.eval(scriptName, namespacedKeys, args)
+      return await pinned(this.scriptRegistry.eval(scriptName, namespacedKeys, args))
     })
   }
 
@@ -695,7 +705,7 @@ export class CacheService extends CacheCollectionCommands {
       'isHealthy',
       async () => {
         try {
-          const pong = await this.client().ping()
+          const pong = await pinned(this.client().ping())
           return pong === 'PONG'
         } catch {
           return false
@@ -714,7 +724,7 @@ export class CacheService extends CacheCollectionCommands {
    */
   async ping(): Promise<string> {
     return await this.track('ping', async () => {
-      return await this.client().ping()
+      return await pinned(this.client().ping())
     })
   }
 
@@ -728,7 +738,9 @@ export class CacheService extends CacheCollectionCommands {
   async info(section?: string): Promise<string> {
     return await this.track('info', async () => {
       const client = this.client()
-      return section === undefined ? await client.info() : await client.info(section)
+      return section === undefined
+        ? await pinned(client.info())
+        : await pinned(client.info(section))
     })
   }
 
@@ -750,6 +762,6 @@ export class CacheService extends CacheCollectionCommands {
     const value = this.serializer.deserialize<T>(raw)
     return options?.validate === undefined
       ? value
-      : await validateRead(value, options.validate, location)
+      : await pinned(validateRead(value, options.validate, location))
   }
 }

@@ -68,3 +68,34 @@ export function forgedThen(this: Promise<unknown>, resolve?: (value: unknown) =>
   resolve?.('PONG')
   return undefined
 }
+
+/**
+ * Installs a one-shot attacker on `Promise.prototype`: `constructor` and `then` become accessors that each
+ * restore their own original on the first read and answer `value` to whatever adopts the promise. A host call
+ * that plants it and returns a promise leaves the checks made before the call and after the await clean.
+ *
+ * @param value - What the forged `then` resolves with.
+ * @returns A counter of the reads that found the accessors: zero means nothing awaited a promise through them.
+ */
+export function plantSelfRestoring(value: unknown): { reads: () => number } {
+  let reads = 0
+  const slot = (key: 'constructor' | 'then', original: unknown, forged: unknown): void => {
+    Object.defineProperty(Promise.prototype, key, {
+      configurable: true,
+      enumerable: false,
+      get(): unknown {
+        reads += 1
+        Object.defineProperty(Promise.prototype, key, {
+          configurable: true,
+          enumerable: false,
+          writable: true,
+          value: original
+        })
+        return forged
+      }
+    })
+  }
+  slot('constructor', realConstructor, Object)
+  slot('then', realThen, (resolve?: (answer: unknown) => unknown): void => void resolve?.(value))
+  return { reads: () => reads }
+}
