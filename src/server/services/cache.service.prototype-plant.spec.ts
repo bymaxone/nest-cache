@@ -1,12 +1,11 @@
 /**
  * The refusal of a command while `Object.prototype` holds a key planted after the client connected.
  *
- * Layer: server. The guard on `Object.prototype` ran when the manager was built, when each client was
- * built and at every connect. A key planted after the last of those (an application's own prototype
- * pollution) reached ioredis's command path unchecked: its flag tables are plain objects, so a planted
- * `get` reads as a flag of every `get` and the reply handler throws from the socket event, which is an
- * uncaught exception. The same guard now runs at every command the library sends, and refuses with the
- * count of the keys, never a key or a value.
+ * Layer: server. ioredis keeps its command flag tables in plain objects, so a key planted on
+ * `Object.prototype` and named like a command (`get`) reads as a flag of every call of that name, and the
+ * reply handler then throws from the socket event, which is an uncaught exception. A command the library
+ * sends while such a key is present must therefore be refused before it reaches the driver, with the count
+ * of the keys and never a key or a value.
  */
 import { applyDefaults } from '../config/default-options'
 import { ConnectionManager } from '../connection/connection.manager'
@@ -70,7 +69,7 @@ describe('a command with a key planted on Object.prototype after the client conn
   })
 
   // Scenario: the QA reproduction. A key named like a command is planted after connect, then the
-  // command is issued. Before the fix the call went on to ioredis, whose reply handler throws.
+  // command is issued. The call must not reach ioredis, whose reply handler would throw.
   // Rule: the call is refused with the count of the keys, and nothing of the key or its value.
   it.each(['get', 'set', 'ttl'])('refuses a cache call after %s is planted', async (name) => {
     const calls: Record<string, () => Promise<unknown>> = {
