@@ -248,6 +248,16 @@ describe('inputs that are already running', () => {
     )
   })
 
+  // The first refusal is the one reported, and a second unpinnable input does not replace it.
+  it('awaitAll reports the first refusal when two inputs are frozen', async () => {
+    const frozen = (): Promise<never> =>
+      Object.freeze(new IntrinsicPromise<never>((_resolve, reject) => setTimeout(reject, 5, 'x')))
+
+    await expect(awaitAll([frozen(), frozen()])).rejects.toMatchObject({
+      code: 'cache.invalid_options'
+    })
+  })
+
   // A host promise that cannot take a pin is still watched: its later rejection is absorbed, not unhandled.
   it('absorbCall watches a frozen host promise before pinned refuses it', (finish) => {
     const frozen = Object.freeze(

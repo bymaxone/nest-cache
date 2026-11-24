@@ -6,6 +6,8 @@
 import {
   forgedThen,
   handledRejection,
+  plantSelfRestoring,
+  realConstructor,
   realThen,
   restoreBuiltins,
   underForgery
@@ -37,5 +39,28 @@ describe('underForgery', () => {
     )
 
     expect(outcome).toMatchObject({ settled: 'rejected', value: expect.any(Error) })
+  })
+})
+
+describe('plantSelfRestoring', () => {
+  afterEach(restoreBuiltins)
+
+  // Scenario: both accessors are read, once each, with nothing awaited while they are live.
+  // Rule: each read forges its slot, counts, and puts the original back, so the runner is never forged.
+  it('forges each slot once, counts the reads and restores the originals', () => {
+    const planted = plantSelfRestoring('forged')
+    const forgedConstructor = Promise.prototype.constructor
+    const forgedThenSlot = Promise.prototype.then as unknown as (
+      resolve?: (v: unknown) => void
+    ) => void
+    const answers: unknown[] = []
+    forgedThenSlot((answer) => answers.push(answer))
+    forgedThenSlot()
+
+    expect(forgedConstructor).toBe(Object)
+    expect(answers).toEqual(['forged'])
+    expect(planted.reads()).toBe(2)
+    expect(Promise.prototype.constructor).toBe(realConstructor)
+    expect(Promise.prototype.then).toBe(realThen)
   })
 })
