@@ -62,26 +62,33 @@ export const bindFunction = uncurryThis(Function.prototype.bind)
 export const nextTick = process.nextTick
 /** `Error.captureStackTrace`, as it was when the library loaded. */
 export const captureStackTrace = Error.captureStackTrace
-/** Why the library refuses to load when the `Promise` it would rely on is not the one of the language. */
-const PROMISE_BASELINE_REASON = 'The global Promise is not the Promise of the language'
+/** Why the library refuses to load when the constructor of the promise prototype is not the constructor of that prototype. */
+const PROMISE_BASELINE_REASON =
+  'The constructor of the promise prototype is not the Promise of the language'
 /** Why the library refuses to load when `Promise[Symbol.species]` is not the accessor of the language. */
 const SPECIES_BASELINE_REASON =
   'The species of the global Promise is not an accessor of the language'
 
 /**
- * The `Promise` of the language, which the library holds from the moment it loads. A global `Promise` that was
- * replaced before the import (a library that wraps it, a polyfill) must not become the baseline, so the
- * constructor is accepted only when it is the constructor of the prototype an async function's promise has;
- * otherwise the import fails. An adversary that replaced both before the import is out of reach (a known limit).
+ * The `Promise` of the language, which the library holds from the moment it loads. It is read from the
+ * prototype an async function's promise has, never from the global binding, so a host that replaced the
+ * global `Promise` before the import (a library that wraps it, a polyfill, a subclass) still loads, and the
+ * library keeps the intrinsic. The import fails only when the constructor that prototype names does not have
+ * that prototype, a pair that disagrees with itself. An adversary that replaced both before the import is out
+ * of reach (a known limit).
  *
- * @throws {CacheException} `INVALID_OPTIONS` when the global `Promise` is not the intrinsic one.
+ * @throws {CacheException} `INVALID_OPTIONS` when the constructor of the promise prototype is not a
+ *   function whose `prototype` is that prototype.
  */
 export const NativePromise: PromiseConstructor = ((): PromiseConstructor => {
   const prototype = getPrototypeOf((async (): Promise<undefined> => undefined)()) as {
-    constructor: PromiseConstructor
+    constructor: unknown
   }
-  const candidate = Promise
-  if (candidate.prototype !== (prototype as unknown) || prototype.constructor !== candidate) {
+  const candidate = prototype.constructor as PromiseConstructor
+  if (
+    typeof candidate !== 'function' ||
+    (candidate.prototype as unknown) !== (prototype as unknown)
+  ) {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, { reason: PROMISE_BASELINE_REASON })
   }
   return candidate

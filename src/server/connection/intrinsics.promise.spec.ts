@@ -2,7 +2,8 @@
  * The `Promise` the library takes as its baseline when it loads.
  *
  * Layer: server. A global `Promise` replaced before the import must not become the constructor every later
- * check compares against, so the import is refused unless that constructor is the intrinsic one.
+ * check compares against, so the baseline is the intrinsic, read from an async function's promise, and the
+ * import is refused only when that constructor and its prototype disagree.
  */
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 
@@ -11,7 +12,8 @@ const realConstructor = Promise.prototype.constructor
 
 const realSpecies = Object.getOwnPropertyDescriptor(Promise, Symbol.species) as PropertyDescriptor
 
-const BASELINE_REASON = 'The global Promise is not the Promise of the language'
+const BASELINE_REASON =
+  'The constructor of the promise prototype is not the Promise of the language'
 const SPECIES_REASON = 'The species of the global Promise is not an accessor of the language'
 
 type Loaded = { NativePromise: PromiseConstructor; NativeSpeciesGetter: unknown }
@@ -49,50 +51,73 @@ describe('NativePromise baseline', () => {
     expect(NativePromise).toBe(RealPromise)
   })
 
-  it('refuses a global Promise with a prototype of its own', () => {
+  // Scenario: a host replaced the global binding before the import (a wrapper, a polyfill, a subclass).
+  // Rule: the baseline is the intrinsic, taken from the prototype an async function's promise has, so the
+  // import loads and the library keeps the intrinsic, never the host's constructor.
+  it('loads and keeps the intrinsic when the global Promise is a subclass', () => {
     // Arrange
     class Wrapped<T> extends RealPromise<T> {}
     globalThis.Promise = Wrapped as unknown as PromiseConstructor
 
     // Act
-    const refusal = refusalOf(loadIntrinsics)
+    const { NativePromise } = loadIntrinsics()
 
     // Assert
-    expect(refusal).toMatchObject({
-      response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
-    })
+    expect(NativePromise).toBe(RealPromise)
+    expect(NativePromise).not.toBe(Wrapped)
   })
 
-  it('refuses a global Promise that is not the constructor of the intrinsic prototype', () => {
+  it('loads and keeps the intrinsic when the global Promise shares the intrinsic prototype', () => {
     // Arrange
     function Imposter(): void {}
     Imposter.prototype = RealPromise.prototype
     globalThis.Promise = Imposter as unknown as PromiseConstructor
 
     // Act
+    const { NativePromise, NativeSpeciesGetter } = loadIntrinsics()
+
+    // Assert
+    expect(NativePromise).toBe(RealPromise)
+    expect(NativeSpeciesGetter).toBe(realSpecies.get)
+  })
+
+  it('loads and keeps the intrinsic when the global Promise is a plain wrapper function', () => {
+    // Arrange
+    globalThis.Promise = function Bluebirdish(): void {} as unknown as PromiseConstructor
+
+    // Act
+    const { NativePromise } = loadIntrinsics()
+
+    // Assert
+    expect(NativePromise).toBe(RealPromise)
+  })
+
+  // Scenario: the constructor the intrinsic prototype names does not have that prototype. Rule: the pair is
+  // inconsistent with itself, so the import is refused whatever the global binding is.
+  it('refuses a constructor of the intrinsic prototype that has a prototype of its own', () => {
+    // Arrange
+    function Imposter(): void {}
+    Imposter.prototype = {}
+    Promise.prototype.constructor = Imposter as unknown as PromiseConstructor
+
+    // Act
     const refusal = refusalOf(loadIntrinsics)
 
-    // Assert: the baseline check refuses it, not the species check that would refuse any Imposter later.
+    // Assert
     expect(refusal).toMatchObject({
       details: { reason: BASELINE_REASON },
       response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
     })
   })
 
-  // Scenario: a global Promise whose own prototype is not the intrinsic one but which the intrinsic prototype
-  // names as its constructor. Rule: the prototype comparison refuses it by itself, so it is not left to the
-  // constructor comparison alone.
-  it('refuses a global Promise that the intrinsic prototype names but that has a prototype of its own', () => {
+  it('refuses a constructor of the intrinsic prototype that is not a function', () => {
     // Arrange
-    function Imposter(): void {}
-    Imposter.prototype = {}
-    Promise.prototype.constructor = Imposter as unknown as PromiseConstructor
-    globalThis.Promise = Imposter as unknown as PromiseConstructor
+    Promise.prototype.constructor = undefined as unknown as PromiseConstructor
 
     // Act
     const refusal = refusalOf(loadIntrinsics)
 
-    // Assert: the baseline check refuses it, not the species check that would refuse any Imposter later.
+    // Assert
     expect(refusal).toMatchObject({
       details: { reason: BASELINE_REASON },
       response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
@@ -102,8 +127,9 @@ describe('NativePromise baseline', () => {
   // Scenario: the refusal names why, with the exact text a host reads in `details`.
   it('names the baseline as the reason of the refusal', () => {
     // Arrange
-    class Wrapped<T> extends RealPromise<T> {}
-    globalThis.Promise = Wrapped as unknown as PromiseConstructor
+    function Imposter(): void {}
+    Imposter.prototype = {}
+    Promise.prototype.constructor = Imposter as unknown as PromiseConstructor
 
     // Act
     const refusal = refusalOf(loadIntrinsics)
