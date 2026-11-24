@@ -24,6 +24,10 @@
     "reason": "Runs scripts/mutate-const-tables.mjs as a child process on fixture directories and imports nothing from src/, so it judges no mutant."
   },
   {
+    "file": "src/promise-statics.scan.spec.ts",
+    "reason": "Reads the text of src/ and imports nothing from src/. The sandbox holds instrumented copies, so it is ignored in jest.stryker.config.ts and judges no mutant."
+  },
+  {
     "file": "src/readme-exports.spec.ts",
     "reason": "Reads README.md and the entry files as text and imports nothing from src/, so no instrumented code is reachable from it and it judges no mutant."
   },
