@@ -11,6 +11,9 @@ const realConstructor = Promise.prototype.constructor
 
 const realSpecies = Object.getOwnPropertyDescriptor(Promise, Symbol.species) as PropertyDescriptor
 
+const BASELINE_REASON = 'The global Promise is not the Promise of the language'
+const SPECIES_REASON = 'The species of the global Promise is not an accessor of the language'
+
 type Loaded = { NativePromise: PromiseConstructor; NativeSpeciesGetter: unknown }
 
 function loadIntrinsics(): Loaded {
@@ -69,8 +72,9 @@ describe('NativePromise baseline', () => {
     // Act
     const refusal = refusalOf(loadIntrinsics)
 
-    // Assert
+    // Assert: the baseline check refuses it, not the species check that would refuse any Imposter later.
     expect(refusal).toMatchObject({
+      details: { reason: BASELINE_REASON },
       response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
     })
   })
@@ -88,8 +92,9 @@ describe('NativePromise baseline', () => {
     // Act
     const refusal = refusalOf(loadIntrinsics)
 
-    // Assert
+    // Assert: the baseline check refuses it, not the species check that would refuse any Imposter later.
     expect(refusal).toMatchObject({
+      details: { reason: BASELINE_REASON },
       response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
     })
   })
@@ -105,7 +110,7 @@ describe('NativePromise baseline', () => {
 
     // Assert
     expect(refusal).toMatchObject({
-      details: { reason: 'The global Promise is not the Promise of the language' }
+      details: { reason: BASELINE_REASON }
     })
   })
 
@@ -128,7 +133,24 @@ describe('NativePromise baseline', () => {
 
     // Assert
     expect(refusal).toMatchObject({
-      details: { reason: 'The species of the global Promise is not an accessor of the language' }
+      details: { reason: SPECIES_REASON }
+    })
+  })
+
+  // Scenario: the species is an own accessor that has no getter. Rule: it is not the accessor of the
+  // language, so the import is refused (an own `get` field that is not a function).
+  it('refuses a Promise whose species accessor has no getter', () => {
+    // Arrange
+    const getterless: Record<string, unknown> = { get: undefined, configurable: true }
+    Object.defineProperty(Promise, Symbol.species, getterless as PropertyDescriptor)
+
+    // Act
+    const refusal = refusalOf(loadIntrinsics)
+
+    // Assert
+    expect(refusal).toMatchObject({
+      details: { reason: SPECIES_REASON },
+      response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
     })
   })
 })
