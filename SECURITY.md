@@ -61,6 +61,21 @@ self-referencing Proxy given to `isNativePromise`. A report of one of these is a
 vulnerability; a report of a way for untrusted input (a key, a value, a Redis reply) to cause
 one is.
 
+A key planted on `Object.prototype` is refused before each command the library sends, except
+`quit` and `disconnect`, which teardown needs (`cache.invalid_options`, with a count and never a
+key or a value). These cases stay outside that check, and each is a known limit:
+
+- A command already in flight: a key planted after the command was sent and before its reply
+  arrives is read by ioredis's reply handler, which the library cannot check from. Freeze
+  `Object.prototype` early to close it.
+- A pipeline or transaction opened before the plant and executed after it: `exec()` runs the
+  queued commands without a library frame, so the plant ends the process with an uncaught
+  exception, as it does for a command in flight. `getClient()` returns the raw client, which
+  is not guarded at all.
+- `unsubscribe` and `punsubscribe` under a plant: the call is refused like any other command, so
+  the handler is detached locally and the server-side subscription stays, so its messages find no
+  listener (a later `subscribe` to the same channel sends `SUBSCRIBE` again).
+
 ## Supported Versions
 
 Only the latest minor (currently `1.2.x`) receives security fixes. Earlier versions are not
