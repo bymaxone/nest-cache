@@ -106,6 +106,25 @@ describe('combineCacheEvents', () => {
     expect(unhandled).toEqual([])
   })
 
+  // Rule: a bag that never settles does not hide the failure of a later one from the module.
+  it('raises the failure of a later bag while an earlier bag never settles', async () => {
+    const failure = new Error('later')
+    const events = combineCacheEvents(
+      { onQueue: (): Promise<void> => new Promise<void>(() => undefined) },
+      { onQueue: async (): Promise<void> => Promise.reject(failure) }
+    )
+
+    const outcome = await Promise.race([
+      Promise.resolve(events.onQueue?.(1)).then(
+        () => 'resolved',
+        (error: unknown) => error
+      ),
+      settle().then(() => 'pending')
+    ])
+
+    expect(outcome).toBe(failure)
+  })
+
   // Rule: every bag gets its own frozen copy of the data, so a write in one cannot reach the next
   // and the library's own object is never the one handed out.
   it('gives each bag its own frozen copy of the data', () => {

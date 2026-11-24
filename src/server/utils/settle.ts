@@ -264,22 +264,27 @@ export function absorbCall(call: () => unknown, onFailure: () => void): void {
 }
 
 /**
- * Awaits every promise, in the order given, and rejects with the first rejection in that order. Every
- * promise has a handler before anything can refuse or await, so no rejection is left unhandled, and each
- * await is preceded by a synchronous check.
+ * Awaits every promise and settles as soon as one rejects, with that rejection; when none does, it resolves
+ * with the values in the order given. Every promise has a handler before anything can refuse or await, so
+ * no rejection is left unhandled, even one that arrives after the aggregate settled, and each await is
+ * preceded by a synchronous check.
  *
  * @param promises - Work already in flight.
  * @returns The values, in the order given.
  * @throws {CacheException} `INVALID_OPTIONS` when the promise machinery was replaced or planted on.
  */
 export async function awaitAll<T>(promises: readonly Promise<T>[]): Promise<T[]> {
+  let finish: (settlement: Settlement<T[]>) => void = noop
+  const outcome = new IntrinsicPromise<Settlement<T[]>>((resolve) => {
+    finish = resolve
+  })
   const awaited: Promise<T>[] = []
   let refusal: unknown
   for (let index = 0; index < promises.length; index += 1) {
-    const work = promises[index] as Promise<T>
-    const native = asNative(work)
+    const native = asNative(promises[index] as Promise<T>)
     try {
-      ignoreRejection(native)
+      // The first rejection to arrive settles the aggregate, whatever an earlier input is doing.
+      onRejection(native, (error) => finish(box<T[]>('error', undefined, error)))
     } catch (error) {
       // A promise that cannot be pinned is still watched; the others are watched before this refuses.
       refusal = error
@@ -288,11 +293,22 @@ export async function awaitAll<T>(promises: readonly Promise<T>[]): Promise<T[]>
   }
   assertPromiseIntrinsics()
   if (refusal !== undefined) throw refusal
-  const values: T[] = []
-  for (let index = 0; index < awaited.length; index += 1) {
-    assertPromiseIntrinsics()
-    values.push(await pinned(awaited[index] as Promise<T>))
-  }
+  const inner = (async (): Promise<void> => {
+    try {
+      const values: T[] = []
+      for (let index = 0; index < awaited.length; index += 1) {
+        assertPromiseIntrinsics()
+        values.push(await pinned(awaited[index] as Promise<T>))
+      }
+      finish(box('value', values))
+    } catch (error) {
+      finish(box<T[]>('error', undefined, error))
+    }
+  })()
+  ignoreRejection(inner)
   assertPromiseIntrinsics()
-  return values
+  const settlement = await pinned(outcome)
+  assertPromiseIntrinsics()
+  if (settlement.kind === 'error') throw settlement.error
+  return settlement.value as T[]
 }
