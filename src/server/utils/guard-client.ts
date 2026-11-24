@@ -9,6 +9,7 @@
  * `CONNECTION_LOST` (`reason: 'offline'`), with the original error kept as `cause`. A timed-out
  * command may still have been applied by the server.
  */
+import { assertDriverUnshadowed } from '../connection/driver-option-names'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import {
@@ -69,7 +70,8 @@ async function mapRejection(result: Promise<unknown>): Promise<unknown> {
 const GUARDED = new WeakMap<object, object>()
 
 /**
- * Wraps a client so that every command it runs reports a timeout or an offline connection as a coded error.
+ * Wraps a client so that every command it runs reports a timeout or an offline connection as a coded error,
+ * and is refused while `Object.prototype` holds a key it does not hold by default (`assertDriverUnshadowed`).
  *
  * Methods that return a promise have their rejection mapped; everything else (properties, pipelines,
  * streams) is returned as it is.
@@ -90,6 +92,12 @@ export function guardClient<C extends object>(client: C): C {
         return value
       }
       return (...args: unknown[]): unknown => {
+        // `quit`, `disconnect` and `on` send no command and must keep working at teardown, so they are not
+        // checked. A key planted on `Object.prototype` after the client was built is read by ioredis's command path
+        // (its flag tables are plain objects), so the guard runs at every command, not only at connect.
+        if (property !== 'quit' && property !== 'disconnect' && property !== 'on') {
+          assertDriverUnshadowed()
+        }
         const result: unknown = value.apply(target, args)
         if (!isNativePromise(result)) return result
         // The caller awaits what is returned: its own constructor keeps that await off a replaced prototype.

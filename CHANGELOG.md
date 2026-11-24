@@ -7,6 +7,15 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.40] - 2026-11-24
+
+### Security
+
+- A key planted on `Object.prototype` after a client connected no longer reaches ioredis's command path. ioredis keeps its command flag tables and reply transformers in plain objects, so a planted `get`, `set` or `ttl` is found for every command of that name: the call fails with `transformer is not a function` and the reply handler then throws from the socket event, which ends the process. The guard of `Object.prototype` ran when the manager was built, when each client was built and at every connect; `guardClient` now runs it before every command, and before a transaction or pipeline is opened, and refuses with `cache.invalid_options` and a count, never a key or a value. `quit`, `disconnect` and listener registration are not commands and still run, so shutdown works under pollution. The check costs about 4 microseconds per command on the machine measured (a loop of `get` on a stub client: 0.73 to 4.6 microseconds).
+- Known limit: a key planted after a command was sent and before its reply arrives is read by ioredis's reply handler, which has no library frame to check from; freeze `Object.prototype` early (`Object.freeze(Object.prototype)` at startup) to close it.
+
+  **Apply to a derived backend:** a backend that wraps its own client with `guardClient` now has its commands refused while `Object.prototype` holds a key it does not hold by default; one that relied on the guard being absent at command time must not plant keys there.
+
 ## [1.2.39] - 2026-11-24
 
 ### Security
@@ -1238,7 +1247,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.38...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.40...HEAD
+[1.2.40]: https://github.com/bymaxone/nest-cache/compare/v1.2.39...v1.2.40
 [1.2.39]: https://github.com/bymaxone/nest-cache/compare/v1.2.38...v1.2.39
 [1.2.38]: https://github.com/bymaxone/nest-cache/compare/v1.2.37...v1.2.38
 [1.2.37]: https://github.com/bymaxone/nest-cache/compare/v1.2.36...v1.2.37
