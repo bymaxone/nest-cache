@@ -28,7 +28,7 @@ These changes harden the library against code in the same process that replaces 
 
 ### Known limits
 
-- Same-process code that is hostile on purpose is outside the guards, which are best-effort. Known cases that are not fixed: a `then` planted on `EventEmitter.prototype` or `Stream.prototype` while the connector walks to the next sentinel or node; a throwing `stream.destroy` in the refusal of a socket; a replaced `Promise.prototype.then` reached through ioredis's `asCallback`; a stream accessor of the host; a live `net.createConnection` read in the CommonJS build; and `isNativePromise` on a self-referencing Proxy.
+- Same-process code that is hostile on purpose is outside the guards, which are best-effort; the known cases that are not fixed are listed in `SECURITY.md`, section "Threat model: same-process code".
 - Code running concurrently that plants a `then` and removes it again between the entry check and the work's own resolution cannot be seen afterwards. This includes a plant that fires on the work's own resolution, which runs before any library code.
 - A caller's own `await` of the promise a public method returns reads that promise's `constructor` once, when the method first suspends; the library cannot pin the promise of an `async` method it returns, so a constructor replaced at that moment is the caller's to guard.
 - A plant made inside ioredis's own synchronous command path, before the promise of a public method is returned, is not covered: the library calls no replaceable global between a public method's entry and its first suspension, and what the driver does there is the dependency's.
