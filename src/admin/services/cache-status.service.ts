@@ -10,7 +10,9 @@ import {
   BYMAX_CACHE_OPTIONS,
   BYMAX_CACHE_SERIALIZER,
   CacheService,
-  DEFAULT_REDIS_PORT
+  DEFAULT_REDIS_PORT,
+  settleWithin,
+  pinned
 } from '@bymax-one/nest-cache'
 import type { ISerializer, ResolvedOptions } from '@bymax-one/nest-cache'
 
@@ -45,33 +47,27 @@ const TLS_PROTOCOL = 'rediss:'
 const PROBE_TIMEOUT = Symbol('probe-timeout')
 
 /**
- * Races a probe against its deadline.
+ * Waits for a probe, at most `timeoutMs`.
  *
  * Resolves to {@link PROBE_TIMEOUT} rather than rejecting, so a deadline is not
- * signalled through the same channel as a connection failure — the two produce
- * different `reason`s and must not be recovered by inspecting an error. The
- * timer is always cleared, including when the work rejects first, so a probe
- * never keeps the process alive.
+ * signalled through the same channel as a connection failure: the two produce
+ * different `reason`s and must not be recovered by inspecting an error. The wait
+ * goes through the library's guarded settlement, never `Promise.race`, so a
+ * replaced built-in cannot turn a failed or late probe into a reply.
  *
  * @param work - The in-flight probe.
  * @param timeoutMs - How long to wait.
  * @returns The probe's value, or the timeout marker.
+ * @throws The probe's own rejection, or the refusal of the promise guard.
  */
 async function raceDeadline<T>(
   work: Promise<T>,
   timeoutMs: number
 ): Promise<T | typeof PROBE_TIMEOUT> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const deadline = new Promise<typeof PROBE_TIMEOUT>((resolve) => {
-    timer = setTimeout(() => {
-      resolve(PROBE_TIMEOUT)
-    }, timeoutMs)
-  })
-  try {
-    return await Promise.race([work, deadline])
-  } finally {
-    clearTimeout(timer)
-  }
+  const settlement = await pinned(settleWithin(work, timeoutMs))
+  if (settlement.kind === 'error') throw settlement.error
+  // `settleWithin` asserts the intrinsics last, and only microtasks run between that check and this return.
+  return settlement.kind === 'timeout' ? PROBE_TIMEOUT : (settlement.value as T)
 }
 
 /**
@@ -194,7 +190,7 @@ export class CacheStatusService {
    */
   async health(): Promise<CacheHealth> {
     return {
-      ...(await this.probe()),
+      ...(await pinned(this.probe())),
       mode: this.options.mode,
       isScanSupported: this.options.mode !== SCAN_UNSUPPORTED_MODE,
       degradedAboveMs: this.adminOptions.degradedAboveMs
@@ -207,7 +203,7 @@ export class CacheStatusService {
    * @returns The parsed statistics, stamped with the reading host's clock.
    */
   async stats(): Promise<RedisStats> {
-    return readRedisStats(await this.cache.info(), new Date())
+    return readRedisStats(await pinned(this.cache.info()), new Date())
   }
 
   /**
@@ -244,7 +240,7 @@ export class CacheStatusService {
     const started = performance.now()
     let reply: string | typeof PROBE_TIMEOUT
     try {
-      reply = await raceDeadline(this.cache.ping(), this.adminOptions.probeTimeoutMs)
+      reply = await pinned(raceDeadline(this.cache.ping(), this.adminOptions.probeTimeoutMs))
     } catch (error) {
       return { status: 'down', reason: 'error', code: readErrorCode(error) }
     }

@@ -107,7 +107,7 @@ shared (zero deps)
 
 From `@bymax-one/nest-cache/metrics`: `CacheConnectionTally`, `CacheConnectionTallyOptions`, `CacheConnectionMetrics`, the token `CACHE_CONNECTION_TALLY` and the metric names `CACHE_EVENTS_METRIC` and `CACHE_READY_METRIC`. From `@bymax-one/nest-cache/observability`: `CacheObservability`, `CacheObservabilityOptions`, `CacheObservabilityLogger`, `CacheOperationMetrics`, `CacheHealthIndicator`, `CACHE_HEALTH_INDICATOR_NAME`, `combineCacheEvents`, the token `CACHE_OBSERVABILITY`, the log codes `CACHE_LOG_EVENTS` and the metric names `CACHE_OPERATIONS_METRIC`, `CACHE_PUBSUB_QUEUED_METRIC` and `CACHE_PUBSUB_DROPPED_METRIC`.
 
-The main entry also exports `guardClient` at runtime. It is an internal export and is not supported: it can change or disappear in any release.
+The main entry also exports `guardClient`, `settleWithin`, `awaitAll`, `absorbCall`, `onRejection`, `pinned` and the type `Settlement` at runtime. They are internal helpers and are not supported: they can change or disappear in any release.
 
 `/metrics` and `/observability` are the only entries that load `@bymax-one/nest-core` or `prom-client`, both optional peers: `.`, `/admin` and `/shared` never import either.
 

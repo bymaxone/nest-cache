@@ -12,7 +12,14 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 
-import { CACHE_ERROR_CODES, CacheException, CacheService, guardClient } from '@bymax-one/nest-cache'
+import {
+  awaitAll,
+  CACHE_ERROR_CODES,
+  CacheException,
+  CacheService,
+  guardClient,
+  pinned
+} from '@bymax-one/nest-cache'
 
 import { BYMAX_CACHE_ADMIN_OPTIONS } from '../bymax-cache-admin.constants'
 import type { ResolvedAdminOptions } from '../config/resolved-admin-options'
@@ -211,7 +218,9 @@ export class CacheAdminService {
     let cursor = listOptions.cursor ?? SCAN_END_CURSOR
     let round = 0
     do {
-      const [nextCursor, batch] = await client.scan(cursor, 'MATCH', scope.pattern, 'COUNT', limit)
+      const [nextCursor, batch] = await pinned(
+        client.scan(cursor, 'MATCH', scope.pattern, 'COUNT', limit)
+      )
       cursor = nextCursor
       keys.push(...batch)
       round += 1
@@ -225,7 +234,7 @@ export class CacheAdminService {
     // batch may overshoot it by up to one batch.
     const isComplete = cursor === SCAN_END_CURSOR
     const includeSize = listOptions.includeSize === true
-    const entries = await this.describeAll(client, keys, includeSize)
+    const entries = await pinned(this.describeAll(client, keys, includeSize))
 
     return {
       scopeId: scope.id,
@@ -254,7 +263,7 @@ export class CacheAdminService {
   async describeKey(scopeId: string, key: string): Promise<KeyDetail> {
     const scope = this.resolve(scopeId, key)
     const client = guardClient(this.cache.getClient())
-    const [type, ttl] = await Promise.all([client.type(key), client.ttl(key)])
+    const [type, ttl] = await pinned(awaitAll<unknown>([client.type(key), client.ttl(key)]))
     return {
       scopeId: scope.id,
       key,
@@ -282,12 +291,12 @@ export class CacheAdminService {
       return { status: 'withheld', key, scopeId: withholder.id, origin: withholder.origin }
     }
     const client = guardClient(this.cache.getClient())
-    const rawType = await client.type(key)
+    const rawType = await pinned(client.type(key))
     if (rawType === TYPE_NONE) {
       return { status: 'missing', key }
     }
     const type = readKeyType(rawType)
-    const value = await this.readValue(client, key, type)
+    const value = await pinned(this.readValue(client, key, type))
     return value === null ? { status: 'missing', key } : { status: 'revealed', key, type, value }
   }
 
@@ -360,7 +369,7 @@ export class CacheAdminService {
           pipeline.memory('USAGE', key)
         }
       }
-      const replies = await pipeline.exec()
+      const replies = await pinned(pipeline.exec())
       chunk.forEach((key, index) => {
         const base = index * perKey
         entries.push({
@@ -384,11 +393,11 @@ export class CacheAdminService {
   private async readString(client: IRedisReader, key: string): Promise<RevealedValue | null> {
     const limit = this.options.revealStringLimit
     const bytes = limit * REVEAL_BYTES_PER_CHARACTER
-    const reply = await client.call('GETRANGE', key, 0, bytes)
+    const reply = await pinned(client.call('GETRANGE', key, 0, bytes))
     const value = typeof reply === 'string' ? reply : ''
     // An empty answer is both a string that is empty and a key that is gone, and the key was there a
     // moment ago, so the type is asked again to tell them apart.
-    if (value === '' && (await client.type(key)) === TYPE_NONE) {
+    if (value === '' && (await pinned(client.type(key))) === TYPE_NONE) {
       return null
     }
     let capped = value.slice(0, limit)
@@ -421,15 +430,15 @@ export class CacheAdminService {
   ): Promise<RevealedValue | null> {
     switch (type) {
       case 'string':
-        return this.readString(client, key)
+        return await pinned(this.readString(client, key))
       case 'hash':
-        return this.readHash(client, key)
+        return await pinned(this.readHash(client, key))
       case 'set':
-        return this.readSet(client, key)
+        return await pinned(this.readSet(client, key))
       case 'list':
-        return this.readList(client, key)
+        return await pinned(this.readList(client, key))
       case 'zset':
-        return this.readSortedSet(client, key)
+        return await pinned(this.readSortedSet(client, key))
       default:
         return { kind: 'unsupported', type }
     }
@@ -438,10 +447,8 @@ export class CacheAdminService {
   /** Reads a hash with `HSCAN`; `null` when it is gone. */
   private async readHash(client: IRedisReader, key: string): Promise<RevealedValue | null> {
     const limit = this.options.revealLimit
-    const { entries, isComplete } = await scanUpTo(
-      limit,
-      (cursor) => client.call('HSCAN', key, cursor, 'COUNT', limit),
-      true
+    const { entries, isComplete } = await pinned(
+      scanUpTo(limit, (cursor) => client.call('HSCAN', key, cursor, 'COUNT', limit), true)
     )
     if (isGone(entries.length, isComplete)) {
       return null
@@ -460,10 +467,8 @@ export class CacheAdminService {
   /** Reads a set with `SSCAN`; `null` when it is gone. */
   private async readSet(client: IRedisReader, key: string): Promise<RevealedValue | null> {
     const limit = this.options.revealLimit
-    const { entries, isComplete } = await scanUpTo(
-      limit,
-      (cursor) => client.call('SSCAN', key, cursor, 'COUNT', limit),
-      false
+    const { entries, isComplete } = await pinned(
+      scanUpTo(limit, (cursor) => client.call('SSCAN', key, cursor, 'COUNT', limit), false)
     )
     if (isGone(entries.length, isComplete)) {
       return null
@@ -474,7 +479,7 @@ export class CacheAdminService {
   /** Reads a list with one range; `null` when it is gone. */
   private async readList(client: IRedisReader, key: string): Promise<RevealedValue | null> {
     const limit = this.options.revealLimit
-    const all = await client.lrange(key, 0, limit)
+    const all = await pinned(client.lrange(key, 0, limit))
     if (isGone(all.length, true)) {
       return null
     }
@@ -487,7 +492,7 @@ export class CacheAdminService {
     const limit = this.options.revealLimit
     // Through `call` because ioredis's `zrange` overload set cannot be
     // narrowed to a four-argument signature — see the reader interface.
-    const reply = await client.call('ZRANGE', key, 0, limit, 'WITHSCORES')
+    const reply = await pinned(client.call('ZRANGE', key, 0, limit, 'WITHSCORES'))
     const { members, isComplete } = readScoredMembers(reply, limit)
     // Only an empty list is a finished read of nothing; a reply that is not a list is an unexpected
     // shape, which reads as no members rather than as a deleted key.

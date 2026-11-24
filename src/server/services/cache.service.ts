@@ -15,6 +15,8 @@
  *
  * @see `docs/technical_specification.md` §5 — Main Service
  */
+import type { Readable } from 'node:stream'
+
 import { Inject, Injectable, Optional } from '@nestjs/common'
 import type { ChainableCommander, Cluster, Redis } from 'ioredis'
 
@@ -35,6 +37,7 @@ import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
+import { nextStep, pinned } from '../utils/settle'
 import { found, reportOperation, trackOperation } from '../utils/track-operation'
 import { assertTtlSeconds, MIN_WRITE_TTL_SECONDS } from '../utils/ttl'
 import { validateRead } from '../utils/validate-read'
@@ -132,7 +135,8 @@ export class CacheService extends CacheCollectionCommands {
     run: () => Promise<T>,
     classify?: (result: T) => CacheOperationOutcome
   ): Promise<T> {
-    return trackOperation(this.options.events, operation, run, classify)
+    // Pinned here once, so no caller's `await` of the result reads `Promise.prototype.constructor`.
+    return pinned(trackOperation(this.options.events, operation, run, classify))
   }
 
   // ─── String / value commands ───────────────────────────────────────────────
@@ -153,16 +157,16 @@ export class CacheService extends CacheCollectionCommands {
   async get<T>(prefix: string, id: string, options?: ReadOptions<T>): Promise<T | null> {
     // Whether Redis returned a payload, not whether it decodes to a value: the JSON text `null` is a hit.
     let present = false
-    return this.track(
+    return await this.track(
       'get',
       async () => {
         const key = this.keyBuilder.build(prefix, id)
-        const raw = await this.client().get(key)
+        const raw = await pinned(this.client().get(key))
         if (raw === null) {
           return null
         }
         present = true
-        return this.decode<T>(raw, options)
+        return await pinned(this.decode<T>(raw, options))
       },
       () => found(present)
     )
@@ -176,10 +180,10 @@ export class CacheService extends CacheCollectionCommands {
    * @returns The raw string, or `null` when the key does not exist.
    */
   async getRaw(prefix: string, id: string): Promise<string | null> {
-    return this.track(
+    return await this.track(
       'getRaw',
       async () => {
-        return this.client().get(this.keyBuilder.build(prefix, id))
+        return await pinned(this.client().get(this.keyBuilder.build(prefix, id)))
       },
       (value) => found(value !== null)
     )
@@ -199,14 +203,14 @@ export class CacheService extends CacheCollectionCommands {
    * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer of at least 1.
    */
   async set<T>(prefix: string, id: string, value: T, ttlSeconds?: number): Promise<void> {
-    return this.track('set', async () => {
+    return await this.track('set', async () => {
       const key = this.keyBuilder.build(prefix, id)
       const raw = this.serializer.serialize(value)
       if (ttlSeconds !== undefined) {
         assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
-        await this.client().set(key, raw, 'EX', ttlSeconds)
+        await pinned(this.client().set(key, raw, 'EX', ttlSeconds))
       } else {
-        await this.client().set(key, raw)
+        await pinned(this.client().set(key, raw))
       }
     })
   }
@@ -223,13 +227,13 @@ export class CacheService extends CacheCollectionCommands {
    * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer of at least 1.
    */
   async setRaw(prefix: string, id: string, value: string, ttlSeconds?: number): Promise<void> {
-    return this.track('setRaw', async () => {
+    return await this.track('setRaw', async () => {
       const key = this.keyBuilder.build(prefix, id)
       if (ttlSeconds !== undefined) {
         assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
-        await this.client().set(key, value, 'EX', ttlSeconds)
+        await pinned(this.client().set(key, value, 'EX', ttlSeconds))
       } else {
-        await this.client().set(key, value)
+        await pinned(this.client().set(key, value))
       }
     })
   }
@@ -248,14 +252,14 @@ export class CacheService extends CacheCollectionCommands {
    * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer of at least 1.
    */
   async setNx<T>(prefix: string, id: string, value: T, ttlSeconds?: number): Promise<boolean> {
-    return this.track('setNx', async () => {
+    return await this.track('setNx', async () => {
       const key = this.keyBuilder.build(prefix, id)
       const raw = this.serializer.serialize(value)
       if (ttlSeconds !== undefined) assertTtlSeconds(ttlSeconds, MIN_WRITE_TTL_SECONDS)
       const result =
         ttlSeconds !== undefined
-          ? await this.client().set(key, raw, 'EX', ttlSeconds, 'NX')
-          : await this.client().set(key, raw, 'NX')
+          ? await pinned(this.client().set(key, raw, 'EX', ttlSeconds, 'NX'))
+          : await pinned(this.client().set(key, raw, 'NX'))
       return result === 'OK'
     })
   }
@@ -268,8 +272,8 @@ export class CacheService extends CacheCollectionCommands {
    * @returns The number of keys removed (`0` or `1`).
    */
   async del(prefix: string, id: string): Promise<number> {
-    return this.track('del', async () => {
-      return this.client().del(this.keyBuilder.build(prefix, id))
+    return await this.track('del', async () => {
+      return await pinned(this.client().del(this.keyBuilder.build(prefix, id)))
     })
   }
 
@@ -284,11 +288,11 @@ export class CacheService extends CacheCollectionCommands {
     if (ids.length === 0) {
       return 0
     }
-    return this.track('delMany', async () => {
+    return await this.track('delMany', async () => {
       const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
       let removed = 0
       for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
-        removed += await this.client().del(...part)
+        removed += await pinned(this.client().del(...part))
       }
       return removed
     })
@@ -302,10 +306,10 @@ export class CacheService extends CacheCollectionCommands {
    * @returns `true` when the key exists, otherwise `false`.
    */
   async exists(prefix: string, id: string): Promise<boolean> {
-    return this.track(
+    return await this.track(
       'exists',
       async () => {
-        const count = await this.client().exists(this.keyBuilder.build(prefix, id))
+        const count = await pinned(this.client().exists(this.keyBuilder.build(prefix, id)))
         return count > 0
       },
       found
@@ -324,9 +328,11 @@ export class CacheService extends CacheCollectionCommands {
    * @returns The value after the increment.
    */
   async incr(prefix: string, id: string, by = 1): Promise<number> {
-    return this.track('incr', async () => {
+    return await this.track('incr', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return by === 1 ? this.client().incr(key) : this.client().incrby(key, by)
+      return by === 1
+        ? await pinned(this.client().incr(key))
+        : await pinned(this.client().incrby(key, by))
     })
   }
 
@@ -340,9 +346,11 @@ export class CacheService extends CacheCollectionCommands {
    * @returns The value after the decrement.
    */
   async decr(prefix: string, id: string, by = 1): Promise<number> {
-    return this.track('decr', async () => {
+    return await this.track('decr', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return by === 1 ? this.client().decr(key) : this.client().decrby(key, by)
+      return by === 1
+        ? await pinned(this.client().decr(key))
+        : await pinned(this.client().decrby(key, by))
     })
   }
 
@@ -359,9 +367,11 @@ export class CacheService extends CacheCollectionCommands {
    * @throws {CacheException} `INVALID_TTL` when `ttlSeconds` is not a safe integer.
    */
   async expire(prefix: string, id: string, ttlSeconds: number): Promise<boolean> {
-    return this.track('expire', async () => {
+    return await this.track('expire', async () => {
       assertTtlSeconds(ttlSeconds, undefined)
-      const result = await this.client().expire(this.keyBuilder.build(prefix, id), ttlSeconds)
+      const result = await pinned(
+        this.client().expire(this.keyBuilder.build(prefix, id), ttlSeconds)
+      )
       return result === 1
     })
   }
@@ -375,8 +385,8 @@ export class CacheService extends CacheCollectionCommands {
    *   exists with no expiration.
    */
   async ttl(prefix: string, id: string): Promise<number> {
-    return this.track('ttl', async () => {
-      return this.client().ttl(this.keyBuilder.build(prefix, id))
+    return await this.track('ttl', async () => {
+      return await pinned(this.client().ttl(this.keyBuilder.build(prefix, id)))
     })
   }
 
@@ -389,8 +399,8 @@ export class CacheService extends CacheCollectionCommands {
    *   or does not exist.
    */
   async persist(prefix: string, id: string): Promise<boolean> {
-    return this.track('persist', async () => {
-      const result = await this.client().persist(this.keyBuilder.build(prefix, id))
+    return await this.track('persist', async () => {
+      const result = await pinned(this.client().persist(this.keyBuilder.build(prefix, id)))
       return result === 1
     })
   }
@@ -419,19 +429,21 @@ export class CacheService extends CacheCollectionCommands {
     }
     // As for `get`: a payload that decodes to `null` is still a hit. Set before the classifier runs.
     let present: boolean
-    return this.track(
+    return await this.track(
       'mget',
       async () => {
         const keys = ids.map((id) => this.keyBuilder.build(prefix, id))
         const values: Array<string | null> = []
         for (const part of chunkOf(keys, MAX_COMMAND_ARGUMENTS)) {
-          values.push(...(await this.client().mget(...part)))
+          values.push(...(await pinned(this.client().mget(...part))))
         }
         present = values.some((value) => value !== null)
         const decoded: Array<T | null> = []
         // One at a time, in order, so the element a failure names is the first bad one.
         for (const [index, value] of values.entries()) {
-          decoded.push(value === null ? null : await this.decode<T>(value, options, { index }))
+          decoded.push(
+            value === null ? null : await pinned(this.decode<T>(value, options, { index }))
+          )
         }
         return decoded
       },
@@ -452,20 +464,20 @@ export class CacheService extends CacheCollectionCommands {
     if (entries.length === 0) {
       return
     }
-    return this.track('mset', async () => {
+    return await this.track('mset', async () => {
       const pairs: string[] = []
       for (const [id, value] of entries) {
         pairs.push(this.keyBuilder.build(prefix, id), this.serializer.serialize(value))
       }
       if (pairs.length <= MAX_COMMAND_ARGUMENTS) {
-        await this.client().mset(...pairs)
+        await pinned(this.client().mset(...pairs))
         return
       }
       const transaction = this.client().multi()
       for (const part of chunkOf(pairs, MAX_COMMAND_ARGUMENTS)) {
         transaction.mset(...part)
       }
-      await execTransaction(transaction)
+      await pinned(execTransaction(transaction))
     })
   }
 
@@ -489,13 +501,13 @@ export class CacheService extends CacheCollectionCommands {
    * ```
    */
   async keys(prefix: string, pattern: string): Promise<string[]> {
-    return this.track('keys', async () => {
+    return await this.track('keys', async () => {
       const fullPattern = this.keyBuilder.buildPattern(prefix, pattern)
       const client = this.client()
       if (!isScannableClient(client)) {
         throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'keys' })
       }
-      return client.keys(fullPattern)
+      return await pinned(client.keys(fullPattern))
     })
   }
 
@@ -523,39 +535,43 @@ export class CacheService extends CacheCollectionCommands {
   async *scan(prefix: string, pattern: string, count = SCAN_COUNT): AsyncIterable<string> {
     const events = this.options.events
     let outcome: CacheOperationOutcome = 'ok'
+    let stream: Readable | undefined
     try {
-      yield* this.scanKeys(prefix, pattern, count)
+      stream = this.scanKeys(prefix, pattern, count)
+      const steps = stream[Symbol.asyncIterator]()
+      for (let step = await pinned(nextStep(steps)); step.done !== true;) {
+        for (const key of step.value as string[]) {
+          // ScanStream pushes string[] batches — ioredis internal contract
+          yield key
+        }
+        step = await pinned(nextStep(steps))
+      }
     } catch (error) {
       outcome = 'error'
       throw error
     } finally {
+      stream?.destroy()
       reportOperation(events, 'scan', outcome)
     }
   }
 
   /**
-   * Iterates the keys of {@link CacheService.scan}, with no reporting of its own.
+   * Opens the `SCAN` stream of {@link CacheService.scan}.
    *
    * @param prefix - Entity-group prefix.
    * @param pattern - Glob for the id segment.
    * @param count - `SCAN` `COUNT` hint.
-   * @returns The matching keys, one at a time.
+   * @returns The stream of key batches.
    * @throws {CacheException} `UNSUPPORTED_IN_CLUSTER` in cluster mode.
    */
-  private async *scanKeys(prefix: string, pattern: string, count: number): AsyncIterable<string> {
+  private scanKeys(prefix: string, pattern: string, count: number): Readable {
     const fullPattern = this.keyBuilder.buildPattern(prefix, pattern)
     const client = this.client()
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'scan' })
     }
     const hint = Number.isInteger(count) ? Math.min(Math.max(count, 1), MAX_SCAN_COUNT) : SCAN_COUNT
-    const stream = client.scanStream({ match: fullPattern, count: hint })
-    for await (const chunk of stream) {
-      for (const key of chunk as string[]) {
-        // ScanStream pushes string[] batches — ioredis internal contract
-        yield key
-      }
-    }
+    return client.scanStream({ match: fullPattern, count: hint })
   }
 
   // ─── Pipeline / escape hatch ───────────────────────────────────────────────
@@ -617,7 +633,7 @@ export class CacheService extends CacheCollectionCommands {
    *   (no usable top-level `scanStream`).
    */
   async flushNamespace(): Promise<number> {
-    return this.track('flushNamespace', async () => {
+    return await this.track('flushNamespace', async () => {
       if (
         process.env['NODE_ENV']?.trim().toLowerCase() === PRODUCTION_ENV &&
         !this.options.allowFlushInProduction
@@ -636,11 +652,17 @@ export class CacheService extends CacheCollectionCommands {
       const stream = client.scanStream({ match: pattern, count: FLUSH_SCAN_COUNT })
       let total = 0
 
-      for await (const chunk of stream) {
-        const keys = chunk as string[] // ScanStream pushes string[] batches — ioredis internal contract
-        if (keys.length > 0) {
-          total += await client.unlink(...keys)
+      const steps = stream[Symbol.asyncIterator]()
+      try {
+        for (let step = await pinned(nextStep(steps)); step.done !== true;) {
+          const keys = step.value as string[] // ScanStream pushes string[] batches — ioredis internal contract
+          if (keys.length > 0) {
+            total += await pinned(client.unlink(...keys))
+          }
+          step = await pinned(nextStep(steps))
         }
+      } finally {
+        stream.destroy()
       }
       return total
     })
@@ -672,12 +694,12 @@ export class CacheService extends CacheCollectionCommands {
     keys: readonly string[],
     args: ReadonlyArray<string | number>
   ): Promise<unknown> {
-    return this.track('eval', async () => {
+    return await this.track('eval', async () => {
       if (!this.scriptRegistry) {
         throw new CacheException(CACHE_ERROR_CODES.SCRIPT_REGISTRY_MISSING)
       }
       const namespacedKeys = keys.map((key) => this.keyBuilder.applyNamespace(key))
-      return this.scriptRegistry.eval(scriptName, namespacedKeys, args)
+      return await pinned(this.scriptRegistry.eval(scriptName, namespacedKeys, args))
     })
   }
 
@@ -691,11 +713,11 @@ export class CacheService extends CacheCollectionCommands {
    * @returns `true` when the server replies `PONG`, otherwise `false`.
    */
   async isHealthy(): Promise<boolean> {
-    return this.track(
+    return await this.track(
       'isHealthy',
       async () => {
         try {
-          const pong = await this.client().ping()
+          const pong = await pinned(this.client().ping())
           return pong === 'PONG'
         } catch {
           return false
@@ -713,8 +735,8 @@ export class CacheService extends CacheCollectionCommands {
    * @throws The underlying ioredis error when the connection is down.
    */
   async ping(): Promise<string> {
-    return this.track('ping', async () => {
-      return this.client().ping()
+    return await this.track('ping', async () => {
+      return await pinned(this.client().ping())
     })
   }
 
@@ -726,9 +748,11 @@ export class CacheService extends CacheCollectionCommands {
    * @returns The `INFO` text.
    */
   async info(section?: string): Promise<string> {
-    return this.track('info', async () => {
+    return await this.track('info', async () => {
       const client = this.client()
-      return section === undefined ? client.info() : client.info(section)
+      return section === undefined
+        ? await pinned(client.info())
+        : await pinned(client.info(section))
     })
   }
 
@@ -748,6 +772,8 @@ export class CacheService extends CacheCollectionCommands {
     location?: Record<string, unknown>
   ): Promise<T> {
     const value = this.serializer.deserialize<T>(raw)
-    return options?.validate === undefined ? value : validateRead(value, options.validate, location)
+    return options?.validate === undefined
+      ? value
+      : await pinned(validateRead(value, options.validate, location))
   }
 }

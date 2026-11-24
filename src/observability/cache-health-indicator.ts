@@ -9,7 +9,7 @@ import { BymaxHealthIndicator } from '@bymax-one/nest-core/health'
 import type { HealthIndicatorResult, IHealthIndicator } from '@bymax-one/nest-core/health'
 import { Inject, Injectable } from '@nestjs/common'
 
-import { CacheService } from '@bymax-one/nest-cache'
+import { CacheService, pinned } from '@bymax-one/nest-cache'
 
 /** The name the indicator reports in the readiness response. */
 export const CACHE_HEALTH_INDICATOR_NAME = 'cache'
@@ -32,6 +32,6 @@ export class CacheHealthIndicator implements IHealthIndicator {
    * @returns `up` when the server answers `PONG`, `down` otherwise; never a detail.
    */
   async check(): Promise<HealthIndicatorResult> {
-    return { status: (await this.cache.isHealthy()) ? 'up' : 'down' }
+    return { status: (await pinned(this.cache.isHealthy())) ? 'up' : 'down' }
   }
 }

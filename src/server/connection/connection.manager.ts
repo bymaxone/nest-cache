@@ -36,6 +36,7 @@ import { fireEvent } from '../utils/call-hook'
 import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
 import { releaseClient } from '../utils/release-client'
+import { assertPromiseIntrinsics, IntrinsicPromise, ignoreRejection, pinned } from '../utils/settle'
 import { copyClusterOptions } from './copy-cluster-options'
 import { assertDriverUnshadowed, withOwnKeys } from './driver-option-names'
 import {
@@ -181,7 +182,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         : this.options.connection?.lazyConnect
     )
     if (!lazy) {
-      await this.waitUntilReady(client)
+      const ready = this.waitUntilReady(client)
+      ignoreRejection(ready)
+      // Immediately before the await whose outcome is the init's own.
+      assertPromiseIntrinsics()
+      await pinned(ready)
     }
   }
 
@@ -238,17 +243,19 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       return
     }
     try {
-      await closeClient(client, this.options.shutdownTimeoutMs, () =>
-        // Graceful quit timed out or rejected: signal the forced teardown to the
-        // observability sink before severing the socket. Reuses the 'error' event
-        // (the CacheEventName union has no shutdown member) with a distinguishing
-        // `reason: 'forced_disconnect'` and no `error` string, so consumers can tell
-        // it apart from an ioredis socket error.
-        this.emit('error', {
-          role: 'main',
-          reason: 'forced_disconnect',
-          shutdownTimeoutMs: this.options.shutdownTimeoutMs
-        })
+      await pinned(
+        closeClient(client, this.options.shutdownTimeoutMs, () =>
+          // Graceful quit timed out or rejected: signal the forced teardown to the
+          // observability sink before severing the socket. Reuses the 'error' event
+          // (the CacheEventName union has no shutdown member) with a distinguishing
+          // `reason: 'forced_disconnect'` and no `error` string, so consumers can tell
+          // it apart from an ioredis socket error.
+          this.emit('error', {
+            role: 'main',
+            reason: 'forced_disconnect',
+            shutdownTimeoutMs: this.options.shutdownTimeoutMs
+          })
+        )
       )
     } finally {
       this.#client = null
@@ -471,7 +478,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     // A cluster takes its timers from `cluster.options.redisOptions`, every other mode from `connection`.
     const deadline = this.#connectDeadline
     try {
-      await new Promise<void>((resolve, reject) => {
+      const ready = new IntrinsicPromise<void>((resolve, reject) => {
         const settle = (outcome: () => void): void => {
           clearTimeout(timer)
           client.off('ready', onReady)
@@ -500,6 +507,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         client.once('error', onError)
         client.once('end', onEnd)
       })
+      // Handled before the check, so a refusal cannot leave a later rejection of `ready` unhandled.
+      ignoreRejection(ready)
+      // Immediately before the await the verdict is read from.
+      assertPromiseIntrinsics()
+      await pinned(ready)
     } catch (error) {
       // A failed boot must not leave a client that keeps reconnecting, nor one the shutdown that
       // follows would try to quit.

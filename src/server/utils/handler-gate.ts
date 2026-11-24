@@ -5,6 +5,10 @@
  * is bounded as a whole and not per channel.
  */
 
+import { absorbCall, pinned } from './settle'
+
+const noop = (): void => undefined
+
 /** One execution waiting for a slot. */
 interface Waiting {
   readonly run: () => Promise<unknown>
@@ -61,7 +65,13 @@ export class HandlerGate {
       this.#startWaiting()
     }
     // A throw before the promise exists frees the slot the same way a rejection does.
-    new Promise((resolve) => resolve(run())).then(free, free)
+    absorbCall(async () => {
+      try {
+        await pinned(run())
+      } finally {
+        free()
+      }
+    }, noop)
   }
 
   #startWaiting(): void {

@@ -16,6 +16,8 @@
 import { Module } from '@nestjs/common'
 import type { DynamicModule, InjectionToken, OptionalFactoryDependency } from '@nestjs/common'
 
+import { pinned } from '@bymax-one/nest-cache'
+
 import { BYMAX_CACHE_ADMIN_OPTIONS } from './bymax-cache-admin.constants'
 import { resolveAdminOptions } from './config/resolved-admin-options'
 import type { BymaxCacheAdminModuleOptions } from './interfaces/admin-module-options.interface'
@@ -87,7 +89,7 @@ export class BymaxCacheAdminModule {
           provide: BYMAX_CACHE_ADMIN_OPTIONS,
           inject: options.inject ?? [],
           useFactory: async (...args: never[]): Promise<ReturnType<typeof resolveAdminOptions>> =>
-            resolveAdminOptions(await options.useFactory(...args))
+            resolveAdminOptions(await pinned(options.useFactory(...args)))
         },
         ...ADMIN_SERVICES
       ],

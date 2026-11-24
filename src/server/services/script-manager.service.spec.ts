@@ -6,6 +6,7 @@
  * idempotent-cache, EVALSHA, NOSCRIPT-recovery, and error-wrapping paths. The
  * registry is exercised through its public API only (no private access).
  */
+import { handledRejection, underForgery } from '../../test-helpers/forge-promise'
 import { applyDefaults } from '../config/default-options'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
@@ -359,6 +360,29 @@ describe('ScriptManagerService', () => {
 
     expect(failure).toMatchObject({ code: CACHE_ERROR_CODES.INVALID_OPTIONS })
     expect((failure as CacheException).cause).toBe(hostError)
+  })
+
+  // A replaced Promise.all answered for the loads, so a script that failed to load read as loaded.
+  it('rejects at bootstrap when Promise.all is replaced and a script load fails', async () => {
+    script.mockReturnValue(handledRejection(new Error('NOSCRIPT')))
+
+    // A load the replaced static never observes is dropped; the listener keeps that from ending the worker.
+    const dropped = jest.fn()
+    process.on('unhandledRejection', dropped)
+    let outcome: Awaited<ReturnType<typeof underForgery>>
+    try {
+      outcome = await underForgery(
+        () => {
+          Promise.all = (() => Promise.resolve([])) as unknown as typeof Promise.all
+        },
+        () => registry.onApplicationBootstrap()
+      )
+      await new Promise((resolve) => setImmediate(resolve))
+    } finally {
+      process.off('unhandledRejection', dropped)
+    }
+
+    expect(outcome.settled).toBe('rejected')
   })
 
   // With lazyConnect, bootstrap must defer loading entirely (no SCRIPT LOAD).

@@ -7,6 +7,7 @@ import { ConsoleLogger, Logger } from '@nestjs/common'
 
 import type { CacheEventName } from '../../shared/types/cache-event.types'
 import type { ICacheEvents } from '../interfaces/cache-events.interface'
+import { absorbCall } from './settle'
 
 /** The hooks of `ICacheEvents`, the only names a failure is logged under. */
 export type CacheHookName = 'onEvent' | 'onOperation' | 'onQueue'
@@ -73,12 +74,9 @@ function failed(hook: CacheHookName): void {
  * @param call - Invokes the hook.
  */
 export function callHook(hook: CacheHookName, call: () => unknown): void {
-  try {
-    // Adopts a promise or any thenable, so a rejection (or a `then` that throws) is handled here.
-    void Promise.resolve(call()).then(undefined, () => failed(hook))
-  } catch {
-    failed(hook)
-  }
+  // Awaits a promise or any thenable inside an async function, so a synchronous throw, a rejection and
+  // a `then` that throws are all handled here.
+  absorbCall(call, () => failed(hook))
 }
 
 /**

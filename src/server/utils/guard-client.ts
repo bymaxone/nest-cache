@@ -11,6 +11,13 @@
  */
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import {
+  assertPromiseIntrinsics,
+  ignoreRejection,
+  isNativePromise,
+  pinConstructor,
+  pinned
+} from './settle'
 
 /** The exact message ioredis rejects a timed-out command with. */
 const COMMAND_TIMED_OUT = 'Command timed out'
@@ -36,6 +43,26 @@ export function mapCommandFailure(error: unknown): unknown {
   return error.message === OFFLINE
     ? new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'offline' }, undefined, error)
     : error
+}
+
+/**
+ * Awaits a command's promise and maps a rejection to a coded error, without `.catch`: a replaced
+ * `Promise.prototype.catch` would otherwise answer for the command, so a failed `PING` could read as `PONG`.
+ * A refusal of the promise guard rejects the command, which a caller reads as a failure, never as a reply.
+ *
+ * @param result - The command's native promise.
+ * @returns The reply, or a rejection with the mapped error.
+ */
+async function mapRejection(result: Promise<unknown>): Promise<unknown> {
+  ignoreRejection(result)
+  try {
+    assertPromiseIntrinsics()
+    const reply = await pinned(result)
+    assertPromiseIntrinsics()
+    return reply
+  } catch (error) {
+    throw mapCommandFailure(error)
+  }
 }
 
 /** The wrapped client of each client, so a client is wrapped once however many calls reach it. */
@@ -64,11 +91,11 @@ export function guardClient<C extends object>(client: C): C {
       }
       return (...args: unknown[]): unknown => {
         const result: unknown = value.apply(target, args)
-        return result instanceof Promise
-          ? result.catch((error: unknown) => {
-              throw mapCommandFailure(error)
-            })
-          : result
+        if (!isNativePromise(result)) return result
+        // The caller awaits what is returned: its own constructor keeps that await off a replaced prototype.
+        const mapped = mapRejection(result)
+        pinConstructor(mapped)
+        return mapped
       }
     }
   })

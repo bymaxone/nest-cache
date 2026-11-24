@@ -15,6 +15,7 @@ import type { ConnectionOptions } from 'node:tls'
 
 import { AbstractConnector, SentinelConnector } from 'ioredis'
 
+import { assertNoThen, pinned } from '../utils/settle'
 import { assertDriverUnshadowed, DRIVER_OPTION_NAMES } from './driver-option-names'
 import {
   assign,
@@ -150,13 +151,27 @@ export class GuardedConnector extends AbstractConnector {
           reject(error)
           return
         }
-        sealListeners(this.stream)
-        this.stream.once('error', (error) => {
-          this.firstError = error
-        })
-        resolve(this.stream)
+        this.deliver(resolve, reject)
       })
     })
+  }
+
+  /** Seals the listeners of the socket just opened and hands it over, or destroys it and refuses. */
+  private deliver(resolve: (stream: Socket) => void, reject: (error: unknown) => void): void {
+    const stream = this.stream as Socket
+    sealListeners(stream)
+    stream.once('error', (error) => {
+      this.firstError = error
+    })
+    try {
+      // Resolving with the socket reads `then` along its whole chain, with no code between.
+      assertNoThen(stream)
+    } catch (error) {
+      stream.destroy()
+      reject(error)
+      return
+    }
+    resolve(stream)
   }
 }
 
@@ -237,7 +252,7 @@ export class GuardedSentinelConnector extends SentinelConnector {
     eventEmitter: Parameters<SentinelConnector['connect']>[0]
   ): ReturnType<SentinelConnector['connect']> {
     assertDriverUnshadowed()
-    const stream = await super.connect(eventEmitter)
+    const stream = await pinned(super.connect(eventEmitter))
     try {
       assertDriverUnshadowed()
     } catch (error) {
@@ -245,6 +260,13 @@ export class GuardedSentinelConnector extends SentinelConnector {
       throw error
     }
     sealListeners(stream)
+    try {
+      // Returning the socket from an async function reads `then` along its whole chain, with no code between.
+      assertNoThen(stream)
+    } catch (error) {
+      stream.destroy()
+      throw error
+    }
     return stream
   }
 }

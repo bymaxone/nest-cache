@@ -63,6 +63,8 @@ const ROOT = pkg.root
 // `mset` runs in and the reporting of its failures) and the refusal of an `eval` with more keys and
 // arguments than a call can carry.
 //
+// The server CJS budget (22 140 B, measured 22 110) gates the `require` build of the server entry, which
+// the ESM budget does not measure and which is the larger of the two.
 // The admin budget (5 977 B, measured 5 947) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
 // the package rather than inlining a second copy of `CacheService` and the DI tokens. That is a
@@ -81,12 +83,13 @@ const ROOT = pkg.root
 // and the one caller that absorbs a throwing or rejecting host hook at every observability site, logs the
 // first failure of each hook once, and hands each hook a frozen copy of the event data, and keeps that log line's one allowance when Nest's
 // logging is off. It also covers the option-read guard, which passes only the library's own refusals through,
-// and the single read of every option block and of the tls, sentinels, nodes, natMap and scripts values under it: the key records, the complete tls option record and the copies built from them, and the validation of the tls kind and profile and of the script definitions, `register` included, the copy of the tls key material, the check of the entries of the lists the driver walks, the copy of every view of bytes in the key material, and of the object entries of `key` and `pfx`. It also covers the connector that opens every socket of a standalone client and of the nodes of a cluster, which runs the `Object.prototype` guard in the tick that opens it and hands Node an object without a prototype, and the guard on the connector of a sentinel client, which also checks the socket it opened, and the check that a standard key of `Object.prototype` was not overwritten or already replaced when the library loaded. The socket the connector opens also has its table of listeners sealed. The connector of a sentinel client, with its probe clients, and the seal of the delay queue of a cluster client are in the server budget too. So are the references to the built-ins of the language that the guard and those paths capture when the library loads.
+// and the single read of every option block and of the tls, sentinels, nodes, natMap and scripts values under it: the key records, the complete tls option record and the copies built from them, and the validation of the tls kind and profile and of the script definitions, `register` included, the copy of the tls key material, the check of the entries of the lists the driver walks, the copy of every view of bytes in the key material, and of the object entries of `key` and `pfx`. It also covers the connector that opens every socket of a standalone client and of the nodes of a cluster, which runs the `Object.prototype` guard in the tick that opens it and hands Node an object without a prototype, and the guard on the connector of a sentinel client, which also checks the socket it opened, and the check that a standard key of `Object.prototype` was not overwritten or already replaced when the library loaded. The socket the connector opens also has its table of listeners sealed. The connector of a sentinel client, with its probe clients, and the seal of the delay queue of a cluster client are in the server budget too. So are the references to the built-ins of the language that the guard and those paths capture when the library loads. The settlement helpers (`settleWithin`, `awaitAll`, `absorbCall`, `onRejection`, the constructor check and the pinned constructor), the guarded awaits that decide a verdict without a `Promise` static or a `.catch`, the pinned operand of every `await`, the load-time check of the intrinsic promise, the stepwise read of the scan streams of `scan` and `flushNamespace` (`nextStep`), the baseline of the species of the global promise, and the check that the socket of a connector has no `then` on its chain, a Proxy included, are in it as well (budget 22 005 B, measured 21 983).
 // The observability entry (2 400 B, measured 2 373) is the optional subpath that publishes them, and
 // the fan-out of `combineCacheEvents` that raises its first failure to the module; the
 // main entry imports neither `@bymax-one/nest-core` nor `prom-client`.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 20_630 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 22_005 },
+  { name: 'server CJS (NestJS module)', path: 'dist/server/index.cjs', brotli: 22_140 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_977 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   {

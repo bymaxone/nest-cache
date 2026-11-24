@@ -1,3 +1,5 @@
+import { absorbCall } from '@bymax-one/nest-cache'
+
 /**
  * Calls a host-supplied function so that nothing it does reaches the caller.
  *
@@ -10,8 +12,8 @@
  */
 export function absorb(call: () => unknown): void {
   try {
-    // Adopts a promise or any thenable, so a rejection (or a `then` that throws) is handled here.
-    void Promise.resolve(call()).then(undefined, () => undefined)
+    // Awaits a promise or any thenable, so a rejection (or a `then` that throws) is handled here.
+    absorbCall(call, () => undefined)
   } catch {
     // A faulty host function must never fail what it observes.
   }
