@@ -74,12 +74,9 @@ function failed(hook: CacheHookName): void {
  * @param call - Invokes the hook.
  */
 export function callHook(hook: CacheHookName, call: () => unknown): void {
-  try {
-    // Awaits a promise or any thenable, so a rejection (or a `then` that throws) is handled here.
-    absorbCall(call, () => failed(hook))
-  } catch {
-    failed(hook)
-  }
+  // Awaits a promise or any thenable inside an async function, so a synchronous throw, a rejection and
+  // a `then` that throws are all handled here.
+  absorbCall(call, () => failed(hook))
 }
 
 /**

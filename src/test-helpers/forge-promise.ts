@@ -55,9 +55,7 @@ export function handledRejection(error: Error = new Error('ECONNRESET')): Promis
 
 /** A `then` that answers `'PONG'` for whatever it is asked to wait for, after swapping the constructor (H1). */
 export function forgedThen(this: Promise<unknown>, resolve?: (value: unknown) => unknown): unknown {
-  Promise.prototype.constructor = function Fake() {
-    return undefined
-  } as unknown as PromiseConstructor
+  Promise.prototype.constructor = Object as unknown as PromiseConstructor
   queueMicrotask(() => {
     Promise.prototype.constructor = realConstructor
   })
