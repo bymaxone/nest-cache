@@ -128,6 +128,11 @@ function box<T>(
   return result as unknown as Settlement<T>
 }
 
+/** The promise itself when it is native, else a native promise that follows it through an `await`. */
+function asNative<T>(work: Promise<T>): Promise<T> {
+  return isNativePromise(work) ? work : (async (): Promise<T> => work)()
+}
+
 /** Attaches a no-op rejection handler, so an early rejection is never unhandled while another promise waits. */
 export function ignoreRejection(promise: Promise<unknown>): void {
   onRejection(promise, noop)
@@ -145,9 +150,7 @@ export function ignoreRejection(promise: Promise<unknown>): void {
  *   the work is awaited. The caller treats that as a failure of the operation, never as an outcome.
  */
 export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Promise<Settlement<T>> {
-  const awaited = isNativePromise(work)
-    ? work
-    : (async (): Promise<T> => await (work as Promise<T>))()
+  const awaited = asNative(work)
   // The work has a handler before the check can refuse, so a refusal never leaves its rejection unhandled.
   ignoreRejection(awaited)
   assertPromiseIntrinsics()
@@ -239,23 +242,21 @@ export async function awaitAll<T>(promises: readonly Promise<T>[]): Promise<T[]>
   let refusal: unknown
   for (let index = 0; index < promises.length; index += 1) {
     const work = promises[index] as Promise<T>
-    const native = isNativePromise(work)
-      ? work
-      : (async (): Promise<T> => await (work as Promise<T>))()
+    const native = asNative(work)
     try {
       ignoreRejection(native)
     } catch (error) {
       // A promise that cannot be pinned is still watched; the others are watched before this refuses.
       if (refusal === undefined) refusal = error
     }
-    awaited[index] = native
+    awaited.push(native)
   }
   assertPromiseIntrinsics()
   if (refusal !== undefined) throw refusal
   const values: T[] = []
   for (let index = 0; index < awaited.length; index += 1) {
     assertPromiseIntrinsics()
-    values[index] = await (awaited[index] as Promise<T>)
+    values.push(await (awaited[index] as Promise<T>))
   }
   assertPromiseIntrinsics()
   return values
