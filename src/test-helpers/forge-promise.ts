@@ -5,11 +5,17 @@
  * awaits anything else, because the runner awaits through the same `then`.
  */
 
+/** The intrinsic `Promise.race`, captured before any row replaces it. */
 export const realRace = Promise.race
+/** The intrinsic `Promise.all`, captured before any row replaces it. */
 export const realAll = Promise.all
+/** The intrinsic `Promise.prototype.catch`, captured so a row can restore it. */
 export const realCatch = Promise.prototype.catch
+/** The intrinsic `Promise.prototype.then`, for rows that call it directly or restore it. */
 export const realThen = Promise.prototype.then
+/** The intrinsic `Promise.prototype.constructor`, captured so a row can repair it. */
 export const realConstructor = Promise.prototype.constructor
+/** The intrinsic `Promise` global, captured so a row can restore a replaced binding. */
 export const RealPromise = Promise
 
 /** Puts every built-in a row replaced or planted back. */

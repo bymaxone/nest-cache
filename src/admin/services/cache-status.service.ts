@@ -65,7 +65,7 @@ async function raceDeadline<T>(
 ): Promise<T | typeof PROBE_TIMEOUT> {
   const settlement = await settleWithin(work, timeoutMs)
   if (settlement.kind === 'error') throw settlement.error
-  // `settleWithin` asserted last before it returned, and nothing but microtasks runs before this return.
+  // `settleWithin` asserts the intrinsics last, and only microtasks run between that check and this return.
   return settlement.kind === 'timeout' ? PROBE_TIMEOUT : (settlement.value as T)
 }
 

@@ -34,7 +34,7 @@ const FORBIDDEN: ReadonlyArray<[string, RegExp]> = [
 
 /**
  * Sites that are allowed to keep a construct, per file and construct, with how many times and why.
- * Empty: every site of the library was moved to the guarded helpers in `server/utils/settle.ts`.
+ * Empty: no site of the library may keep a construct; the guarded helpers in `server/utils/settle.ts` replace them.
  */
 const EXEMPT: ReadonlyArray<{ file: string; construct: string; count: number; reason: string }> = []
 

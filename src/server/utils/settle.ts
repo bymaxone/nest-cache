@@ -145,11 +145,12 @@ export function ignoreRejection(promise: Promise<unknown>): void {
  *   the work is awaited. The caller treats that as a failure of the operation, never as an outcome.
  */
 export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Promise<Settlement<T>> {
-  assertPromiseIntrinsics()
   const awaited = isNativePromise(work)
     ? work
     : (async (): Promise<T> => await (work as Promise<T>))()
+  // The work has a handler before the check can refuse, so a refusal never leaves its rejection unhandled.
   ignoreRejection(awaited)
+  assertPromiseIntrinsics()
   let finish: (settlement: Settlement<T>) => void = noop
   const outcome = new IntrinsicPromise<Settlement<T>>((resolve) => {
     finish = resolve
@@ -226,24 +227,31 @@ export function absorbCall(call: () => unknown, onFailure: () => void): void {
 
 /**
  * Awaits every promise, in the order given, and rejects with the first rejection in that order. Every
- * promise has a handler before the first await, so a later rejection is never unhandled, and each await is
- * preceded by a synchronous check.
+ * promise has a handler before anything can refuse or await, so no rejection is left unhandled, and each
+ * await is preceded by a synchronous check.
  *
  * @param promises - Work already in flight.
  * @returns The values, in the order given.
  * @throws {CacheException} `INVALID_OPTIONS` when the promise machinery was replaced or planted on.
  */
 export async function awaitAll<T>(promises: readonly Promise<T>[]): Promise<T[]> {
-  assertPromiseIntrinsics()
   const awaited: Promise<T>[] = []
+  let refusal: unknown
   for (let index = 0; index < promises.length; index += 1) {
     const work = promises[index] as Promise<T>
     const native = isNativePromise(work)
       ? work
       : (async (): Promise<T> => await (work as Promise<T>))()
-    ignoreRejection(native)
+    try {
+      ignoreRejection(native)
+    } catch (error) {
+      // A promise that cannot be pinned is still watched; the others are watched before this refuses.
+      if (refusal === undefined) refusal = error
+    }
     awaited[index] = native
   }
+  assertPromiseIntrinsics()
+  if (refusal !== undefined) throw refusal
   const values: T[] = []
   for (let index = 0; index < awaited.length; index += 1) {
     assertPromiseIntrinsics()

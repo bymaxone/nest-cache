@@ -11,7 +11,7 @@ import type { ChainableCommander } from 'ioredis'
 import { closeClient } from './close-client'
 import { execTransaction } from './exec-transaction'
 import { guardClient } from './guard-client'
-import { IntrinsicPromise, onRejection, pinConstructor } from './settle'
+import { awaitAll, IntrinsicPromise, onRejection, pinConstructor, settleWithin } from './settle'
 import {
   forgedThen,
   RealPromise,
@@ -42,18 +42,28 @@ function repairConstructor(): void {
   })
 }
 
+/** Plants a `then` on `Array.prototype`, which a refusing check reads before an array resolves. */
+function plantArrayThen(): void {
+  Object.defineProperty(Array.prototype, 'then', { value: () => undefined, configurable: true })
+}
+
 /**
- * Counts the unhandled rejections raised while `run` executes under a constructor that throws, and calls
+ * Counts the unhandled rejections raised while `run` executes under a forgery (a constructor that throws
+ * unless `install` says otherwise), and calls
  * `done` with the count once the built-ins are repaired. It takes a callback and returns no promise: the
  * runner reads `constructor` off any promise a test returns, which would throw while the getter is live.
  */
-function unhandledDuring(run: () => unknown, done: (unhandled: number) => void): void {
+function unhandledDuring(
+  run: () => unknown,
+  done: (unhandled: number) => void,
+  install: () => void = hostileConstructor
+): void {
   let count = 0
   const listener = (): void => {
     count += 1
   }
   process.on('unhandledRejection', listener)
-  hostileConstructor()
+  install()
   try {
     run()
   } catch {
@@ -75,7 +85,7 @@ afterEach(() => {
 })
 
 describe('promise helpers under a hostile promise built-in', () => {
-  // The rejection of the QUIT the library started got its handler through the prototype's constructor.
+  // The rejection of the QUIT the library started is handled without reading the prototype's constructor.
   it('leaves no rejection unhandled when the constructor throws and the quit rejects', (finish) => {
     const client = { status: 'ready', quit: jest.fn(bareRejection), disconnect: jest.fn() }
 
@@ -93,7 +103,7 @@ describe('promise helpers under a hostile promise built-in', () => {
     )
   })
 
-  // The rejection of a command the guarded client forwarded got its handler the same way.
+  // The rejection of a command the guarded client forwards is handled the same way.
   it('leaves no rejection unhandled when the constructor throws and a command rejects', (finish) => {
     const guarded = guardClient({ ping: bareRejection })
 
@@ -115,7 +125,7 @@ describe('promise helpers under a hostile promise built-in', () => {
     )
   })
 
-  // execTransaction's own check threw before the rejected EXEC had a handler.
+  // execTransaction handles the rejected EXEC before its own check can throw.
   it('leaves no rejection unhandled when the constructor throws and the exec rejects', (finish) => {
     const transaction = { exec: bareRejection } as unknown as ChainableCommander
 
@@ -183,6 +193,52 @@ describe('promise helpers under a hostile promise built-in', () => {
     expect(outcome.settled).toBe('resolved')
     expect(forced).toHaveBeenCalledTimes(1)
     expect(client.disconnect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('inputs that are already running', () => {
+  /** Runs `call` under `install`, handling the promise it returns, and expects no unhandled rejection. */
+  function expectNoUnhandled(
+    call: () => Promise<unknown>,
+    install: () => void,
+    finish: (error?: unknown) => void
+  ): void {
+    unhandledDuring(
+      () => {
+        realThen.call(call(), undefined, () => undefined)
+      },
+      (unhandled) => {
+        try {
+          expect(unhandled).toBe(0)
+          finish()
+        } catch (error) {
+          finish(error)
+        }
+      },
+      install
+    )
+  }
+
+  // The check refuses before awaiting, and the rejection of an input must already have a handler.
+  it('awaitAll handles a rejecting input before a planted then makes it refuse', (finish) => {
+    expectNoUnhandled(() => awaitAll([bareRejection()]), plantArrayThen, finish)
+  })
+
+  // The same holds for the work a deadline waits on.
+  it('settleWithin handles a rejecting work before a planted then makes it refuse', (finish) => {
+    expectNoUnhandled(() => settleWithin(bareRejection(), 1000), plantArrayThen, finish)
+  })
+
+  // One input that cannot take a pin must not leave the inputs after it without a handler.
+  it('awaitAll still watches every input when one of them is frozen', (finish) => {
+    const frozen = Object.freeze(
+      new IntrinsicPromise<never>((_resolve, reject) => setTimeout(reject, 5, 'x'))
+    )
+    expectNoUnhandled(
+      () => awaitAll([frozen, bareRejection()]),
+      () => undefined,
+      finish
+    )
   })
 })
 

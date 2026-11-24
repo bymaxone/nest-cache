@@ -65,7 +65,7 @@ describe('ConnectionManager readiness under a swapped promise constructor', () =
     expect(redisInstances[0]?.disconnect).toHaveBeenCalled()
   })
 
-  // The readiness promise had no handler when the check refused: the `end` the release causes rejected it.
+  // The readiness promise has a handler before the check can refuse; the `end` the release causes rejects it.
   it('leaves no rejection unhandled when the constructor throws during the readiness wait', (finish) => {
     const manager = new ConnectionManager(applyDefaults({ connection: { host: 'h' } }))
     const realConstructor = Promise.prototype.constructor

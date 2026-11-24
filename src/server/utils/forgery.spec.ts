@@ -2,8 +2,8 @@
  * A host that replaces a promise built-in after the import cannot turn a failed `QUIT` into a clean close
  * or a failed command into a reply.
  *
- * Layer: server. Covers `closeClient` (the `Promise.race` it used to read its verdict from) and
- * `guardClient` (the `.catch` it used to map a rejection with), under the four forgeries a host can
+ * Layer: server. Covers `closeClient` (its verdict never comes from `Promise.race`) and
+ * `guardClient` (its rejection mapping never goes through `.catch`), under the four forgeries a host can
  * write: a replaced static or prototype method, a replace-and-restore of `Promise.prototype.constructor`
  * from a replaced `then`, and a `then` planted on `Object.prototype`, `Array.prototype` or `Function.prototype`.
  */

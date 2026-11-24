@@ -1,6 +1,6 @@
 /**
  * `CacheStatusService.health` cannot be made to report a failed or late probe as up by replacing
- * `Promise.race`, which its deadline used to read the verdict from.
+ * `Promise.race`: the deadline's verdict never comes from a replaceable static.
  *
  * Layer: admin.
  */
