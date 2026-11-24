@@ -129,6 +129,40 @@ describe('the pin of a promise constructor', () => {
     })
   })
 
+  // Scenario: the pin hands `defineProperty` the descriptor, which a handler on the promise can record.
+  // Rule: the descriptor names all four fields, so no flag is left to a default.
+  it('hands defineProperty a descriptor that names every field', () => {
+    const received: PropertyDescriptor[] = []
+    const target = {}
+    const recording = new Proxy(target, {
+      defineProperty(object, key, descriptor): boolean {
+        received.push(descriptor)
+        return Reflect.defineProperty(object, key, descriptor)
+      }
+    })
+
+    pinConstructor(recording as unknown as Promise<unknown>)
+
+    expect(received).toStrictEqual([
+      { value: IntrinsicPromise, writable: false, enumerable: false, configurable: false }
+    ])
+  })
+
+  // Scenario: the pin cannot hold the property, and a host reads the reason in `details`.
+  // Rule: the text is the one the library documents, not only the constant it is read from.
+  it('names the replaced promise built-ins as the reason of a refusal', () => {
+    const frozen = Object.freeze(new IntrinsicPromise<void>((resolve) => resolve()))
+
+    const refusal = thrownBy(() => pinConstructor(frozen))
+
+    expect(refusal).toMatchObject({
+      details: {
+        reason: 'Promise built-ins the library relies on were replaced after it loaded',
+        count: 1
+      }
+    })
+  })
+
   // Scenario: counting accessors on Promise.prototype for `constructor` and `then`, armed only while an
   // `await` starts (it reads what it reads synchronously, before it yields).
   // Rule: an await of a pinned promise reads neither; an await of an unpinned one reads the constructor.
