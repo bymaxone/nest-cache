@@ -12,7 +12,13 @@
  */
 import { Inject, Injectable } from '@nestjs/common'
 
-import { CACHE_ERROR_CODES, CacheException, CacheService, guardClient } from '@bymax-one/nest-cache'
+import {
+  awaitAll,
+  CACHE_ERROR_CODES,
+  CacheException,
+  CacheService,
+  guardClient
+} from '@bymax-one/nest-cache'
 
 import { BYMAX_CACHE_ADMIN_OPTIONS } from '../bymax-cache-admin.constants'
 import type { ResolvedAdminOptions } from '../config/resolved-admin-options'
@@ -254,7 +260,7 @@ export class CacheAdminService {
   async describeKey(scopeId: string, key: string): Promise<KeyDetail> {
     const scope = this.resolve(scopeId, key)
     const client = guardClient(this.cache.getClient())
-    const [type, ttl] = await Promise.all([client.type(key), client.ttl(key)])
+    const [type, ttl] = await awaitAll<unknown>([client.type(key), client.ttl(key)])
     return {
       scopeId: scope.id,
       key,

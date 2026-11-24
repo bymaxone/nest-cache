@@ -217,20 +217,18 @@ describe('CacheObservability', () => {
       ): Promise<{ calls: number; consumed: number; handled: number }> => {
         const previous: unknown = Reflect.get(Logger, 'staticInstanceRef')
         const seen = { calls: 0, consumed: 0, handled: 0 }
-        const method = (): Promise<never> => {
+        // A thenable rather than a native promise: awaiting a native promise never calls its own `then`.
+        const method = (): PromiseLike<never> => {
           seen.calls += 1
-          const rejection = Promise.reject<never>(new Error('logger down'))
-          // Handled up front, so a path that drops it cannot raise an unhandled rejection here.
-          rejection.catch(() => undefined)
-          const adopt = rejection.then.bind(rejection)
-          rejection.then = ((ok, rejected) => {
-            seen.consumed += 1
-            if (typeof rejected === 'function') {
-              seen.handled += 1
-            }
-            return adopt(ok, rejected)
-          }) as typeof rejection.then
-          return rejection
+          return {
+            then: ((ok: unknown, rejected: unknown) => {
+              seen.consumed += 1
+              if (typeof rejected === 'function') {
+                seen.handled += 1
+                rejected(new Error('logger down'))
+              }
+            }) as PromiseLike<never>['then']
+          }
         }
         const service = { debug: method, log: method, warn: method, error: method }
         try {

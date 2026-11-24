@@ -8,6 +8,7 @@
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { releaseClient } from './release-client'
+import { assertPromiseIntrinsics, settleWithin } from './settle'
 
 /** The part of an ioredis client (standalone or cluster) that closing needs. */
 export interface ClosableClient {
@@ -56,7 +57,8 @@ function rejectQueued(client: ClosableClient): void {
  * within the same deadline. A client with no live socket (see {@link DOWN_STATUSES}) has nothing to quit:
  * it is disconnected without `onForced`, because nothing was forced, and what is queued on it is
  * rejected. A client that has ended is left
- * alone: it has nothing to quit and nothing to disconnect.
+ * alone: it has nothing to quit and nothing to disconnect. When the promise machinery was replaced or
+ * planted on, the close is not trusted to have been clean: it is forced.
  *
  * @param client - The ioredis client to close.
  * @param timeoutMs - How long the graceful quit may take.
@@ -76,21 +78,24 @@ export async function closeClient(
     rejectQueued(client)
     return
   }
-  let timer: ReturnType<typeof setTimeout> | undefined
+  // The quit is clean only when it resolved before the deadline. A rejection, the deadline and a refusal
+  // of the promise guard all read the same way, forced, so a replaced built-in can only make the close
+  // louder (the disconnect still runs), never make a failed quit look clean.
+  let clean: boolean
   try {
-    await Promise.race([
-      client.quit(),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new CacheException(CACHE_ERROR_CODES.SHUTDOWN_TIMEOUT, { timeoutMs })),
-          timeoutMs
-        )
-      })
-    ])
+    assertPromiseIntrinsics()
+    const quit = client.quit()
+    assertPromiseIntrinsics()
+    const settlement = await settleWithin(quit, timeoutMs)
+    if (settlement.kind === 'timeout') {
+      throw new CacheException(CACHE_ERROR_CODES.SHUTDOWN_TIMEOUT, { timeoutMs })
+    }
+    clean = settlement.kind === 'value'
   } catch {
+    clean = false
+  }
+  if (!clean) {
     onForced()
     releaseClient(client)
-  } finally {
-    clearTimeout(timer)
   }
 }

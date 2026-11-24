@@ -6,6 +6,7 @@
  * from the others, and one that writes to its data must not alter what the next one receives. The
  * first failure is then raised to the module, which logs it as `CACHE_HOOK_FAILED` and absorbs it.
  */
+import { awaitAll, onRejection } from '@bymax-one/nest-cache'
 import type { ICacheEvents } from '@bymax-one/nest-cache'
 
 /**
@@ -29,9 +30,11 @@ function fanOut(
       return undefined
     }
   })
-  const settled = Promise.all(pending).then(() => undefined)
+  const settled = (async (): Promise<void> => {
+    await awaitAll(pending as Promise<unknown>[])
+  })()
   if (failure !== undefined) {
-    settled.catch(() => undefined)
+    onRejection(settled, () => undefined)
     throw failure.error
   }
   return settled

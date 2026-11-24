@@ -20,11 +20,13 @@ const config: Config = {
   ...base,
   testEnvironment: '@stryker-mutator/jest-runner/jest-env/node',
   // `check-api-surface.spec.ts` and `strip-bundle-comments.spec.ts` run a repository script on
-  // fixture directories and touch no code in `src`, so they kill no mutant.
+  // fixture directories and touch no code in `src`, so they kill no mutant. `promise-statics.scan.spec.ts`
+  // reads the text of `src`, which the sandbox copies instrument, so it fails the dry run.
   testPathIgnorePatterns: [
     ...(base.testPathIgnorePatterns ?? ['/node_modules/']),
     '/check-api-surface\\.spec\\.ts$',
-    '/strip-bundle-comments\\.spec\\.ts$'
+    '/strip-bundle-comments\\.spec\\.ts$',
+    '/promise-statics\\.scan\\.spec\\.ts$'
   ]
 }
 

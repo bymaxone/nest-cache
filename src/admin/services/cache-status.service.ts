@@ -10,7 +10,8 @@ import {
   BYMAX_CACHE_OPTIONS,
   BYMAX_CACHE_SERIALIZER,
   CacheService,
-  DEFAULT_REDIS_PORT
+  DEFAULT_REDIS_PORT,
+  settleWithin
 } from '@bymax-one/nest-cache'
 import type { ISerializer, ResolvedOptions } from '@bymax-one/nest-cache'
 
@@ -45,33 +46,27 @@ const TLS_PROTOCOL = 'rediss:'
 const PROBE_TIMEOUT = Symbol('probe-timeout')
 
 /**
- * Races a probe against its deadline.
+ * Waits for a probe, at most `timeoutMs`.
  *
  * Resolves to {@link PROBE_TIMEOUT} rather than rejecting, so a deadline is not
- * signalled through the same channel as a connection failure — the two produce
- * different `reason`s and must not be recovered by inspecting an error. The
- * timer is always cleared, including when the work rejects first, so a probe
- * never keeps the process alive.
+ * signalled through the same channel as a connection failure: the two produce
+ * different `reason`s and must not be recovered by inspecting an error. The wait
+ * goes through the library's guarded settlement, never `Promise.race`, so a
+ * replaced built-in cannot turn a failed or late probe into a reply.
  *
  * @param work - The in-flight probe.
  * @param timeoutMs - How long to wait.
  * @returns The probe's value, or the timeout marker.
+ * @throws The probe's own rejection, or the refusal of the promise guard.
  */
 async function raceDeadline<T>(
   work: Promise<T>,
   timeoutMs: number
 ): Promise<T | typeof PROBE_TIMEOUT> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const deadline = new Promise<typeof PROBE_TIMEOUT>((resolve) => {
-    timer = setTimeout(() => {
-      resolve(PROBE_TIMEOUT)
-    }, timeoutMs)
-  })
-  try {
-    return await Promise.race([work, deadline])
-  } finally {
-    clearTimeout(timer)
-  }
+  const settlement = await settleWithin(work, timeoutMs)
+  if (settlement.kind === 'error') throw settlement.error
+  // `settleWithin` asserted last before it returned, and nothing but microtasks runs before this return.
+  return settlement.kind === 'timeout' ? PROBE_TIMEOUT : (settlement.value as T)
 }
 
 /**

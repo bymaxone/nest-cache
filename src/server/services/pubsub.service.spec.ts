@@ -6,6 +6,7 @@
  * namespacing, the cross-channel ignore path, handler-error swallowing, listener
  * detachment, and the graceful / forced subscriber shutdown.
  */
+import { realThen, restoreBuiltins } from '../../test-helpers/forge-promise'
 import { applyDefaults } from '../config/default-options'
 import { ConnectionManager } from '../connection/connection.manager'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
@@ -504,5 +505,37 @@ describe('PubSubService', () => {
 
     expect(fakeSubscriber.quit).toHaveBeenCalledTimes(1)
     expect(fakeSubscriber.disconnect).not.toHaveBeenCalled()
+  })
+
+  // The delivery chain read decode and the handler's failure through `then` and `catch`: a replaced `then`
+  // handed the handler a value decode never produced, and a replaced `catch` swallowed the failure.
+  it('delivers only what decode produced and reports a failing handler when then and catch are replaced', async () => {
+    const onEvent = jest.fn()
+    const observed = new PubSubService(options, connection, keyBuilder, undefined, { onEvent })
+    const received: unknown[] = []
+    await observed.subscribe<string>('forged', (message) => {
+      received.push(message)
+      throw new Error('handler boom')
+    })
+
+    Promise.prototype.then = function forged(this: Promise<unknown>, ok?: (v: unknown) => unknown) {
+      return realThen.call(this, () => ok?.('FORGED'))
+    } as typeof Promise.prototype.then
+    Promise.prototype.catch = function swallowed(this: Promise<unknown>) {
+      return this
+    } as typeof Promise.prototype.catch
+    try {
+      await connection.getClient().publish('ps:forged', '"real"')
+      await tick()
+    } finally {
+      restoreBuiltins()
+    }
+
+    expect(received).toEqual(['real'])
+    expect(onEvent).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({ reason: 'handler_error' })
+    )
+    await observed.onApplicationShutdown()
   })
 })

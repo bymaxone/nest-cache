@@ -10,6 +10,7 @@ import type { ChainableCommander } from 'ioredis'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { guardClient, mapCommandFailure } from './guard-client'
+import { assertPromiseIntrinsics } from './settle'
 
 /**
  * The command failure behind a discarded transaction. When a command is refused as it is queued (an
@@ -36,11 +37,15 @@ function firstQueued(error: unknown): unknown {
  *   it was queued reports its own refusal, not the `EXECABORT` that followed it.
  */
 export async function execTransaction(transaction: ChainableCommander): Promise<unknown[]> {
-  const replies = await guardClient(transaction)
-    .exec()
-    .catch((error: unknown) => {
-      throw mapCommandFailure(firstQueued(error))
-    })
+  let replies: Awaited<ReturnType<ChainableCommander['exec']>>
+  try {
+    const pending = guardClient(transaction).exec()
+    // Checked immediately before the await the verdict is read from, and no `.catch` stands between them.
+    assertPromiseIntrinsics()
+    replies = await pending
+  } catch (error) {
+    throw mapCommandFailure(firstQueued(error))
+  }
   if (replies === null) {
     throw new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, { reason: 'transaction_aborted' })
   }

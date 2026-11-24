@@ -39,6 +39,7 @@ import { guardSerializer } from '../utils/guard-serializer'
 import { HandlerGate } from '../utils/handler-gate'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
+import { onRejection } from '../utils/settle'
 import { validateRead } from '../utils/validate-read'
 
 /** Detaches a subscription's listener and unsubscribes its channel/pattern. */
@@ -316,13 +317,14 @@ export class PubSubService implements OnApplicationShutdown {
     invoke: (message: T, channel: string) => unknown
   ): Entry {
     let active = true
-    const execute = (channel: string, raw: string): Promise<unknown> =>
-      Promise.resolve()
-        .then(() => this.decode<T>(raw, options))
-        .then((message) => invoke(message, channel))
-        .catch((error: unknown) => {
-          this.emitHandlerError(channel, error)
-        })
+    const execute = async (channel: string, raw: string): Promise<void> => {
+      try {
+        await undefined
+        await invoke(await this.decode<T>(raw, options), channel)
+      } catch (error) {
+        this.emitHandlerError(channel, error)
+      }
+    }
     const dispatch: Dispatch = (channel, raw) => {
       if (this.gate === null) {
         void execute(channel, raw)
@@ -380,7 +382,7 @@ export class PubSubService implements OnApplicationShutdown {
     if (!ref) {
       const created: SubscriptionRef = { count: 0, ready: subscribe() }
       // Registered before any caller awaits `ready`, so the entry is gone when they reject.
-      created.ready.catch(() => refs.delete(target))
+      onRejection(created.ready, () => refs.delete(target))
       refs.set(target, created)
       ref = created
     }

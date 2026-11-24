@@ -23,6 +23,7 @@ import { CacheException } from '../errors/cache.exception'
 import { MAX_EVAL_ARGUMENTS } from '../utils/chunk'
 import { describeError } from '../utils/describe-error'
 import { guardClient } from '../utils/guard-client'
+import { awaitAll } from '../utils/settle'
 
 /** The `SCRIPT LOAD` subcommand keyword. */
 const SCRIPT_LOAD = 'LOAD'
@@ -99,7 +100,7 @@ export class ScriptManagerService implements OnApplicationBootstrap {
     if (readingOptions(() => this.options.connection?.lazyConnect)) {
       return
     }
-    await Promise.all([...this.scripts.keys()].map((name) => this.load(name)))
+    await awaitAll([...this.scripts.keys()].map((name) => this.load(name)))
   }
 
   /**
