@@ -97,6 +97,27 @@ describe('self-restoring plant while a scan stream is read', () => {
     expect(outcome).toBeInstanceOf(Error)
   })
 
+  // Scenario: nothing is planted, and `flushNamespace` runs to the end of the scan, then fails on an unlink.
+  // Rule: the scan stream is released on completion and on failure, so a host stream never stays open.
+  it.each([
+    ['completes', false],
+    ['fails on an unlink', true]
+  ])('flushNamespace destroys the scan stream when it %s', async (_name, failing) => {
+    const destroy = jest.fn()
+    const source = { ...(stream() as object), destroy }
+    jest.spyOn(cache.getClient(), 'scanStream').mockReturnValue(source as never)
+    jest
+      .spyOn(connection.getClient(), 'unlink')
+      .mockImplementation((() =>
+        failing ? Promise.reject(new Error('unlink failed')) : Promise.resolve(1)) as never)
+
+    const outcome = await settled(cache.flushNamespace())
+
+    expect(destroy).toHaveBeenCalledTimes(1)
+    if (failing) expect(outcome).toBeInstanceOf(Error)
+    else expect(outcome).toBe(3)
+  })
+
   // Scenario: the consumer plants the accessors after the first key, then asks for the next one.
   // Rule: scan yields only the keys the stream carried.
   it('scan never yields a key a forged chunk names', async () => {

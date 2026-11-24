@@ -64,6 +64,9 @@ export const nextTick = process.nextTick
 export const captureStackTrace = Error.captureStackTrace
 /** Why the library refuses to load when the `Promise` it would rely on is not the one of the language. */
 const PROMISE_BASELINE_REASON = 'The global Promise is not the Promise of the language'
+/** Why the library refuses to load when `Promise[Symbol.species]` is not the accessor of the language. */
+const SPECIES_BASELINE_REASON =
+  'The species of the global Promise is not an accessor of the language'
 
 /**
  * The `Promise` of the language, which the library holds from the moment it loads. A global `Promise` that was
@@ -82,6 +85,29 @@ export const NativePromise: PromiseConstructor = ((): PromiseConstructor => {
     throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, { reason: PROMISE_BASELINE_REASON })
   }
   return candidate
+})()
+
+/** `Symbol.species`, as it was when the library loaded. */
+export const speciesSymbol = Symbol.species
+
+/**
+ * The `get` of the accessor `Promise[Symbol.species]` is when the library loads. Every `then` call on a promise,
+ * the library's or a dependency's, builds its result through that accessor, so one a host replaced later would
+ * hand a promise it wrote to the next `await`. It is read from the descriptor, as an own field only: a data
+ * property, or an accessor whose `get` is found on `Object.prototype`, is not the accessor of the language.
+ *
+ * @throws {CacheException} `INVALID_OPTIONS` when the species of `Promise` is not an own accessor.
+ */
+export const NativeSpeciesGetter: unknown = ((): unknown => {
+  const descriptor = getOwnPropertyDescriptor(NativePromise, speciesSymbol)
+  if (
+    descriptor === undefined ||
+    !hasOwn(descriptor, 'get') ||
+    typeof descriptor.get !== 'function'
+  ) {
+    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, { reason: SPECIES_BASELINE_REASON })
+  }
+  return descriptor.get
 })()
 
 const arrayIterator = getPrototypeOf([][Symbol.iterator]()) as object

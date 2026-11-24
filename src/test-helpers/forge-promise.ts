@@ -18,6 +18,12 @@ export const realConstructor = Promise.prototype.constructor
 /** The intrinsic `Promise` global, captured so a row can restore a replaced binding. */
 export const RealPromise = Promise
 
+/** The descriptor of the intrinsic `Promise[Symbol.species]`, captured so a row can restore it. */
+export const realSpecies = Object.getOwnPropertyDescriptor(
+  Promise,
+  Symbol.species
+) as PropertyDescriptor
+
 /** Puts every built-in a row replaced or planted back. */
 export function restoreBuiltins(): void {
   Promise.race = realRace
@@ -26,9 +32,11 @@ export function restoreBuiltins(): void {
   Promise.prototype.then = realThen
   Promise.prototype.constructor = realConstructor
   globalThis.Promise = RealPromise
+  Object.defineProperty(Promise, Symbol.species, realSpecies)
   for (const owner of [Object.prototype, Array.prototype, Function.prototype]) {
     Reflect.deleteProperty(owner, 'then')
   }
+  Reflect.deleteProperty(Object.prototype, 'get')
 }
 
 /**

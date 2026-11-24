@@ -20,7 +20,9 @@ import {
   getPrototypeOf,
   hasOwn,
   NativePromise,
-  objectPrototype
+  NativeSpeciesGetter,
+  objectPrototype,
+  speciesSymbol
 } from '../connection/intrinsics'
 
 /** Why the guard refused when the promise machinery of the language was replaced or planted on. */
@@ -81,8 +83,9 @@ function watch(promise: Promise<unknown>, handler: (error: unknown) => void): vo
 
 /**
  * Counts what an `await` on a native promise would consult and a host replaced: the constructor of the
- * intrinsic promise (an `await` on a promise whose `constructor` differs calls its `then`), and a `then`
- * planted on the prototypes every resolution with an object value reads it from.
+ * intrinsic promise (an `await` on a promise whose `constructor` differs calls its `then`), a `then`
+ * planted on the prototypes every resolution with an object value reads it from, and the species accessor
+ * every `then` call, a dependency's included, builds its result through.
  *
  * @returns How many of them are not as they were when the library loaded.
  */
@@ -93,7 +96,27 @@ function countPromiseDefects(): number {
   if (hasOwn(objectPrototype, 'then')) count += 1
   if (hasOwn(ARRAY_PROTOTYPE, 'then')) count += 1
   if (hasOwn(FUNCTION_PROTOTYPE, 'then')) count += 1
+  const species = getOwnPropertyDescriptor(IntrinsicPromise, speciesSymbol)
+  if (species === undefined || !hasOwn(species, 'get') || species.get !== NativeSpeciesGetter)
+    count += 1
   return count
+}
+
+/**
+ * Refuses, synchronously, a value that has a `then` anywhere on its prototype chain. An async function that
+ * returns an object, and a promise resolved with one, read `then` on that whole chain, so a `then` planted on
+ * `EventEmitter.prototype`, `Stream.prototype` or any class prototype of a host object would replace the value
+ * that is returned. Nothing may run between this check and the `return`.
+ *
+ * @param value - The host object about to be returned from an async function.
+ * @throws {CacheException} `INVALID_OPTIONS` with a count of the holders of a `then`, and no value.
+ */
+export function assertNoThen(value: object): void {
+  let count = 0
+  for (let holder: object | null = value; holder !== null; holder = getPrototypeOf(holder)) {
+    if (hasOwn(holder, 'then')) count += 1
+  }
+  if (count > 0) throw guardRefusal(PROMISE_REASON, count)
 }
 
 /**
@@ -116,7 +139,7 @@ export function assertPromiseIntrinsics(): void {
 export function isNativePromise(value: unknown): value is Promise<unknown> {
   if (typeof value !== 'object' || value === null) return false
   let prototype = getPrototypeOf(value)
-  while (prototype !== null && prototype !== undefined) {
+  while (prototype !== null) {
     if (prototype === PROMISE_PROTOTYPE) return true
     prototype = getPrototypeOf(prototype)
   }

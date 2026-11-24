@@ -7,10 +7,12 @@
  * planted while the connect waited, or only while the probe was built, would send the probe and the sentinel
  * password to a socket of the attacker. The stock connector of ioredis is run the same way as the control.
  */
+import { EventEmitter } from 'node:events'
 import { createServer as netServer } from 'node:net'
 import type { Server, Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Stream } from 'node:stream'
 
 import { SentinelConnector } from 'ioredis'
 
@@ -183,6 +185,39 @@ describe('the connector of a sentinel client', () => {
     }
 
     expect((error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(stream.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  // Scenario: a `then` is planted on a prototype of the socket (Stream or EventEmitter) while the connect it
+  // extends runs, after that connect resolved. Rule: returning the socket from an async function reads `then`
+  // along its whole chain and would call the planted function, so the chain is checked first: the socket is
+  // destroyed, the connect refused, and the planted function never answers for it.
+  it.each([
+    ['Stream.prototype', Stream.prototype],
+    ['EventEmitter.prototype', EventEmitter.prototype]
+  ])('destroys the socket and refuses when a then is planted on %s', async (_name, owner) => {
+    const stream = Object.assign(Object.create(Stream.prototype) as object, fakeStream())
+    const spy = jest.spyOn(SentinelConnector.prototype, 'connect').mockImplementation(() => {
+      const connected = new Promise((resolve) => resolve(stream))
+      Object.defineProperty(owner, 'then', {
+        value: (resolve: (value: unknown) => void) => resolve('forged'),
+        configurable: true,
+        writable: true
+      })
+      return connected as never
+    })
+    let outcome: { value?: unknown; error?: unknown }
+    try {
+      outcome = { value: await new GuardedSentinelConnector(SENTINEL_OPTIONS).connect(jest.fn()) }
+    } catch (caught) {
+      outcome = { error: caught }
+    } finally {
+      Reflect.deleteProperty(owner, 'then')
+      spy.mockRestore()
+    }
+
+    expect(outcome.value).toBeUndefined()
+    expect((outcome.error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
     expect(stream.destroy).toHaveBeenCalledTimes(1)
   })
 

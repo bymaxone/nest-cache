@@ -8,6 +8,7 @@
  * trusted. The guard of the manager runs at build time only, so the connector runs it again, in the tick
  * that opens the socket.
  */
+import { EventEmitter } from 'node:events'
 import { createServer as netServer, Socket } from 'node:net'
 import type { Server } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -266,6 +267,31 @@ function plantedOn<T>(target: object, names: string[], run: () => T): T {
     for (const name of names) Reflect.deleteProperty(target, name)
   }
 }
+
+describe('the connector with a then planted on a prototype of the socket', () => {
+  // Scenario: a `then` appears on EventEmitter.prototype between the call of `connect()` and the tick that
+  // resolves it with the socket. Rule: resolving with the socket would call the planted function, so the
+  // chain is checked in that tick: the socket is destroyed, the connect refused, nothing forged.
+  it('destroys the socket and refuses, and the planted function does not answer for it', async () => {
+    const port = await listenOnPort(netServer(answer))
+    const connector = new GuardedConnector({ host: '127.0.0.1', port, family: 4 })
+    Object.defineProperty(EventEmitter.prototype, 'then', {
+      value: (resolve: (value: unknown) => void) => resolve('forged'),
+      configurable: true,
+      writable: true
+    })
+    let outcome: { stream?: unknown; error?: unknown }
+    try {
+      outcome = await settle(connector)
+    } finally {
+      Reflect.deleteProperty(EventEmitter.prototype, 'then')
+    }
+
+    expect(outcome.stream).toBeUndefined()
+    expect((outcome.error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    connector.disconnect()
+  })
+})
 
 describe('the table of listeners of the socket', () => {
   // Scenario: a string is planted on Object.prototype under the name of an event after the guard ran; Node

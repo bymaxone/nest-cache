@@ -9,12 +9,16 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 const RealPromise = Promise
 const realConstructor = Promise.prototype.constructor
 
-function loadIntrinsics(): { NativePromise: PromiseConstructor } {
-  let loaded: { NativePromise: PromiseConstructor } | undefined
+const realSpecies = Object.getOwnPropertyDescriptor(Promise, Symbol.species) as PropertyDescriptor
+
+type Loaded = { NativePromise: PromiseConstructor; NativeSpeciesGetter: unknown }
+
+function loadIntrinsics(): Loaded {
+  let loaded: Loaded | undefined
   jest.isolateModules(() => {
-    loaded = require('./intrinsics') as { NativePromise: PromiseConstructor }
+    loaded = require('./intrinsics') as Loaded
   })
-  return loaded as { NativePromise: PromiseConstructor }
+  return loaded as Loaded
 }
 
 function refusalOf(load: () => unknown): { code?: string } {
@@ -30,6 +34,8 @@ describe('NativePromise baseline', () => {
   afterEach(() => {
     globalThis.Promise = RealPromise
     Promise.prototype.constructor = realConstructor
+    Reflect.deleteProperty(Object.prototype, 'get')
+    Object.defineProperty(Promise, Symbol.species, realSpecies)
   })
 
   it('is the intrinsic Promise when nothing was replaced', () => {
@@ -66,6 +72,63 @@ describe('NativePromise baseline', () => {
     // Assert
     expect(refusal).toMatchObject({
       response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
+    })
+  })
+
+  // Scenario: a global Promise whose own prototype is not the intrinsic one but which the intrinsic prototype
+  // names as its constructor. Rule: the prototype comparison refuses it by itself, so it is not left to the
+  // constructor comparison alone.
+  it('refuses a global Promise that the intrinsic prototype names but that has a prototype of its own', () => {
+    // Arrange
+    function Imposter(): void {}
+    Imposter.prototype = {}
+    Promise.prototype.constructor = Imposter as unknown as PromiseConstructor
+    globalThis.Promise = Imposter as unknown as PromiseConstructor
+
+    // Act
+    const refusal = refusalOf(loadIntrinsics)
+
+    // Assert
+    expect(refusal).toMatchObject({
+      response: { error: { code: CACHE_ERROR_CODES.INVALID_OPTIONS } }
+    })
+  })
+
+  // Scenario: the refusal names why, with the exact text a host reads in `details`.
+  it('names the baseline as the reason of the refusal', () => {
+    // Arrange
+    class Wrapped<T> extends RealPromise<T> {}
+    globalThis.Promise = Wrapped as unknown as PromiseConstructor
+
+    // Act
+    const refusal = refusalOf(loadIntrinsics)
+
+    // Assert
+    expect(refusal).toMatchObject({
+      details: { reason: 'The global Promise is not the Promise of the language' }
+    })
+  })
+
+  // Scenario: the species of the Promise the library loads against is read as an own accessor.
+  it('takes the get of the species accessor as the baseline', () => {
+    // Act
+    const { NativeSpeciesGetter } = loadIntrinsics()
+
+    // Assert
+    expect(NativeSpeciesGetter).toBe(realSpecies.get)
+  })
+
+  // Scenario: the species was replaced by a data property before the import.
+  it('refuses a Promise whose species is a data property', () => {
+    // Arrange
+    Object.defineProperty(Promise, Symbol.species, { value: RealPromise, configurable: true })
+
+    // Act
+    const refusal = refusalOf(loadIntrinsics)
+
+    // Assert
+    expect(refusal).toMatchObject({
+      details: { reason: 'The species of the global Promise is not an accessor of the language' }
     })
   })
 })
