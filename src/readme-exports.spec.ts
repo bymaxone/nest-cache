@@ -16,6 +16,7 @@ const ENTRIES = [
   'src/admin/index.ts',
   'src/metrics/index.ts',
   'src/observability/index.ts',
+  'src/idempotency/index.ts',
   'src/shared/index.ts'
 ] as const
 

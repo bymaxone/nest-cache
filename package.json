@@ -61,6 +61,16 @@
         "default": "./dist/observability/index.cjs"
       }
     },
+    "./idempotency": {
+      "import": {
+        "types": "./dist/idempotency/index.d.ts",
+        "default": "./dist/idempotency/index.mjs"
+      },
+      "require": {
+        "types": "./dist/idempotency/index.d.cts",
+        "default": "./dist/idempotency/index.cjs"
+      }
+    },
     "./shared": {
       "import": {
         "types": "./dist/shared/index.d.ts",
@@ -89,6 +99,9 @@
       ],
       "observability": [
         "./dist/observability/index.d.cts"
+      ],
+      "idempotency": [
+        "./dist/idempotency/index.d.cts"
       ]
     }
   },

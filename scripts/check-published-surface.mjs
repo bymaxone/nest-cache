@@ -74,13 +74,14 @@ function publicImport(entry, specifier) {
   return `import { ${parts.join(', ')} } from '${specifier}'`
 }
 
-/** The server, `./admin`, `./metrics` and `./observability` entry points, each imported in full. */
+/** The server, `./admin`, `./metrics`, `./observability` and `./idempotency` entry points, each imported in full. */
 function publicImports() {
   return [
     publicImport('server', PKG.name),
     publicImport('admin', `${PKG.name}/admin`),
     publicImport('metrics', `${PKG.name}/metrics`),
-    publicImport('observability', `${PKG.name}/observability`)
+    publicImport('observability', `${PKG.name}/observability`),
+    publicImport('idempotency', `${PKG.name}/idempotency`)
   ].join('\n')
 }
 

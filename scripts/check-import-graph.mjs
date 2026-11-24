@@ -27,7 +27,7 @@ const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|(?:\b|_)require\s*\(\s*)(['"])
 const PEERS = ['@bymax-one/nest-core', 'prom-client']
 
 /** Entries that must not load a peer. */
-const PEER_FREE = ['server', 'admin', 'shared']
+const PEER_FREE = ['server', 'admin', 'shared', 'idempotency']
 
 /** The bundle formats every entry ships. */
 const FORMATS = ['mjs', 'cjs']
@@ -49,7 +49,7 @@ const isPackage = (specifier, name) => specifier === name || specifier.startsWit
  */
 export function importGraphProblems(distDir) {
   const problems = []
-  const entries = ['server', 'admin', 'shared', 'metrics', 'observability']
+  const entries = ['server', 'admin', 'shared', 'metrics', 'observability', 'idempotency']
   for (const entry of entries) {
     for (const format of FORMATS) {
       const file = join(distDir, entry, `index.${format}`)

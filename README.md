@@ -87,13 +87,14 @@ so you control exact versions and the supply-chain surface stays minimal.
 
 One package, several entry points — import only what your app needs:
 
-| Subpath           | Import                                | Purpose                                                                                                                                             |                                     Dependencies                                     |
-| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------: |
-| **Server**        | `@bymax-one/nest-cache`               | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException`                                            |                        NestJS 11, ioredis 6, reflect-metadata                        |
-| **Admin**         | `@bymax-one/nest-cache/admin`         | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal                                                |                        NestJS 11, ioredis 6, the server entry                        |
-| **Metrics**       | `@bymax-one/nest-cache/metrics`       | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core`                                            | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
-| **Observability** | `@bymax-one/nest-cache/observability` | Operation, Pub/Sub backlog and drop metrics, a readiness indicator and the library's log events, through `@bymax-one/nest-core` and the Nest logger | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
-| **Shared**        | `@bymax-one/nest-cache/shared`        | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                                                             |                                         None                                         |
+| Subpath           | Import                                | Purpose                                                                                                                                             |                                                     Dependencies                                                      |
+| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------: |
+| **Server**        | `@bymax-one/nest-cache`               | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException`                                            |                                        NestJS 11, ioredis 6, reflect-metadata                                         |
+| **Admin**         | `@bymax-one/nest-cache/admin`         | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal                                                |                                        NestJS 11, ioredis 6, the server entry                                         |
+| **Metrics**       | `@bymax-one/nest-cache/metrics`       | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core`                                            |                 NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`                  |
+| **Observability** | `@bymax-one/nest-cache/observability` | Operation, Pub/Sub backlog and drop metrics, a readiness indicator and the library's log events, through `@bymax-one/nest-core` and the Nest logger |                 NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`                  |
+| **Idempotency**   | `@bymax-one/nest-cache/idempotency`   | `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`                      | NestJS 11, ioredis 6, the server entry; the `@bymax-one/nest-core` release that has the idempotency port (types only) |
+| **Shared**        | `@bymax-one/nest-cache/shared`        | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                                                             |                                                         None                                                          |
 
 ```
 shared (zero deps)
@@ -882,6 +883,44 @@ that is gone by the time it is read, deleted or expired after its type was asked
 ### Cluster
 
 Every scan-based operation throws `UNSUPPORTED_IN_CLUSTER`, inherited from `CacheService.getClient()` rather than restated. `isScanSupported` travels on the health payload so a console never has to re-derive that rule from `mode`.
+
+---
+
+## 🔁 Idempotency store (`/idempotency`)
+
+`RedisIdempotencyStore` implements `IIdempotencyStore` from `@bymax-one/nest-core`, so an application can keep the claims and answers of HTTP idempotency keys in the Redis it already uses for the cache. The subpath needs the `@bymax-one/nest-core` release that has the idempotency port; it imports that package for types only, so the bundle holds no runtime reference to it. You bind the store to core's token yourself:
+
+```ts
+import { BYMAX_IDEMPOTENCY_STORE } from '@bymax-one/nest-core/idempotency'
+import { RedisIdempotencyStore } from '@bymax-one/nest-cache/idempotency'
+
+@Module({
+  providers: [
+    RedisIdempotencyStore,
+    { provide: BYMAX_IDEMPOTENCY_STORE, useExisting: RedisIdempotencyStore }
+  ]
+})
+export class IdempotencyModule {}
+```
+
+How it stores and answers:
+
+- A claim is one hash under `<namespace>:idem:<key>`. The key arrives already hashed and is not hashed again. `begin` is one atomic script (claim with an `EX` lease, or return the held record); `complete` and `release` are one compare-and-set script each on the token `begin` returned. All three touch a single key and run on the primary.
+- `complete` and `release` act only on an in-progress claim held by the token; they answer `false` after expiry, after a takeover and after a completion. The token never leaves the store in a record.
+- The stored body is opaque text, kept byte for byte; an empty body and an absent body stay different. Enforcing a size limit on the body is the caller's. The serialised headers are limited to 65,536 bytes.
+- `leaseSeconds` and `ttlSeconds` must be integers from 1 to 2,147,483,647; anything else is refused with `cache.invalid_options` before a command is sent.
+- Every failure rejects, so a caller that fails closed never replays a doubtful answer: an outage, a timeout and a lost script cache reject with the connection and script errors the rest of the library uses. A stored value that is not exactly a record this package wrote (an unknown state, a missing or truncated field, a key with no expiry, a key that is not a hash) rejects with `cache.deserialization_failed`, never as a claim and never as a replay. Nothing from the key, the token or the body appears in an error, a log or a metric label.
+- The serialised-header bound is checked in `complete`, after the handler's effects have run. An oversized map makes `complete` reject and the claim stays `in_progress` until its lease ends: it is not released, so the request is not executed a second time at once, and the key can run again afterwards. This package bounds the headers and not the body, and it has no HTTP layer: the body is stored as given. Which caller owns the bounds follows the port's documentation in `@bymax-one/nest-core`.
+- A key holding something this package did not write (another type, or a hash with extra fields) is refused on every `begin` and stays blocked until an operator deletes it or it expires.
+- If a client resends `begin` after a lost reply, the second call finds the key held and answers `claimed: false` with the in-progress record: it never gets a second claim, and the first claim stays orphaned until its lease ends.
+
+Durability limits, the same as for any Redis-backed lock:
+
+- An eviction policy other than `noeviction` can drop a claim under memory pressure.
+- `FLUSHDB`, `FLUSHALL` and `CacheService.flushNamespace()` remove claims, because they live in the namespace.
+- A failover with asynchronous replication can lose a claim the old primary acknowledged.
+- A lease shorter than the handler lets the claim expire while the work runs, so a retry can start it again.
+- A claim orphaned by a resend lasts until its lease ends.
 
 ---
 

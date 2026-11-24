@@ -7,6 +7,12 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+### Added
+
+- `@bymax-one/nest-cache/idempotency`: `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`. The subpath imports that package for types only and needs the release that has the idempotency port; bind the class to core's `BYMAX_IDEMPOTENCY_STORE` in your module. `begin`, `complete` and `release` are single-key scripts on the primary; a malformed or truncated stored value rejects with `cache.deserialization_failed`.
+
+  **Apply to a consumer:** nothing changes for an existing install; the new subpath is opt-in and the other entries are untouched.
+
 ## [1.2.40] - 2026-11-24
 
 ### Security

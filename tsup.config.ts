@@ -100,6 +100,33 @@ export default defineConfig([
     treeshake: true,
     sourcemap: false
   },
+  // Idempotency entry — a Redis store for HTTP idempotency keys.
+  //
+  // `@bymax-one/nest-cache` is external for the reason the admin entry gives (one copy of
+  // `ScriptManagerService`, `KeyBuilder` and the error types per install). `@bymax-one/nest-core` is
+  // external and imported for types only, so the bundle holds no runtime reference to it.
+  {
+    entry: { 'idempotency/index': 'src/idempotency/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({
+      js: format === 'esm' ? '.mjs' : '.cjs'
+    }),
+    external: [
+      /^@nestjs\//,
+      'reflect-metadata',
+      'ioredis',
+      '@bymax-one/nest-cache',
+      '@bymax-one/nest-core'
+    ],
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
+  },
   // Shared entry — types + constants (zero deps)
   {
     entry: { 'shared/index': 'src/shared/index.ts' },
