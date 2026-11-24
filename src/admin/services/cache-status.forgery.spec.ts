@@ -5,15 +5,25 @@
  * Layer: admin.
  */
 import { applyDefaults } from '../../server/config/default-options'
+import { ConnectionManager } from '../../server/connection/connection.manager'
+import { CacheService } from '../../server/services/cache.service'
+import { KeyBuilder } from '../../server/utils/key-builder'
 import { resolveAdminOptions } from '../config/resolved-admin-options'
 import { CacheStatusService } from './cache-status.service'
 
 import type { ISerializer } from '../../server/interfaces/serializer.interface'
 
+jest.mock('ioredis', () => {
+  const Mock = require('ioredis-mock')
+  return require('../../test-helpers/ioredis-module').ioredisModule(Mock, class FakeCluster {})
+})
+
 const realRace = Promise.race
+const realThen = Promise.prototype.then
 
 afterEach(() => {
   Promise.race = realRace
+  Promise.prototype.then = realThen
 })
 
 class JsonLike implements ISerializer {
@@ -51,6 +61,52 @@ describe('CacheStatusService.health under a replaced Promise.race', () => {
     Promise.race = (() => Promise.resolve('PONG')) as unknown as typeof Promise.race
 
     const health = await service.health()
+
+    expect(health.status).toBe('down')
+  })
+})
+
+describe('CacheStatusService.health with the real cache under a then replaced across the call', () => {
+  // A `then` in place while health() is called and restored right after answered PONG for a failed ping.
+  it('reports down when PING fails and a then answering PONG is restored after the call', async () => {
+    const options = applyDefaults({ connection: { host: 'h' }, namespace: 'test' })
+    const connection = new ConnectionManager(options)
+    await connection.onModuleInit()
+    const cache = new CacheService(options, connection, new KeyBuilder(options))
+    jest
+      .spyOn(connection.getClient(), 'ping')
+      .mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => setTimeout(() => reject(new Error('ECONNRESET')), 5))
+      )
+    const service = new CacheStatusService(
+      cache,
+      options,
+      resolveAdminOptions({
+        scopes: [
+          {
+            id: 'cache',
+            label: 'Cache',
+            pattern: 'app:*',
+            isReadable: true,
+            origin: 'the namespace'
+          }
+        ]
+      }),
+      new JsonLike()
+    )
+    Promise.prototype.then = function then(this: Promise<unknown>, onFulfilled?: unknown) {
+      const answer = (): unknown =>
+        typeof onFulfilled === 'function'
+          ? (onFulfilled as (v: unknown) => unknown)('PONG')
+          : undefined
+      return realThen.call(this, answer, answer)
+    } as typeof Promise.prototype.then
+
+    const pending = service.health()
+    Promise.prototype.then = realThen
+    const health = await pending
+    await connection.onApplicationShutdown()
 
     expect(health.status).toBe('down')
   })

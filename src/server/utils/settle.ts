@@ -36,11 +36,6 @@ const PROMISE_PROTOTYPE = IntrinsicPromise.prototype
 const ARRAY_PROTOTYPE = Array.prototype
 const FUNCTION_PROTOTYPE = Function.prototype
 
-/** `Promise.prototype.then` as it was when the library loaded, for the one call that must not be looked up. */
-const PROMISE_THEN = PROMISE_PROTOTYPE.then
-/** `Reflect.apply`, as it was when the library loaded. */
-const apply = Reflect.apply
-
 const noop = (): void => undefined
 
 /** The descriptor that gives a promise its own `constructor`; it has no prototype and is frozen. */
@@ -49,22 +44,24 @@ const OWN_CONSTRUCTOR = ((): Readonly<Record<string, unknown>> => {
   descriptor['value'] = IntrinsicPromise
   descriptor['writable'] = false
   descriptor['enumerable'] = false
-  descriptor['configurable'] = true
+  descriptor['configurable'] = false
   return freeze(descriptor)
 })()
 
 /**
- * Gives a promise an own `constructor`, so that neither attaching a handler nor awaiting it reads
- * `Promise.prototype.constructor`: a throwing or planted one would leave the rejection of a promise the
- * library itself started unhandled. A promise that cannot take the property is left as it is.
+ * Gives a promise an own, non-writable, non-configurable `constructor`, so that neither attaching a
+ * handler nor awaiting it reads `Promise.prototype.constructor`, and nothing can change it afterwards.
+ * Pinning twice is harmless: the same descriptor is accepted again.
  *
  * @param promise - A promise about to get a handler or an `await`.
+ * @throws {CacheException} `INVALID_OPTIONS` when the promise cannot take the property (frozen, sealed or
+ *   exotic): such a promise is never treated as pinned, so a caller fails closed rather than resolve.
  */
 export function pinConstructor(promise: object): void {
   try {
     defineProperty(promise, 'constructor', OWN_CONSTRUCTOR)
   } catch {
-    // A frozen or exotic promise keeps the prototype's constructor, which the entry check covers.
+    throw guardRefusal(PROMISE_REASON, 1)
   }
 }
 
@@ -149,7 +146,9 @@ export function ignoreRejection(promise: Promise<unknown>): void {
  */
 export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Promise<Settlement<T>> {
   assertPromiseIntrinsics()
-  const awaited = isNativePromise(work) ? work : (async (): Promise<T> => await work)()
+  const awaited = isNativePromise(work)
+    ? work
+    : (async (): Promise<T> => await (work as Promise<T>))()
   ignoreRejection(awaited)
   let finish: (settlement: Settlement<T>) => void = noop
   const outcome = new IntrinsicPromise<Settlement<T>>((resolve) => {
@@ -174,24 +173,35 @@ export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Prom
 }
 
 /**
- * Attaches a rejection handler through the `then` captured when the library loaded, so no `.catch`
- * lookup stands between a rejection and what handles it.
+ * Watches a promise for its rejection with a native `await` of the promise after it has its own
+ * `constructor`, so neither `.catch` nor `then` is looked up and `Symbol.species` is never read: a
+ * `then` call would read the species of the constructor, and a throwing one would leave the rejection
+ * unhandled. The wait starts before this returns, so the promise has a handler before anything else runs.
  *
  * @param promise - The promise to watch.
  * @param handler - Called with the rejection; its own throw is dropped.
+ * @throws {CacheException} `INVALID_OPTIONS` when the promise cannot be pinned; it is still watched.
  */
 export function onRejection(promise: Promise<unknown>, handler: (error: unknown) => void): void {
-  pinConstructor(promise)
-  apply(PROMISE_THEN, promise, [
-    undefined,
-    (error: unknown): void => {
+  let refusal: unknown
+  try {
+    pinConstructor(promise)
+  } catch (error) {
+    refusal = error
+  }
+  void (async (): Promise<void> => {
+    try {
+      await promise
+    } catch (error) {
       try {
         handler(error)
       } catch {
-        // The handler's own failure is dropped, so no rejection of the derived promise is left unhandled.
+        // The handler's own failure is dropped, so no rejection of this watcher is left unhandled.
       }
     }
-  ])
+  })()
+  // The promise is watched either way; a promise that could not be pinned is refused to the caller.
+  if (refusal !== undefined) throw refusal
 }
 
 /**
@@ -228,7 +238,9 @@ export async function awaitAll<T>(promises: readonly Promise<T>[]): Promise<T[]>
   const awaited: Promise<T>[] = []
   for (let index = 0; index < promises.length; index += 1) {
     const work = promises[index] as Promise<T>
-    const native = isNativePromise(work) ? work : (async (): Promise<T> => await work)()
+    const native = isNativePromise(work)
+      ? work
+      : (async (): Promise<T> => await (work as Promise<T>))()
     ignoreRejection(native)
     awaited[index] = native
   }

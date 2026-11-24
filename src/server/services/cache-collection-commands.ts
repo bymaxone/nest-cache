@@ -87,7 +87,7 @@ export abstract class CacheCollectionCommands {
   ): Promise<T | null> {
     // Whether Redis returned a payload, not whether it decodes to a value: the JSON text `null` is a hit.
     let present = false
-    return this.track(
+    return await this.track(
       'hget',
       async () => {
         const key = this.keyBuilder.build(prefix, id)
@@ -96,7 +96,7 @@ export abstract class CacheCollectionCommands {
           return null
         }
         present = true
-        return this.decode<T>(raw, options)
+        return await this.decode<T>(raw, options)
       },
       () => found(present)
     )
@@ -114,9 +114,9 @@ export abstract class CacheCollectionCommands {
    * @throws {CacheException} `SERIALIZATION_FAILED` when `value` cannot be encoded.
    */
   async hset<T>(prefix: string, id: string, field: string, value: T): Promise<number> {
-    return this.track('hset', async () => {
+    return await this.track('hset', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return this.client().hset(key, field, this.serializer.serialize(value))
+      return await this.client().hset(key, field, this.serializer.serialize(value))
     })
   }
 
@@ -137,7 +137,7 @@ export abstract class CacheCollectionCommands {
     id: string,
     options?: ReadOptions<T>
   ): Promise<Record<string, T>> {
-    return this.track(
+    return await this.track(
       'hgetall',
       async () => {
         const key = this.keyBuilder.build(prefix, id)
@@ -167,9 +167,9 @@ export abstract class CacheCollectionCommands {
     if (fields.length === 0) {
       return 0
     }
-    return this.track('hdel', async () => {
+    return await this.track('hdel', async () => {
       const key = this.keyBuilder.build(prefix, id)
-      return this.client().hdel(key, ...fields)
+      return await this.client().hdel(key, ...fields)
     })
   }
 
@@ -190,8 +190,8 @@ export abstract class CacheCollectionCommands {
     if (members.length === 0) {
       return 0
     }
-    return this.track('sadd', async () => {
-      return this.client().sadd(this.keyBuilder.build(prefix, id), ...members)
+    return await this.track('sadd', async () => {
+      return await this.client().sadd(this.keyBuilder.build(prefix, id), ...members)
     })
   }
 
@@ -207,8 +207,8 @@ export abstract class CacheCollectionCommands {
     if (members.length === 0) {
       return 0
     }
-    return this.track('srem', async () => {
-      return this.client().srem(this.keyBuilder.build(prefix, id), ...members)
+    return await this.track('srem', async () => {
+      return await this.client().srem(this.keyBuilder.build(prefix, id), ...members)
     })
   }
 
@@ -220,10 +220,10 @@ export abstract class CacheCollectionCommands {
    * @returns The raw string members; `[]` when the set does not exist.
    */
   async smembers(prefix: string, id: string): Promise<string[]> {
-    return this.track(
+    return await this.track(
       'smembers',
       async () => {
-        return this.client().smembers(this.keyBuilder.build(prefix, id))
+        return await this.client().smembers(this.keyBuilder.build(prefix, id))
       },
       (members) => found(members.length > 0)
     )
@@ -238,7 +238,7 @@ export abstract class CacheCollectionCommands {
    * @returns `true` when the member is present, otherwise `false`.
    */
   async sismember(prefix: string, id: string, member: string): Promise<boolean> {
-    return this.track(
+    return await this.track(
       'sismember',
       async () => {
         const result = await this.client().sismember(this.keyBuilder.build(prefix, id), member)
@@ -256,8 +256,8 @@ export abstract class CacheCollectionCommands {
    * @returns The member count; `0` when the set does not exist.
    */
   async scard(prefix: string, id: string): Promise<number> {
-    return this.track('scard', async () => {
-      return this.client().scard(this.keyBuilder.build(prefix, id))
+    return await this.track('scard', async () => {
+      return await this.client().scard(this.keyBuilder.build(prefix, id))
     })
   }
 }

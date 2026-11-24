@@ -39,7 +39,12 @@ import { guardSerializer } from '../utils/guard-serializer'
 import { HandlerGate } from '../utils/handler-gate'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
-import { assertPromiseIntrinsics, onRejection } from '../utils/settle'
+import {
+  assertPromiseIntrinsics,
+  ignoreRejection,
+  isNativePromise,
+  onRejection
+} from '../utils/settle'
 import { validateRead } from '../utils/validate-read'
 
 /** Detaches a subscription's listener and unsubscribes its channel/pattern. */
@@ -152,7 +157,7 @@ export class PubSubService implements OnApplicationShutdown {
   async publish<T>(channel: string, message: T): Promise<number> {
     const fullChannel = this.keyBuilder.applyNamespace(channel)
     const raw = this.serializer.serialize(message)
-    return guardClient(this.connection.getClient()).publish(fullChannel, raw)
+    return await guardClient(this.connection.getClient()).publish(fullChannel, raw)
   }
 
   /**
@@ -321,6 +326,8 @@ export class PubSubService implements OnApplicationShutdown {
       try {
         await undefined
         const result = invoke(await this.decode<T>(raw, options), channel)
+        // A rejection of the handler's promise is handled even when the check below refuses.
+        if (isNativePromise(result)) ignoreRejection(result)
         // Checked after the handler ran and immediately before its result is awaited.
         assertPromiseIntrinsics()
         await result
@@ -450,7 +457,7 @@ export class PubSubService implements OnApplicationShutdown {
    */
   private async decode<T>(raw: string, options: ReadOptions<T> | undefined): Promise<T> {
     const message = this.serializer.deserialize<T>(raw)
-    return options?.validate === undefined ? message : validateRead(message, options.validate)
+    return options?.validate === undefined ? message : await validateRead(message, options.validate)
   }
 
   /**

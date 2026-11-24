@@ -427,15 +427,15 @@ export class CacheAdminService {
   ): Promise<RevealedValue | null> {
     switch (type) {
       case 'string':
-        return this.readString(client, key)
+        return await this.readString(client, key)
       case 'hash':
-        return this.readHash(client, key)
+        return await this.readHash(client, key)
       case 'set':
-        return this.readSet(client, key)
+        return await this.readSet(client, key)
       case 'list':
-        return this.readList(client, key)
+        return await this.readList(client, key)
       case 'zset':
-        return this.readSortedSet(client, key)
+        return await this.readSortedSet(client, key)
       default:
         return { kind: 'unsupported', type }
     }

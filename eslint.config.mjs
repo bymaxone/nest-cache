@@ -79,6 +79,9 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'error',
       '@typescript-eslint/explicit-module-boundary-types': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
+      // `return promise` in an async function reads `promise.then`, which a host can replace before the
+      // call and restore after it; `return await promise` reads only the constructor, which is checked.
+      '@typescript-eslint/return-await': ['error', 'always'],
       // A function is at most 50 raw lines — blank lines and comments count, as a reader sees
       // them. Spec files are exempt: a `describe` callback holds a whole suite.
       'max-lines-per-function': [

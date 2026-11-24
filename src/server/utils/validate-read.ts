@@ -112,5 +112,5 @@ export async function validateRead<T>(
   // would return the data, never `true`, and refuse every value.
   return isPredicate(validate)
     ? checkPredicate(value, validate, location)
-    : checkSchema(value, validate, location)
+    : await checkSchema(value, validate, location)
 }

@@ -11,7 +11,7 @@ import type { ChainableCommander } from 'ioredis'
 import { closeClient } from './close-client'
 import { execTransaction } from './exec-transaction'
 import { guardClient } from './guard-client'
-import { onRejection } from './settle'
+import { IntrinsicPromise, onRejection, pinConstructor } from './settle'
 import {
   forgedThen,
   RealPromise,
@@ -183,5 +183,34 @@ describe('promise helpers under a hostile promise built-in', () => {
     expect(outcome.settled).toBe('resolved')
     expect(forced).toHaveBeenCalledTimes(1)
     expect(client.disconnect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('pinConstructor', () => {
+  // A frozen promise cannot hold the property: the pin refuses, never reports success.
+  it('refuses a frozen promise and watches it all the same', (finish) => {
+    const frozen = Object.freeze(
+      new IntrinsicPromise((_resolve, reject) => setTimeout(reject, 5, 'x'))
+    )
+    let handled = 0
+    expect(() => onRejection(frozen, () => (handled += 1))).toThrow()
+    setTimeout(() => {
+      try {
+        expect(handled).toBe(1)
+        finish()
+      } catch (error) {
+        finish(error)
+      }
+    }, 30)
+  })
+
+  // The pin cannot be removed or rewritten once it is in place.
+  it('cannot be changed after the promise was pinned', () => {
+    const pinned = new IntrinsicPromise<void>((resolve) => resolve())
+    pinConstructor(pinned)
+
+    expect(() => Object.defineProperty(pinned, 'constructor', { value: Object })).toThrow()
+    expect(Reflect.deleteProperty(pinned, 'constructor')).toBe(false)
+    expect(() => pinConstructor(pinned)).not.toThrow()
   })
 })
