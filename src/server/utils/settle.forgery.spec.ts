@@ -187,6 +187,7 @@ describe('promise helpers under a hostile promise built-in', () => {
     const originalThen = realThen
     const originalConstructor = realConstructor
     let hookRuns = 0
+    let restored = true
 
     const outcome = await underForgery(
       () => {
@@ -197,6 +198,10 @@ describe('promise helpers under a hostile promise built-in', () => {
           const timer = realSetTimeout(...args)
           Promise.prototype.then = originalThen
           Promise.prototype.constructor = originalConstructor
+          // Read inside the hook: the harness restores the built-ins again before the row's own assertions.
+          restored &&=
+            Promise.prototype.then === originalThen &&
+            Promise.prototype.constructor === originalConstructor
           return timer
         }) as typeof setTimeout
       },
@@ -205,8 +210,7 @@ describe('promise helpers under a hostile promise built-in', () => {
     globalThis.setTimeout = realSetTimeout
 
     expect(hookRuns).toBeGreaterThan(0)
-    expect(Promise.prototype.then).toBe(originalThen)
-    expect(Promise.prototype.constructor).toBe(originalConstructor)
+    expect(restored).toBe(true)
     expect(outcome.settled).toBe('resolved')
     expect(forced).toHaveBeenCalledTimes(1)
     expect(client.disconnect).toHaveBeenCalledTimes(1)
