@@ -182,14 +182,21 @@ describe('promise helpers under a hostile promise built-in', () => {
     const client = { status: 'ready', quit: jest.fn(bareRejection), disconnect: jest.fn() }
     const forced = jest.fn()
     const realSetTimeout = globalThis.setTimeout
+    // Captured before the hook runs: `RealPromise` is the global itself, so reading `then` through it
+    // after the plant would restore the forged method.
+    const originalThen = realThen
+    const originalConstructor = realConstructor
+    let hookRuns = 0
 
     const outcome = await underForgery(
       () => {
         globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+          hookRuns += 1
+          Promise.prototype.constructor = class Imposter {} as unknown as PromiseConstructor
           Promise.prototype.then = forgedThen as typeof Promise.prototype.then
           const timer = realSetTimeout(...args)
-          Promise.prototype.then = RealPromise.prototype.then
-          Promise.prototype.constructor = realConstructor
+          Promise.prototype.then = originalThen
+          Promise.prototype.constructor = originalConstructor
           return timer
         }) as typeof setTimeout
       },
@@ -197,6 +204,9 @@ describe('promise helpers under a hostile promise built-in', () => {
     )
     globalThis.setTimeout = realSetTimeout
 
+    expect(hookRuns).toBeGreaterThan(0)
+    expect(Promise.prototype.then).toBe(originalThen)
+    expect(Promise.prototype.constructor).toBe(originalConstructor)
     expect(outcome.settled).toBe('resolved')
     expect(forced).toHaveBeenCalledTimes(1)
     expect(client.disconnect).toHaveBeenCalledTimes(1)
