@@ -19,7 +19,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Known limits
 
 - Code running concurrently that plants a `then` and removes it again between the entry check and the work's own resolution cannot be seen afterwards. This includes a plant timed between the check inside a command's guarded wait and the return of the public method that awaited it, and a plant that fires on the work's own resolution, which runs before any library code.
-- A plant made inside ioredis's own synchronous command path, before the promise of a public method is returned, is not covered: the library calls no replaceable global between a public method's entry and its first suspension (a row runs `get` and `set` under a hooked `setTimeout` and `Date.now`), and what the driver does there is the dependency's.
+- A plant made inside ioredis's own synchronous command path, before the promise of a public method is returned, is not covered: the library calls no replaceable global between a public method's entry and its first suspension, and what the driver does there is the dependency's.
 - A replacement made before the library is imported is out of scope.
 - A dependency that reads a static internally (for example `prom-client` collecting a registry with `Promise.all`) is not covered: the entry covers only the library's own code.
 
