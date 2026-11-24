@@ -291,6 +291,31 @@ describe('the connector with a then planted on a prototype of the socket', () =>
     expect((outcome.error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
     connector.disconnect()
   })
+
+  // Scenario: the prototype of EventEmitter.prototype is replaced by a Proxy whose get answers `then`, which
+  // `hasOwn` cannot see. Rule: a Proxy on the chain is refused, the socket destroyed, nothing forged.
+  it('refuses a Proxy on the chain of the socket, which answers then through its get trap', async () => {
+    const port = await listenOnPort(netServer(answer))
+    const connector = new GuardedConnector({ host: '127.0.0.1', port, family: 4 })
+    const original = Reflect.getPrototypeOf(EventEmitter.prototype) as object
+    const proxy = new Proxy(original, {
+      get(target, key, receiver) {
+        if (key === 'then') return (resolve: (value: unknown) => void) => resolve('forged')
+        return Reflect.get(target, key, receiver) as unknown
+      }
+    })
+    Reflect.setPrototypeOf(EventEmitter.prototype, proxy)
+    let outcome: { stream?: unknown; error?: unknown }
+    try {
+      outcome = await settle(connector)
+    } finally {
+      Reflect.setPrototypeOf(EventEmitter.prototype, original)
+    }
+
+    expect(outcome.stream).toBeUndefined()
+    expect((outcome.error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    connector.disconnect()
+  })
 })
 
 describe('the table of listeners of the socket', () => {

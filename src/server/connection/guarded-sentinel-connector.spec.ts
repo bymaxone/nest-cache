@@ -221,6 +221,42 @@ describe('the connector of a sentinel client', () => {
     expect(stream.destroy).toHaveBeenCalledTimes(1)
   })
 
+  // Scenario: the prototype of Stream.prototype is replaced by a Proxy whose get answers `then` for every
+  // object that inherits from it, while `hasOwn` on that Proxy reports nothing.
+  // Rule: a Proxy anywhere on the chain is refused without calling any of its traps, because resolving with the
+  // socket reads `then` through the get trap; the socket is destroyed and the connect refused.
+  it('destroys the socket and refuses when a Proxy is on the chain of the socket', async () => {
+    const stream = Object.assign(Object.create(Stream.prototype) as object, fakeStream())
+    const original = Reflect.getPrototypeOf(Stream.prototype) as object
+    const traps: string[] = []
+    const proxy = new Proxy(original, {
+      get(target, key, receiver) {
+        traps.push(String(key))
+        if (key === 'then') return (resolve: (value: unknown) => void) => resolve('forged')
+        return Reflect.get(target, key, receiver) as unknown
+      }
+    })
+    const spy = jest.spyOn(SentinelConnector.prototype, 'connect').mockImplementation(() => {
+      const connected = new Promise((resolve) => resolve(stream))
+      Reflect.setPrototypeOf(Stream.prototype, proxy)
+      return connected as never
+    })
+    let outcome: { value?: unknown; error?: unknown }
+    try {
+      outcome = { value: await new GuardedSentinelConnector(SENTINEL_OPTIONS).connect(jest.fn()) }
+    } catch (caught) {
+      outcome = { error: caught }
+    } finally {
+      Reflect.setPrototypeOf(Stream.prototype, original)
+      spy.mockRestore()
+    }
+
+    expect(outcome.value).toBeUndefined()
+    expect((outcome.error as { code?: string }).code).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+    expect(stream.destroy).toHaveBeenCalledTimes(1)
+    expect(traps).toEqual([])
+  })
+
   // Scenario: the manager builds a client in sentinel mode.
   // Rule: it is on the connector of the library, and that connector reports its events through the client.
   it('is the connector of a client the manager builds in sentinel mode, bound to it', () => {

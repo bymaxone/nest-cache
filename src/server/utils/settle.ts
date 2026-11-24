@@ -19,6 +19,7 @@ import {
   getOwnPropertyDescriptor,
   getPrototypeOf,
   hasOwn,
+  isProxy,
   NativePromise,
   NativeSpeciesGetter,
   objectPrototype,
@@ -108,12 +109,20 @@ function countPromiseDefects(): number {
  * `EventEmitter.prototype`, `Stream.prototype` or any class prototype of a host object would replace the value
  * that is returned. Nothing may run between this check and the `return`.
  *
+ * A Proxy anywhere on the chain is refused as well.
+ *
  * @param value - The host object about to be returned from an async function.
  * @throws {CacheException} `INVALID_OPTIONS` with a count of the holders of a `then`, and no value.
  */
 export function assertNoThen(value: object): void {
   let count = 0
   for (let holder: object | null = value; holder !== null; holder = getPrototypeOf(holder)) {
+    // A Proxy answers `then` through its `get` trap, which `hasOwn` does not consult, and each of its other
+    // traps is host code: it is counted and the walk stops before any trap runs.
+    if (isProxy(holder)) {
+      count += 1
+      break
+    }
     if (hasOwn(holder, 'then')) count += 1
   }
   if (count > 0) throw guardRefusal(PROMISE_REASON, count)

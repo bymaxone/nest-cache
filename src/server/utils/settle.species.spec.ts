@@ -10,6 +10,7 @@ import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { realSpecies, restoreBuiltins } from '../../test-helpers/forge-promise'
 import {
   assertPromiseIntrinsics,
+  assertNoThen,
   awaitAll,
   IntrinsicPromise,
   PROMISE_REASON,
@@ -210,5 +211,45 @@ describe('awaitAll refusals', () => {
   it('resolves with exactly the values given, and with none for no members', async () => {
     await expect(awaitAll([Promise.resolve(1), Promise.resolve(2)])).resolves.toStrictEqual([1, 2])
     await expect(awaitAll([])).resolves.toStrictEqual([])
+  })
+})
+
+describe('assertNoThen', () => {
+  // Scenario: a Proxy is the value, or sits anywhere above it on the chain, with a trap for every operation.
+  // Rule: it is refused as one holder of a `then`, and no trap runs.
+  it.each([
+    ['as the value', 0],
+    ['one level up', 1],
+    ['two levels up', 2]
+  ])('refuses a Proxy %s without running a trap', (_name, depth) => {
+    const traps: string[] = []
+    const record = (name: string) => (): never => {
+      traps.push(name)
+      throw new Error(name)
+    }
+    let holder: object = new Proxy(
+      {},
+      {
+        get: record('get'),
+        getPrototypeOf: record('getPrototypeOf'),
+        getOwnPropertyDescriptor: record('getOwnPropertyDescriptor'),
+        has: record('has')
+      }
+    )
+    for (let level = 0; level < depth; level += 1) holder = Object.create(holder) as object
+
+    const refusal = thrownBy(() => assertNoThen(depth === 0 ? holder : Object.create(holder)))
+
+    expect(refusal).toMatchObject({ details: { reason: PROMISE_REASON, count: 1 } })
+    expect(traps).toEqual([])
+  })
+
+  // Scenario: a plain object with a `then` on the object and on a prototype, and one with none.
+  it('counts every holder of a then on a plain chain and accepts a chain without one', () => {
+    const base = { then: () => undefined }
+    const value = Object.assign(Object.create(base) as object, { then: () => undefined })
+
+    expect(thrownBy(() => assertNoThen(value))).toMatchObject({ details: { count: 2 } })
+    expect(thrownBy(() => assertNoThen(Object.create(null) as object))).toBeUndefined()
   })
 })
