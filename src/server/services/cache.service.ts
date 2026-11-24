@@ -15,6 +15,8 @@
  *
  * @see `docs/technical_specification.md` §5 — Main Service
  */
+import type { Readable } from 'node:stream'
+
 import { Inject, Injectable, Optional } from '@nestjs/common'
 import type { ChainableCommander, Cluster, Redis } from 'ioredis'
 
@@ -35,7 +37,7 @@ import { guardClient } from '../utils/guard-client'
 import { guardSerializer } from '../utils/guard-serializer'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
-import { pinned } from '../utils/settle'
+import { nextStep, pinned } from '../utils/settle'
 import { found, reportOperation, trackOperation } from '../utils/track-operation'
 import { assertTtlSeconds, MIN_WRITE_TTL_SECONDS } from '../utils/ttl'
 import { validateRead } from '../utils/validate-read'
@@ -533,39 +535,43 @@ export class CacheService extends CacheCollectionCommands {
   async *scan(prefix: string, pattern: string, count = SCAN_COUNT): AsyncIterable<string> {
     const events = this.options.events
     let outcome: CacheOperationOutcome = 'ok'
+    let stream: Readable | undefined
     try {
-      yield* this.scanKeys(prefix, pattern, count)
+      stream = this.scanKeys(prefix, pattern, count)
+      const steps = stream[Symbol.asyncIterator]()
+      for (let step = await pinned(nextStep(steps)); step.done !== true;) {
+        for (const key of step.value as string[]) {
+          // ScanStream pushes string[] batches — ioredis internal contract
+          yield key
+        }
+        step = await pinned(nextStep(steps))
+      }
     } catch (error) {
       outcome = 'error'
       throw error
     } finally {
+      stream?.destroy()
       reportOperation(events, 'scan', outcome)
     }
   }
 
   /**
-   * Iterates the keys of {@link CacheService.scan}, with no reporting of its own.
+   * Opens the `SCAN` stream of {@link CacheService.scan}.
    *
    * @param prefix - Entity-group prefix.
    * @param pattern - Glob for the id segment.
    * @param count - `SCAN` `COUNT` hint.
-   * @returns The matching keys, one at a time.
+   * @returns The stream of key batches.
    * @throws {CacheException} `UNSUPPORTED_IN_CLUSTER` in cluster mode.
    */
-  private async *scanKeys(prefix: string, pattern: string, count: number): AsyncIterable<string> {
+  private scanKeys(prefix: string, pattern: string, count: number): Readable {
     const fullPattern = this.keyBuilder.buildPattern(prefix, pattern)
     const client = this.client()
     if (!isScannableClient(client)) {
       throw new CacheException(CACHE_ERROR_CODES.UNSUPPORTED_IN_CLUSTER, { operation: 'scan' })
     }
     const hint = Number.isInteger(count) ? Math.min(Math.max(count, 1), MAX_SCAN_COUNT) : SCAN_COUNT
-    const stream = client.scanStream({ match: fullPattern, count: hint })
-    for await (const chunk of stream) {
-      for (const key of chunk as string[]) {
-        // ScanStream pushes string[] batches — ioredis internal contract
-        yield key
-      }
-    }
+    return client.scanStream({ match: fullPattern, count: hint })
   }
 
   // ─── Pipeline / escape hatch ───────────────────────────────────────────────
@@ -646,11 +652,17 @@ export class CacheService extends CacheCollectionCommands {
       const stream = client.scanStream({ match: pattern, count: FLUSH_SCAN_COUNT })
       let total = 0
 
-      for await (const chunk of stream) {
-        const keys = chunk as string[] // ScanStream pushes string[] batches — ioredis internal contract
-        if (keys.length > 0) {
-          total += await pinned(client.unlink(...keys))
+      const steps = stream[Symbol.asyncIterator]()
+      try {
+        for (let step = await pinned(nextStep(steps)); step.done !== true;) {
+          const keys = step.value as string[] // ScanStream pushes string[] batches — ioredis internal contract
+          if (keys.length > 0) {
+            total += await pinned(client.unlink(...keys))
+          }
+          step = await pinned(nextStep(steps))
         }
+      } finally {
+        stream.destroy()
       }
       return total
     })

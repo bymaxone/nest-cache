@@ -138,6 +138,22 @@ export function pinned<T>(value: T): T {
   return value
 }
 
+/**
+ * Takes the next step of an async iterator with a pinned `await`, checked before and after. A `for await`
+ * awaits every step without either, so a host that planted accessors on `Promise.prototype` would answer
+ * for the iterator and forge a step.
+ *
+ * @param iterator - The iterator to advance.
+ * @returns The step, as the iterator produced it.
+ * @throws {CacheException} `INVALID_OPTIONS` when the promise machinery was replaced or planted on.
+ */
+export async function nextStep<T>(iterator: AsyncIterator<T>): Promise<IteratorResult<T>> {
+  assertPromiseIntrinsics()
+  const step = await pinned(iterator.next())
+  assertPromiseIntrinsics()
+  return step
+}
+
 /** How a settlement ended: the value, the rejection, or the deadline. Never has a prototype. */
 export interface Settlement<T> {
   readonly kind: 'value' | 'error' | 'timeout'
@@ -266,7 +282,7 @@ export async function awaitAll<T>(promises: readonly Promise<T>[]): Promise<T[]>
       ignoreRejection(native)
     } catch (error) {
       // A promise that cannot be pinned is still watched; the others are watched before this refuses.
-      if (refusal === undefined) refusal = error
+      refusal = error
     }
     awaited.push(native)
   }

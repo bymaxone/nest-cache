@@ -82,6 +82,15 @@ export default [
       // `return promise` in an async function reads `promise.then`, which a host can replace before the
       // call and restore after it; `return await promise` reads only the constructor, which is checked.
       '@typescript-eslint/return-await': ['error', 'always'],
+      // `for await` awaits every step of an iterator without a pinned hop or a check; read it with `nextStep`.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ForOfStatement[await=true]',
+          message:
+            'A `for await` is a bare await: advance the iterator with `nextStep` and `pinned`.'
+        }
+      ],
       // A function is at most 50 raw lines — blank lines and comments count, as a reader sees
       // them. Spec files are exempt: a `describe` callback holds a whole suite.
       'max-lines-per-function': [

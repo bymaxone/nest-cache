@@ -248,8 +248,8 @@ describe('inputs that are already running', () => {
     )
   })
 
-  // The first refusal is the one reported, and a second unpinnable input does not replace it.
-  it('awaitAll reports the first refusal when two inputs are frozen', async () => {
+  // Two unpinnable inputs: the call refuses once, with the guard's code, and both are watched.
+  it('awaitAll refuses when two inputs are frozen', async () => {
     const frozen = (): Promise<never> =>
       Object.freeze(new IntrinsicPromise<never>((_resolve, reject) => setTimeout(reject, 5, 'x')))
 
