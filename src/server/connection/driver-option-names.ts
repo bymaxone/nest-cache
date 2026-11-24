@@ -207,9 +207,10 @@ function countPlantedSymbols(): number {
  * before the import (a replaced `Function.prototype.toString`) is out of reach of this check.
  *
  * It runs when the manager is built, when each client is built and in the tick that opens every socket,
- * on the first connect and on every reconnect (the connector). It does not cover `Array.prototype`,
- * `Function.prototype` or `Buffer`'s prototype, and a key planted after the last of those runs is still
- * read by the objects the driver builds later (a command, a pipeline).
+ * on the first connect and on every reconnect (the connector), and `guardClient` runs it before every
+ * command and every transaction or pipeline the library opens. It does not cover `Array.prototype`,
+ * `Function.prototype` or `Buffer`'s prototype, and a key planted after the check of a call, while that
+ * call is in flight, is still read by the reply handler of the driver.
  *
  * @throws {CacheException} `INVALID_OPTIONS` with the count of the keys, or of the replaced built-ins, never a
  *   key, a name or a value.
