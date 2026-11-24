@@ -47,6 +47,20 @@ prefer to remain anonymous.
   instance, caching plaintext secrets the app should have encrypted first).
 - Denial of service from unbounded usage patterns the consumer controls.
 
+## Threat model: same-process code
+
+Code that runs in the same Node.js process as the library is trusted, as it is in Node itself.
+It can replace `Promise`, plant a `then` on a shared prototype, or edit this package's files, and
+no library running in that process can stop all of it. The guards against replaced Promise
+built-ins (`assertPromiseIntrinsics`, `settleWithin`, `pinned`, and the socket check of the
+connectors) are best-effort hardening that catches accidents and common planting, not a security
+boundary. Known cases they do not cover: a `then` planted on `EventEmitter` or `Stream` during a
+connect, a throwing `stream.destroy` in a refusal, a replaced `Promise.prototype.then` reached
+through ioredis, the stream accessor, a live `net.createConnection` in the CommonJS build, and a
+self-referencing Proxy given to `isNativePromise`. A report of one of these is a known limit, not a
+vulnerability; a report of a way for untrusted input (a key, a value, a Redis reply) to cause
+one is.
+
 ## Supported Versions
 
 Only the latest minor (currently `1.2.x`) receives security fixes. Earlier versions are not
