@@ -910,7 +910,7 @@ How it stores and answers:
 - The stored body is opaque text, kept byte for byte; an empty body and an absent body stay different. The size bounds belong to `@bymax-one/nest-core`: its interceptor checks the body (`maxBodyBytes`, 64 KiB by default) and the serialised headers (65,536 bytes) before it calls `complete`, and stores an oversized response without its body and headers, so the record reads as completed but is not replayed. This store does not bound the body.
 - `leaseSeconds` and `ttlSeconds` must be integers from 1 to 2,147,483,647; anything else is refused with `cache.invalid_options` before a command is sent.
 - Every failure rejects, so a caller that fails closed never replays a doubtful answer: an outage, a timeout and a lost script cache reject with the connection and script errors the rest of the library uses. A stored value that is not exactly a record this package wrote (an unknown state, a missing or truncated field, a key with no expiry, a key that is not a hash) rejects with `cache.deserialization_failed`, never as a claim and never as a replay. Nothing from the key, the token or the body appears in an error, a log or a metric label.
-- As its own guard, `complete` also refuses a serialised header map over 65,536 bytes, with `cache.invalid_options`. Core's interceptor keeps a response under that bound, so the guard fires only for a caller that skips it. A rejected `complete` is not released: the claim stays `in_progress` until its lease ends, so the key is not executed a second time at once, and can run again afterwards.
+- As its own guard, `complete` also refuses a serialised header map over 65,536 bytes, with `cache.invalid_options`. Core's interceptor keeps a response under that bound, so the guard fires only for a caller that skips it. That refusal happens before any write, so the claim stays `in_progress` until its lease ends and a retry in that window is told the request is in progress. A rejected `complete` is never released by this store. A connection error is different: it can arrive after the write (a lost reply), so a retry may find the completed record and replay it, or find the claim still `in_progress`.
 - A key holding something this package did not write (another type, or a hash with extra fields) is refused on every `begin` and stays blocked until an operator deletes it or it expires.
 - If a client resends `begin` after a lost reply, the second call finds the key held and answers `claimed: false` with the in-progress record: it never gets a second claim, and the first claim stays orphaned until its lease ends.
 
@@ -919,7 +919,7 @@ Durability limits, the same as for any Redis-backed lock:
 - An eviction policy other than `noeviction` can drop a claim under memory pressure.
 - `FLUSHDB`, `FLUSHALL` and `CacheService.flushNamespace()` remove claims, because they live in the namespace.
 - A failover with asynchronous replication can lose a claim the old primary acknowledged.
-- A lease shorter than the handler lets the claim expire while the work runs, so a retry can start it again.
+- The lease must outlive the longest handler, downstream timeouts included. A shorter lease lets the claim expire while the work runs, so the key can be claimed again and run in parallel.
 - A claim orphaned by a resend lasts until its lease ends.
 
 ---
