@@ -92,7 +92,7 @@ export function guardClient<C extends object>(client: C): C {
         return value
       }
       return (...args: unknown[]): unknown => {
-        // `quit`, `disconnect` and `on` send no command and must keep working at teardown, so they are not
+        // `quit`, `disconnect` and `on` are the calls teardown needs and must keep working, so they are not
         // checked. A key planted on `Object.prototype` after the client was built is read by ioredis's command path
         // (its flag tables are plain objects), so the guard runs at every command, not only at connect.
         if (property !== 'quit' && property !== 'disconnect' && property !== 'on') {
