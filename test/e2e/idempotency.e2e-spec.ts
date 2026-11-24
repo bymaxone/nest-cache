@@ -7,6 +7,8 @@
  * run the scripts. Raw seeding goes through a second plain ioredis client so each row can plant
  * exactly the stored shape it needs.
  */
+import { createHash } from 'node:crypto'
+
 import {
   CacheException,
   CacheService,
@@ -21,6 +23,9 @@ import { startRedisCluster, type StartedRedisCluster } from './helpers/start-red
 import { startRedisContainer, type StartedRedis } from './helpers/start-redis-container'
 
 import type { TestingModule } from '@nestjs/testing'
+
+/** A key as the port delivers it: 64 lower-case hexadecimal characters (SHA-256). */
+const hashed = (name: string): string => createHash('sha256').update(name).digest('hex')
 
 const NAMESPACE = 'e2e-idem'
 const FP = 'fingerprint-a'
@@ -73,19 +78,19 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
 
   // A first begin claims with a lease; the hash carries the lease as a TTL and no token leaks.
   it('claims a free key with a lease and returns a token', async () => {
-    const result = await store.begin('k-claim', FP, 30)
+    const result = await store.begin(hashed('k-claim'), FP, 30)
 
     expect(result.claimed).toBe(true)
-    const ttl = await raw.ttl(redisKey('k-claim'))
+    const ttl = await raw.ttl(redisKey(hashed('k-claim')))
     expect(ttl).toBeGreaterThan(0)
     expect(ttl).toBeLessThanOrEqual(30)
   })
 
   // The second begin finds the claim: in_progress, same fingerprint, never a second claim.
   it('answers a held key with the in-progress record and no token', async () => {
-    await store.begin('k-held', FP, 30)
+    await store.begin(hashed('k-held'), FP, 30)
 
-    const again = await store.begin('k-held', FP, 30)
+    const again = await store.begin(hashed('k-held'), FP, 30)
 
     expect(again).toEqual({ claimed: false, record: { state: 'in_progress', fingerprint: FP } })
   })
@@ -94,7 +99,9 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
   it('lets exactly one of two concurrent begins from two connections claim', async () => {
     const other = storeOf(second)
     const results = await Promise.all(
-      Array.from({ length: 20 }, (_, i) => (i % 2 === 0 ? store : other).begin('k-race', FP, 30))
+      Array.from({ length: 20 }, (_, i) =>
+        (i % 2 === 0 ? store : other).begin(hashed('k-race'), FP, 30)
+      )
     )
 
     expect(results.filter((r) => r.claimed)).toHaveLength(1)
@@ -102,72 +109,72 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
 
   // complete stores the answer, drops the token, and a later begin replays it byte for byte.
   it('completes with the token and replays the stored response', async () => {
-    const claim = await store.begin('k-done', FP, 30)
+    const claim = await store.begin(hashed('k-done'), FP, 30)
     if (!claim.claimed) throw new Error('expected a claim')
 
-    expect(await store.complete('k-done', claim.token, RESPONSE, 60)).toBe(true)
+    expect(await store.complete(hashed('k-done'), claim.token, RESPONSE, 60)).toBe(true)
 
-    const replay = await store.begin('k-done', FP, 30)
+    const replay = await store.begin(hashed('k-done'), FP, 30)
     expect(replay).toEqual({
       claimed: false,
       record: { state: 'completed', fingerprint: FP, response: RESPONSE }
     })
-    const ttl = await raw.ttl(redisKey('k-done'))
+    const ttl = await raw.ttl(redisKey(hashed('k-done')))
     expect(ttl).toBeGreaterThan(30)
-    expect(await raw.hexists(redisKey('k-done'), 't')).toBe(0)
+    expect(await raw.hexists(redisKey(hashed('k-done')), 't')).toBe(0)
   })
 
   // A token that is not the holder's changes nothing and answers false.
   it('refuses complete and release with a token that does not hold the claim', async () => {
-    await store.begin('k-wrong', FP, 30)
+    await store.begin(hashed('k-wrong'), FP, 30)
 
-    expect(await store.complete('k-wrong', 'not-the-token', RESPONSE, 60)).toBe(false)
-    expect(await store.release('k-wrong', 'not-the-token')).toBe(false)
-    expect((await store.begin('k-wrong', FP, 30)).claimed).toBe(false)
+    expect(await store.complete(hashed('k-wrong'), 'not-the-token', RESPONSE, 60)).toBe(false)
+    expect(await store.release(hashed('k-wrong'), 'not-the-token')).toBe(false)
+    expect((await store.begin(hashed('k-wrong'), FP, 30)).claimed).toBe(false)
   })
 
   // release frees an in-progress claim so the next begin claims anew.
   it('releases a claim so the key can be claimed again', async () => {
-    const claim = await store.begin('k-rel', FP, 30)
+    const claim = await store.begin(hashed('k-rel'), FP, 30)
     if (!claim.claimed) throw new Error('expected a claim')
 
-    expect(await store.release('k-rel', claim.token)).toBe(true)
+    expect(await store.release(hashed('k-rel'), claim.token)).toBe(true)
 
-    expect((await store.begin('k-rel', FP, 30)).claimed).toBe(true)
+    expect((await store.begin(hashed('k-rel'), FP, 30)).claimed).toBe(true)
   })
 
   // A completed record is never released or completed again.
   it('answers false for release after complete and for a second complete', async () => {
-    const claim = await store.begin('k-twice', FP, 30)
+    const claim = await store.begin(hashed('k-twice'), FP, 30)
     if (!claim.claimed) throw new Error('expected a claim')
-    await store.complete('k-twice', claim.token, RESPONSE, 60)
+    await store.complete(hashed('k-twice'), claim.token, RESPONSE, 60)
 
-    expect(await store.release('k-twice', claim.token)).toBe(false)
-    expect(await store.complete('k-twice', claim.token, RESPONSE, 60)).toBe(false)
-    expect((await store.begin('k-twice', FP, 30)).claimed).toBe(false)
+    expect(await store.release(hashed('k-twice'), claim.token)).toBe(false)
+    expect(await store.complete(hashed('k-twice'), claim.token, RESPONSE, 60)).toBe(false)
+    expect((await store.begin(hashed('k-twice'), FP, 30)).claimed).toBe(false)
   })
 
   // After the lease ends the claim is gone: complete answers false and writes nothing.
   it('answers false for complete after the lease expired', async () => {
-    const claim = await store.begin('k-exp', FP, 1)
+    const claim = await store.begin(hashed('k-exp'), FP, 1)
     if (!claim.claimed) throw new Error('expected a claim')
     await new Promise((resolve) => setTimeout(resolve, 1_300))
 
-    expect(await store.complete('k-exp', claim.token, RESPONSE, 60)).toBe(false)
-    expect(await raw.exists(redisKey('k-exp'))).toBe(0)
+    expect(await store.complete(hashed('k-exp'), claim.token, RESPONSE, 60)).toBe(false)
+    expect(await raw.exists(redisKey(hashed('k-exp')))).toBe(0)
   })
 
   // After a takeover the first holder's token is stale: its complete is refused and the new
   // holder's claim is untouched.
   it('answers false for complete after another caller took the key over', async () => {
-    const first = await store.begin('k-take', FP, 1)
+    const first = await store.begin(hashed('k-take'), FP, 1)
     if (!first.claimed) throw new Error('expected a claim')
     await new Promise((resolve) => setTimeout(resolve, 1_300))
-    const taker = await storeOf(second).begin('k-take', FP, 30)
+    const taker = await storeOf(second).begin(hashed('k-take'), FP, 30)
     if (!taker.claimed) throw new Error('expected a takeover')
 
-    expect(await store.complete('k-take', first.token, RESPONSE, 60)).toBe(false)
-    expect(await storeOf(second).complete('k-take', taker.token, RESPONSE, 60)).toBe(true)
+    expect(await store.complete(hashed('k-take'), first.token, RESPONSE, 60)).toBe(false)
+    expect(await storeOf(second).complete(hashed('k-take'), taker.token, RESPONSE, 60)).toBe(true)
   })
 
   // The key space is the namespace: another namespace on the same server never sees the claim.
@@ -177,9 +184,9 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
       namespace: 'e2e-idem-b'
     })
     try {
-      await store.begin('k-ns', FP, 30)
+      await store.begin(hashed('k-ns'), FP, 30)
 
-      expect((await storeOf(elsewhere).begin('k-ns', FP, 30)).claimed).toBe(true)
+      expect((await storeOf(elsewhere).begin(hashed('k-ns'), FP, 30)).claimed).toBe(true)
     } finally {
       await elsewhere.close()
     }
@@ -190,11 +197,11 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
     const flushed = await bootCacheApp({ connection: { url: redis.url }, namespace: 'e2e-idem-f' })
     try {
       const fs = storeOf(flushed)
-      await fs.begin('k-flush', FP, 30)
+      await fs.begin(hashed('k-flush'), FP, 30)
 
       await flushed.get(CacheService).flushNamespace()
 
-      expect((await fs.begin('k-flush', FP, 30)).claimed).toBe(true)
+      expect((await fs.begin(hashed('k-flush'), FP, 30)).claimed).toBe(true)
     } finally {
       await flushed.close()
     }
@@ -204,7 +211,7 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
   it.each([0, -1, 1.5, Number.NaN, 2_147_483_648, Number.MAX_SAFE_INTEGER])(
     'refuses lease %p with the invalid-options code and writes nothing',
     async (lease) => {
-      const key = `k-bound-${String(lease)}`
+      const key = hashed(`k-bound-${String(lease)}`)
 
       expect(await codeOf(store.begin(key, FP, lease))).toBe('cache.invalid_options')
       expect(await raw.exists(redisKey(key))).toBe(0)
@@ -214,63 +221,83 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
   // A ttl above Redis's EXPIRE limit would fail inside the script after the write; it is
   // refused first, so the claim stays in progress and untouched.
   it('refuses an overflowing ttl in complete before the script runs', async () => {
-    const claim = await store.begin('k-ttl', FP, 30)
+    const claim = await store.begin(hashed('k-ttl'), FP, 30)
     if (!claim.claimed) throw new Error('expected a claim')
 
-    expect(await codeOf(store.complete('k-ttl', claim.token, RESPONSE, 2_147_483_648))).toBe(
-      'cache.invalid_options'
-    )
-    expect(await raw.hget(redisKey('k-ttl'), 's')).toBe('p')
+    expect(
+      await codeOf(store.complete(hashed('k-ttl'), claim.token, RESPONSE, 2_147_483_648))
+    ).toBe('cache.invalid_options')
+    expect(await raw.hget(redisKey(hashed('k-ttl')), 's')).toBe('p')
   })
 
   // The largest accepted lease is a valid EXPIRE on a real server.
   it('accepts the largest lease and sets it as the TTL', async () => {
-    expect((await store.begin('k-max', FP, 2_147_483_647)).claimed).toBe(true)
-    expect(await raw.ttl(redisKey('k-max'))).toBeGreaterThan(2_000_000_000)
+    expect((await store.begin(hashed('k-max'), FP, 2_147_483_647)).claimed).toBe(true)
+    expect(await raw.ttl(redisKey(hashed('k-max')))).toBeGreaterThan(2_000_000_000)
   })
 
   // A hash this package wrote but with no expiry is never trusted as a record.
   it('rejects a held record with no TTL as a bad record', async () => {
-    await raw.hset(redisKey('k-nottl'), { s: 'p', f: FP, t: 'tok' })
+    await raw.hset(redisKey(hashed('k-nottl')), { s: 'p', f: FP, t: 'tok' })
 
-    expect(await codeOf(store.begin('k-nottl', FP, 30))).toBe('cache.deserialization_failed')
+    expect(await codeOf(store.begin(hashed('k-nottl'), FP, 30))).toBe(
+      'cache.deserialization_failed'
+    )
   })
 
   // A key of another type, or a hash with extra fields, is never claimed and never replayed.
   it('rejects a key of the wrong type and a hash with extra fields', async () => {
-    await raw.set(redisKey('k-string'), 'x')
-    await raw.hset(redisKey('k-extra'), { s: 'p', f: FP, t: 'tok', a: '1', b: '2', c: '3', d: '4' })
-    await raw.expire(redisKey('k-extra'), 60)
+    await raw.set(redisKey(hashed('k-string')), 'x')
+    await raw.hset(redisKey(hashed('k-extra')), {
+      s: 'p',
+      f: FP,
+      t: 'tok',
+      a: '1',
+      b: '2',
+      c: '3',
+      d: '4'
+    })
+    await raw.expire(redisKey(hashed('k-extra')), 60)
 
-    expect(await codeOf(store.begin('k-string', FP, 30))).toBe('cache.deserialization_failed')
-    expect(await codeOf(store.begin('k-extra', FP, 30))).toBe('cache.deserialization_failed')
-    expect(await codeOf(store.complete('k-string', 't', RESPONSE, 60))).toBe(
+    expect(await codeOf(store.begin(hashed('k-string'), FP, 30))).toBe(
       'cache.deserialization_failed'
     )
-    expect(await codeOf(store.release('k-string', 't'))).toBe('cache.deserialization_failed')
+    expect(await codeOf(store.begin(hashed('k-extra'), FP, 30))).toBe(
+      'cache.deserialization_failed'
+    )
+    expect(await codeOf(store.complete(hashed('k-string'), 't', RESPONSE, 60))).toBe(
+      'cache.deserialization_failed'
+    )
+    expect(await codeOf(store.release(hashed('k-string'), 't'))).toBe(
+      'cache.deserialization_failed'
+    )
   })
 
   // Truncated or unknown-state values reject and are never replayed.
   it('rejects an unknown state and a truncated completed record', async () => {
-    await raw.hset(redisKey('k-state'), { s: 'z', f: FP })
-    await raw.expire(redisKey('k-state'), 60)
-    await raw.hset(redisKey('k-trunc'), { s: 'c', f: FP, st: '200' })
-    await raw.expire(redisKey('k-trunc'), 60)
+    await raw.hset(redisKey(hashed('k-state')), { s: 'z', f: FP })
+    await raw.expire(redisKey(hashed('k-state')), 60)
+    await raw.hset(redisKey(hashed('k-trunc')), { s: 'c', f: FP, st: '200' })
+    await raw.expire(redisKey(hashed('k-trunc')), 60)
 
-    expect(await codeOf(store.begin('k-state', FP, 30))).toBe('cache.deserialization_failed')
-    expect(await codeOf(store.begin('k-trunc', FP, 30))).toBe('cache.deserialization_failed')
+    expect(await codeOf(store.begin(hashed('k-state'), FP, 30))).toBe(
+      'cache.deserialization_failed'
+    )
+    expect(await codeOf(store.begin(hashed('k-trunc'), FP, 30))).toBe(
+      'cache.deserialization_failed'
+    )
   })
 
   // An empty body and an absent body are different answers and stay different.
   it('keeps an empty body distinct from an absent one', async () => {
-    const empty = await store.begin('k-empty', FP, 30)
-    const absent = await store.begin('k-absent', FP, 30)
+    const empty = await store.begin(hashed('k-empty'), FP, 30)
+    const absent = await store.begin(hashed('k-absent'), FP, 30)
     if (!empty.claimed || !absent.claimed) throw new Error('expected claims')
-    await store.complete('k-empty', empty.token, { status: 204, headers: {}, body: '' }, 60)
-    await store.complete('k-absent', absent.token, { status: 204, headers: {} }, 60)
+    await store.complete(hashed('k-empty'), empty.token, { status: 204, headers: {}, body: '' }, 60)
+    await store.complete(hashed('k-absent'), absent.token, { status: 204, headers: {} }, 60)
 
-    const a = await store.begin('k-empty', FP, 30)
-    const b = await store.begin('k-absent', FP, 30)
+    const a = await store.begin(hashed('k-empty'), FP, 30)
+    const b = await store.begin(hashed('k-absent'), FP, 30)
     expect(a).toMatchObject({ record: { response: { body: '' } } })
     expect(b).toMatchObject({ claimed: false })
     expect('body' in (b as { record: { response: object } }).record.response).toBe(false)
@@ -280,41 +307,41 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
   // size limit is the caller's, not the store's.
   it('stores a 1 MB body byte for byte', async () => {
     const body = 'é€𝄞\u0000'.repeat(100_000)
-    const claim = await store.begin('k-big', FP, 30)
+    const claim = await store.begin(hashed('k-big'), FP, 30)
     if (!claim.claimed) throw new Error('expected a claim')
 
-    await store.complete('k-big', claim.token, { status: 200, headers: {}, body }, 60)
+    await store.complete(hashed('k-big'), claim.token, { status: 200, headers: {}, body }, 60)
 
-    const replay = await store.begin('k-big', FP, 30)
+    const replay = await store.begin(hashed('k-big'), FP, 30)
     expect(replay).toMatchObject({ record: { response: { body } } })
   })
 
-  // The header bound fires in complete, after the handler ran: complete rejects and the claim
+  // The store's own header guard (core's interceptor normally keeps a response under it):  complete rejects and the claim
   // stays in progress until its lease ends, so the key is not executed a second time at once.
   it('rejects an oversized header map and leaves the claim in progress', async () => {
-    const claim = await store.begin('k-hdr', FP, 30)
+    const claim = await store.begin(hashed('k-hdr'), FP, 30)
     if (!claim.claimed) throw new Error('expected a claim')
     const headers = { 'x-big': 'v'.repeat(70_000) }
 
-    expect(await codeOf(store.complete('k-hdr', claim.token, { status: 200, headers }, 60))).toBe(
-      'cache.invalid_options'
-    )
-    expect((await store.begin('k-hdr', FP, 30)).claimed).toBe(false)
-    expect(await raw.hget(redisKey('k-hdr'), 's')).toBe('p')
+    expect(
+      await codeOf(store.complete(hashed('k-hdr'), claim.token, { status: 200, headers }, 60))
+    ).toBe('cache.invalid_options')
+    expect((await store.begin(hashed('k-hdr'), FP, 30)).claimed).toBe(false)
+    expect(await raw.hget(redisKey(hashed('k-hdr')), 's')).toBe('p')
   })
 
   // After SCRIPT FLUSH the next call reloads the scripts and succeeds.
   it('recovers after the server script cache is flushed', async () => {
     await raw.script('FLUSH')
 
-    expect((await store.begin('k-noscript', FP, 30)).claimed).toBe(true)
+    expect((await store.begin(hashed('k-noscript'), FP, 30)).claimed).toBe(true)
   })
 
   // A second begin of a resend never claims again; the first claim stays held until its lease ends.
   it('answers a resent begin as held, never as a second claim', async () => {
-    const first = await store.begin('k-resend', FP, 30)
+    const first = await store.begin(hashed('k-resend'), FP, 30)
 
-    const resend = await store.begin('k-resend', FP, 30)
+    const resend = await store.begin(hashed('k-resend'), FP, 30)
 
     expect(first.claimed).toBe(true)
     expect(resend.claimed).toBe(false)
@@ -343,12 +370,12 @@ describe('RedisIdempotencyStore E2E (Redis Cluster)', () => {
   // Every script touches one key, so one slot: claim, hold, complete and replay work on a cluster.
   it('claims, holds, completes and replays across the cluster', async () => {
     const store = storeOf(app)
-    const claim = await store.begin('c-1', FP, 30)
+    const claim = await store.begin(hashed('c-1'), FP, 30)
     if (!claim.claimed) throw new Error('expected a claim')
 
-    expect((await store.begin('c-1', FP, 30)).claimed).toBe(false)
-    expect(await store.complete('c-1', claim.token, RESPONSE, 60)).toBe(true)
-    expect(await store.begin('c-1', FP, 30)).toMatchObject({
+    expect((await store.begin(hashed('c-1'), FP, 30)).claimed).toBe(false)
+    expect(await store.complete(hashed('c-1'), claim.token, RESPONSE, 60)).toBe(true)
+    expect(await store.begin(hashed('c-1'), FP, 30)).toMatchObject({
       claimed: false,
       record: { state: 'completed' }
     })
