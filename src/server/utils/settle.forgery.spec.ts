@@ -8,6 +8,7 @@
  */
 import type { ChainableCommander } from 'ioredis'
 
+import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { closeClient } from './close-client'
 import { execTransaction } from './exec-transaction'
 import { guardClient } from './guard-client'
@@ -214,6 +215,46 @@ describe('promise helpers under a hostile promise built-in', () => {
     expect(outcome.settled).toBe('resolved')
     expect(forced).toHaveBeenCalledTimes(1)
     expect(client.disconnect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the deadline of settleWithin', () => {
+  // Scenario: a hooked setTimeout plants Array.prototype.then while it arms the deadline, so the guard that
+  // runs right after the timer exists refuses. Rule: the refusal is the outcome, and the deadline it armed is
+  // cleared, so an abandoned timer cannot keep the process alive.
+  it('is cleared when the guard refuses right after the timer was armed', async () => {
+    const realSetTimeout = globalThis.setTimeout
+    const realClearTimeout = globalThis.clearTimeout
+    const armed: unknown[] = []
+    const cleared: unknown[] = []
+    globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+      Object.defineProperty(Array.prototype, 'then', {
+        value: () => undefined,
+        configurable: true,
+        writable: true
+      })
+      const timer = realSetTimeout(...args)
+      armed.push(timer)
+      return timer
+    }) as typeof setTimeout
+    globalThis.clearTimeout = ((timer: Parameters<typeof clearTimeout>[0]) => {
+      cleared.push(timer)
+      realClearTimeout(timer)
+    }) as typeof clearTimeout
+    let pending: Promise<unknown>
+    try {
+      pending = settleWithin(new RealPromise(() => undefined), 60_000)
+    } finally {
+      // The refusal is thrown before the first wait, so nothing needs the plant after the call returned.
+      Reflect.deleteProperty(Array.prototype, 'then')
+      globalThis.setTimeout = realSetTimeout
+      globalThis.clearTimeout = realClearTimeout
+    }
+
+    await expect(pending).rejects.toMatchObject({ code: CACHE_ERROR_CODES.INVALID_OPTIONS })
+    expect(armed).toHaveLength(1)
+    expect(cleared).toHaveLength(1)
+    expect(cleared[0] === armed[0]).toBe(true)
   })
 })
 

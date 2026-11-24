@@ -246,9 +246,14 @@ export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Prom
   })()
   ignoreRejection(inner)
   const timer = setTimeout(() => finish(box<T>('timeout')), timeoutMs)
-  assertPromiseIntrinsics()
-  const settlement = await pinned(outcome)
-  clearTimeout(timer)
+  let settlement: Settlement<T>
+  try {
+    assertPromiseIntrinsics()
+    settlement = await pinned(outcome)
+  } finally {
+    // A refusal here must not leave the deadline armed, which would keep the process alive.
+    clearTimeout(timer)
+  }
   assertPromiseIntrinsics()
   return settlement
 }
