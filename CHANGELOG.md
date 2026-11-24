@@ -28,6 +28,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 - A plant made inside ioredis's own synchronous command path, before the promise of a public method is returned, is not covered: the library calls no replaceable global between a public method's entry and its first suspension, and what the driver does there is the dependency's.
 - A replacement made before the library is imported is out of scope: the load-time check refuses a global `Promise` that differs from the language's, but code that replaced both the global and the prototype of async-function promises before the load, consistently, is not detectable.
 - A dependency that reads a static internally (for example `prom-client` collecting a registry with `Promise.all`) is not covered: the entry covers only the library's own code.
+- A value the host's serializer returns is handed back as the host built it, so a `then` on its own prototype chain is host-authored; the library does not inspect the chain of what a serializer returns.
 
 ## [1.2.38] - 2026-11-23
 
