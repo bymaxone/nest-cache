@@ -54,12 +54,29 @@ const OWN_CONSTRUCTOR = ((): Readonly<Record<string, unknown>> => {
  * @throws {CacheException} `INVALID_OPTIONS` when the promise cannot take the property (frozen, sealed or
  *   exotic): such a promise is never treated as pinned, so a caller fails closed rather than resolve.
  */
-export function pinConstructor(promise: object): void {
+export function pinConstructor(promise: Promise<unknown>): void {
   try {
     defineProperty(promise, 'constructor', OWN_CONSTRUCTOR)
   } catch {
+    // The promise is watched before the refusal, so a later rejection of it is never left unhandled.
+    watch(promise, noop)
     throw guardRefusal(PROMISE_REASON, 1)
   }
+}
+
+/** Starts a native `await` of the promise that reports its rejection; the handler's own throw is dropped. */
+function watch(promise: Promise<unknown>, handler: (error: unknown) => void): void {
+  void (async (): Promise<void> => {
+    try {
+      await promise
+    } catch (error) {
+      try {
+        handler(error)
+      } catch {
+        // The handler's own failure is dropped, so no rejection of this watcher is left unhandled.
+      }
+    }
+  })()
 }
 
 /**
@@ -114,7 +131,7 @@ export function isNativePromise(value: unknown): value is Promise<unknown> {
  *
  * @param value - The operand of an `await`.
  * @returns `value`, pinned when it is a native promise.
- * @throws {CacheException} `INVALID_OPTIONS` when the promise cannot take the property.
+ * @throws {CacheException} `INVALID_OPTIONS` when the promise cannot take the property; it is watched first.
  */
 export function pinned<T>(value: T): T {
   if (isNativePromise(value)) pinConstructor(value)
@@ -205,17 +222,7 @@ export function onRejection(promise: Promise<unknown>, handler: (error: unknown)
   } catch (error) {
     refusal = error
   }
-  void (async (): Promise<void> => {
-    try {
-      await promise
-    } catch (error) {
-      try {
-        handler(error)
-      } catch {
-        // The handler's own failure is dropped, so no rejection of this watcher is left unhandled.
-      }
-    }
-  })()
+  watch(promise, handler)
   // The promise is watched either way; a promise that could not be pinned is refused to the caller.
   if (refusal !== undefined) throw refusal
 }

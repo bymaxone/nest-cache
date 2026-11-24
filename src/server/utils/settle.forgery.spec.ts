@@ -11,7 +11,14 @@ import type { ChainableCommander } from 'ioredis'
 import { closeClient } from './close-client'
 import { execTransaction } from './exec-transaction'
 import { guardClient } from './guard-client'
-import { awaitAll, IntrinsicPromise, onRejection, pinConstructor, settleWithin } from './settle'
+import {
+  absorbCall,
+  awaitAll,
+  IntrinsicPromise,
+  onRejection,
+  pinConstructor,
+  settleWithin
+} from './settle'
 import {
   forgedThen,
   RealPromise,
@@ -236,6 +243,23 @@ describe('inputs that are already running', () => {
     )
     expectNoUnhandled(
       () => awaitAll([frozen, bareRejection()]),
+      () => undefined,
+      finish
+    )
+  })
+
+  // A host promise that cannot take a pin is still watched: its later rejection is absorbed, not unhandled.
+  it('absorbCall watches a frozen host promise before pinned refuses it', (finish) => {
+    const frozen = Object.freeze(
+      new IntrinsicPromise<never>((_resolve, reject) => setTimeout(reject, 5, 'x'))
+    )
+    expectNoUnhandled(
+      async () => {
+        absorbCall(
+          () => frozen,
+          () => undefined
+        )
+      },
       () => undefined,
       finish
     )
