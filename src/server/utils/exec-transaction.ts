@@ -10,7 +10,7 @@ import type { ChainableCommander } from 'ioredis'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { guardClient, mapCommandFailure } from './guard-client'
-import { assertPromiseIntrinsics } from './settle'
+import { assertPromiseIntrinsics, ignoreRejection } from './settle'
 
 /**
  * The command failure behind a discarded transaction. When a command is refused as it is queued (an
@@ -40,6 +40,7 @@ export async function execTransaction(transaction: ChainableCommander): Promise<
   let replies: Awaited<ReturnType<ChainableCommander['exec']>>
   try {
     const pending = guardClient(transaction).exec()
+    ignoreRejection(pending)
     // Checked immediately before the await the verdict is read from, and no `.catch` stands between them.
     assertPromiseIntrinsics()
     replies = await pending

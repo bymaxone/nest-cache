@@ -8,7 +8,7 @@
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { releaseClient } from './release-client'
-import { assertPromiseIntrinsics, settleWithin } from './settle'
+import { assertPromiseIntrinsics, ignoreRejection, settleWithin } from './settle'
 
 /** The part of an ioredis client (standalone or cluster) that closing needs. */
 export interface ClosableClient {
@@ -85,6 +85,7 @@ export async function closeClient(
   try {
     assertPromiseIntrinsics()
     const quit = client.quit()
+    ignoreRejection(quit)
     assertPromiseIntrinsics()
     const settlement = await settleWithin(quit, timeoutMs)
     if (settlement.kind === 'timeout') {

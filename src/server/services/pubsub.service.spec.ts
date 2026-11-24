@@ -538,4 +538,32 @@ describe('PubSubService', () => {
     )
     await observed.onApplicationShutdown()
   })
+
+  // A handler that returns a plain object while a `then` that never settles is planted: the await on its
+  // result must be refused, not left waiting.
+  it('reports a handler_error when a then is planted on Object.prototype while a handler runs', async () => {
+    const onEvent = jest.fn()
+    const observed = new PubSubService(options, connection, keyBuilder, undefined, { onEvent })
+    await observed.subscribe<string>('planted', () => {
+      Object.defineProperty(Object.prototype, 'then', {
+        value: () => undefined,
+        configurable: true
+      })
+      return {} as unknown as undefined
+    })
+
+    try {
+      await connection.getClient().publish('ps:planted', '"x"')
+      await tick()
+      await tick()
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'then')
+    }
+
+    expect(onEvent).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({ reason: 'handler_error' })
+    )
+    await observed.onApplicationShutdown()
+  })
 })

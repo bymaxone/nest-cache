@@ -11,7 +11,7 @@
  */
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
-import { assertPromiseIntrinsics, ignoreRejection, isNativePromise } from './settle'
+import { assertPromiseIntrinsics, ignoreRejection, isNativePromise, pinConstructor } from './settle'
 
 /** The exact message ioredis rejects a timed-out command with. */
 const COMMAND_TIMED_OUT = 'Command timed out'
@@ -85,7 +85,11 @@ export function guardClient<C extends object>(client: C): C {
       }
       return (...args: unknown[]): unknown => {
         const result: unknown = value.apply(target, args)
-        return isNativePromise(result) ? mapRejection(result) : result
+        if (!isNativePromise(result)) return result
+        // The caller awaits what is returned: its own constructor keeps that await off a replaced prototype.
+        const mapped = mapRejection(result)
+        pinConstructor(mapped)
+        return mapped
       }
     }
   })

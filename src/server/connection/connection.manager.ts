@@ -505,6 +505,8 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         client.once('error', onError)
         client.once('end', onEnd)
       })
+      // Handled before the check, so a refusal cannot leave a later rejection of `ready` unhandled.
+      ignoreRejection(ready)
       // Immediately before the await the verdict is read from.
       assertPromiseIntrinsics()
       await ready

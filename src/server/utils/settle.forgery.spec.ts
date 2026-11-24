@@ -6,8 +6,12 @@
  * `setTimeout` that swaps the constructor, plants an answering `then` and restores both, which must not
  * change the verdict of `closeClient`.
  */
+import type { ChainableCommander } from 'ioredis'
+
 import { closeClient } from './close-client'
+import { execTransaction } from './exec-transaction'
 import { guardClient } from './guard-client'
+import { onRejection } from './settle'
 import {
   forgedThen,
   RealPromise,
@@ -109,6 +113,51 @@ describe('promise helpers under a hostile promise built-in', () => {
         }
       }
     )
+  })
+
+  // execTransaction's own check threw before the rejected EXEC had a handler.
+  it('leaves no rejection unhandled when the constructor throws and the exec rejects', (finish) => {
+    const transaction = { exec: bareRejection } as unknown as ChainableCommander
+
+    unhandledDuring(
+      () => {
+        // The caller's own promise is handled here: only the library's rejections are counted.
+        const returned = execTransaction(transaction)
+        Object.defineProperty(returned, 'constructor', { value: RealPromise })
+        realThen.call(returned, undefined, () => undefined)
+      },
+      (unhandled) => {
+        try {
+          expect(unhandled).toBe(0)
+          finish()
+        } catch (error) {
+          finish(error)
+        }
+      }
+    )
+  })
+
+  // A rejection handler that throws must not turn into a rejection of the promise `then` derives.
+  it('leaves no rejection unhandled when the handler given to onRejection throws', (finish) => {
+    let count = 0
+    const listener = (): void => {
+      count += 1
+    }
+    process.on('unhandledRejection', listener)
+    onRejection(bareRejection(), () => {
+      throw new Error('handler boom')
+    })
+    setTimeout(() => {
+      setImmediate(() => {
+        process.off('unhandledRejection', listener)
+        try {
+          expect(count).toBe(0)
+          finish()
+        } catch (error) {
+          finish(error)
+        }
+      })
+    }, 30)
   })
 
   // A hooked setTimeout runs while closeClient arms its deadline; what it forges must not reach the verdict.

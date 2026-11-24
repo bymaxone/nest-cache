@@ -60,7 +60,7 @@ const OWN_CONSTRUCTOR = ((): Readonly<Record<string, unknown>> => {
  *
  * @param promise - A promise about to get a handler or an `await`.
  */
-function pinConstructor(promise: object): void {
+export function pinConstructor(promise: object): void {
   try {
     defineProperty(promise, 'constructor', OWN_CONSTRUCTOR)
   } catch {
@@ -133,8 +133,7 @@ function box<T>(
 
 /** Attaches a no-op rejection handler, so an early rejection is never unhandled while another promise waits. */
 export function ignoreRejection(promise: Promise<unknown>): void {
-  pinConstructor(promise)
-  apply(PROMISE_THEN, promise, [undefined, noop])
+  onRejection(promise, noop)
 }
 
 /**
@@ -183,7 +182,16 @@ export async function settleWithin<T>(work: Promise<T>, timeoutMs: number): Prom
  */
 export function onRejection(promise: Promise<unknown>, handler: (error: unknown) => void): void {
   pinConstructor(promise)
-  apply(PROMISE_THEN, promise, [undefined, handler])
+  apply(PROMISE_THEN, promise, [
+    undefined,
+    (error: unknown): void => {
+      try {
+        handler(error)
+      } catch {
+        // The handler's own failure is dropped, so no rejection of the derived promise is left unhandled.
+      }
+    }
+  ])
 }
 
 /**

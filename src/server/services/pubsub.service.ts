@@ -39,7 +39,7 @@ import { guardSerializer } from '../utils/guard-serializer'
 import { HandlerGate } from '../utils/handler-gate'
 import { KeyBuilder } from '../utils/key-builder'
 import { resolveSerializer } from '../utils/resolve-serializer'
-import { onRejection } from '../utils/settle'
+import { assertPromiseIntrinsics, onRejection } from '../utils/settle'
 import { validateRead } from '../utils/validate-read'
 
 /** Detaches a subscription's listener and unsubscribes its channel/pattern. */
@@ -320,7 +320,10 @@ export class PubSubService implements OnApplicationShutdown {
     const execute = async (channel: string, raw: string): Promise<void> => {
       try {
         await undefined
-        await invoke(await this.decode<T>(raw, options), channel)
+        const result = invoke(await this.decode<T>(raw, options), channel)
+        // Checked after the handler ran and immediately before its result is awaited.
+        assertPromiseIntrinsics()
+        await result
       } catch (error) {
         this.emitHandlerError(channel, error)
       }

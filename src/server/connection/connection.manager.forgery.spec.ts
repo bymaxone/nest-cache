@@ -8,6 +8,7 @@ import { EventEmitter } from 'node:events'
 
 import {
   forgedThen,
+  RealPromise,
   realThen,
   restoreBuiltins,
   underForgery
@@ -62,5 +63,47 @@ describe('ConnectionManager readiness under a swapped promise constructor', () =
 
     expect(outcome.settled).toBe('rejected')
     expect(redisInstances[0]?.disconnect).toHaveBeenCalled()
+  })
+
+  // The readiness promise had no handler when the check refused: the `end` the release causes rejected it.
+  it('leaves no rejection unhandled when the constructor throws during the readiness wait', (finish) => {
+    const manager = new ConnectionManager(applyDefaults({ connection: { host: 'h' } }))
+    const realConstructor = Promise.prototype.constructor
+    let count = 0
+    const listener = (): void => {
+      count += 1
+    }
+    process.on('unhandledRejection', listener)
+    Object.defineProperty(Promise.prototype, 'constructor', {
+      get() {
+        throw new Error('hostile')
+      },
+      configurable: true
+    })
+    try {
+      const init = manager.onModuleInit()
+      Object.defineProperty(init, 'constructor', { value: RealPromise })
+      realThen.call(init, undefined, () => undefined)
+    } catch {
+      // the init refusing is part of the outcome
+    }
+    setTimeout(() => {
+      Object.defineProperty(Promise.prototype, 'constructor', {
+        value: realConstructor,
+        writable: true,
+        configurable: true
+      })
+      restoreBuiltins()
+      redisInstances[0]?.emit('end')
+      setImmediate(() => {
+        process.off('unhandledRejection', listener)
+        try {
+          expect(count).toBe(0)
+          finish()
+        } catch (error) {
+          finish(error)
+        }
+      })
+    }, 30)
   })
 })
