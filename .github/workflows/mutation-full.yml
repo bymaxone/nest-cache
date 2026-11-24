@@ -36,9 +36,8 @@ jobs:
       # The ceiling is per shard job. A run the ceiling cancels leaves no score and no baseline for the
       # week, and an over-wide ceiling costs only the minutes it uses. Module-level tables and the baseline
       # of built-ins are static mutants, and each one reruns the whole suite (about 16 s with overhead): the
-      # four files that hold them have 324 static mutants of 417. With two shards, a cold run was cancelled
-      # at an 80-minute ceiling on both, so a shard of that size takes more than 80 minutes; the ceiling here
-      # is 150 for a third of the work per shard.
+      # four files that hold them have 324 static mutants of 417. A shard takes 44 to 89 minutes, measured
+      # over two cold runs of three shards, so the ceiling of 150 is about 1.7 times the slowest one.
       timeout-minutes: 150
       # A unit test the cold run did not run fails the job: it would never be held to killing a
       # mutant, and the score cannot notice. The tooling specs that reach no source are listed in
