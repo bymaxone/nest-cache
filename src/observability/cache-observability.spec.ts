@@ -8,7 +8,6 @@
 import { Logger } from '@nestjs/common'
 
 import { CacheObservability } from './cache-observability'
-import { CACHE_LOG_EVENTS } from './constants'
 
 type Level = 'debug' | 'log' | 'warn' | 'error'
 
@@ -36,11 +35,11 @@ describe('CacheObservability', () => {
     // Scenario: each connection lifecycle event of the main connection.
     // Rule: one object log, with the documented code, level and library text, and the role field.
     it.each([
-      ['connect', 'debug', CACHE_LOG_EVENTS.connect, 'Redis connection opened'],
-      ['ready', 'log', CACHE_LOG_EVENTS.ready, 'Redis connection ready'],
-      ['close', 'warn', CACHE_LOG_EVENTS.close, 'Redis connection closed'],
-      ['reconnecting', 'warn', CACHE_LOG_EVENTS.reconnecting, 'Redis connection is reconnecting'],
-      ['end', 'warn', CACHE_LOG_EVENTS.end, 'Redis connection ended, no further reconnect']
+      ['connect', 'debug', 'CACHE_CONNECT', 'Redis connection opened'],
+      ['ready', 'log', 'CACHE_READY', 'Redis connection ready'],
+      ['close', 'warn', 'CACHE_CLOSE', 'Redis connection closed'],
+      ['reconnecting', 'warn', 'CACHE_RECONNECTING', 'Redis connection is reconnecting'],
+      ['end', 'warn', 'CACHE_END', 'Redis connection ended, no further reconnect']
     ] as const)('logs %s as %s with its code', (event, level, code, message) => {
       const { logger, calls } = recorder()
       const observability = new CacheObservability({ logger })
@@ -55,10 +54,10 @@ describe('CacheObservability', () => {
       [
         'forced_disconnect',
         'warn',
-        CACHE_LOG_EVENTS.forcedDisconnect,
+        'CACHE_FORCED_DISCONNECT',
         'Redis connection did not quit in time and was disconnected'
       ],
-      ['handler_error', 'error', CACHE_LOG_EVENTS.handlerError, 'A Pub/Sub handler failed']
+      ['handler_error', 'error', 'CACHE_HANDLER_ERROR', 'A Pub/Sub handler failed']
     ] as const)('logs the %s reason as %s with its code', (reason, level, code, message) => {
       const { logger, calls } = recorder()
 
@@ -82,7 +81,7 @@ describe('CacheObservability', () => {
       expect(calls[0]).toEqual([
         'warn',
         {
-          event: CACHE_LOG_EVENTS.pubsubDropped,
+          event: 'CACHE_PUBSUB_DROPPED',
           message:
             'Pub/Sub messages were dropped because every handler slot and the queue were taken',
           role: 'subscriber',
@@ -103,7 +102,7 @@ describe('CacheObservability', () => {
         [
           'error',
           {
-            event: CACHE_LOG_EVENTS.connectionError,
+            event: 'CACHE_CONNECTION_ERROR',
             message: 'Redis connection error',
             role: 'main'
           }
@@ -264,10 +263,7 @@ describe('CacheObservability', () => {
           observability.events.onEvent?.('ready', payload as unknown as Record<string, unknown>)
         ).not.toThrow()
         expect(calls).toEqual([
-          [
-            'log',
-            { event: CACHE_LOG_EVENTS.ready, message: 'Redis connection ready', role: 'unknown' }
-          ]
+          ['log', { event: 'CACHE_READY', message: 'Redis connection ready', role: 'unknown' }]
         ])
       }
     )
@@ -282,7 +278,7 @@ describe('CacheObservability', () => {
 
         expect(contexts).toEqual(['BymaxCache'])
         expect(spy).toHaveBeenCalledWith({
-          event: CACHE_LOG_EVENTS.ready,
+          event: 'CACHE_READY',
           message: 'Redis connection ready',
           role: 'main'
         })
