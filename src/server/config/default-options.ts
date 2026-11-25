@@ -558,7 +558,14 @@ function validateConnectionNumbers(
   if (options === undefined || options === null) {
     return
   }
-  const ranges = [
+  // Typed here, not cast with `as const`: the instrumenter skips what is under `as`.
+  const ranges: readonly (readonly [
+    string,
+    unknown,
+    number,
+    number,
+    { when: number | null; text: string } | undefined
+  ])[] = [
     ['port', fromUrl.port === undefined ? options.port : undefined, 1, 65_535, undefined],
     ['db', fromUrl.db === undefined ? options.db : undefined, 0, MAX_TIMER_DELAY_MS, undefined],
     [
@@ -575,12 +582,12 @@ function validateConnectionNumbers(
       MAX_TIMER_DELAY_MS,
       { when: null, text: 'null lifts the retry bound: only commandTimeout would bound a command' }
     ]
-  ] as const
+  ]
   for (const [option, value, min, max, why] of ranges) {
     // `null` is unset too, except for `maxRetriesPerRequest`, where it is the driver's "retry forever".
     const unset = option === 'maxRetriesPerRequest' ? value === undefined : isUnset(value)
-    const inRange =
-      typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+    // `Number.isInteger` is false for every non-number, so the bounds below only ever see a number.
+    const inRange = Number.isInteger(value) && (value as number) >= min && (value as number) <= max
     if (!unset && !inRange) {
       refuseOption(`${where}.${option}`, 'not an integer in range', value, {
         min,
@@ -662,7 +669,6 @@ export function applyDefaults(options: BymaxCacheModuleOptions): Readonly<Resolv
     Object.defineProperty(resolved, key, {
       get: (): unknown => value,
       enumerable: false,
-      // Stryker disable next-line BooleanLiteral: equivalent HERE — `resolved` is `Object.freeze`d on the way out and freezing makes every property non-configurable anyway, so flipping this flag changes nothing observable. It stays because it states the guarantee where the accessor is defined, and nest-storage withholds its credentials the same way WITHOUT freezing, where this flag is the only thing enforcing it.
       configurable: false
     })
   }
@@ -716,11 +722,11 @@ export const OPTION_KEYS: Readonly<Record<keyof BymaxCacheModuleOptions, true>> 
  */
 export function resolveOptions(options: BymaxCacheModuleOptions): Readonly<ResolvedOptions> {
   return readingOptions(() => {
-    const copied = snapshotBlocks(
-      Object.fromEntries(
-        Object.keys(OPTION_KEYS).map((key) => [key, readKey(options, key)])
-      ) as BymaxCacheModuleOptions
+    // The cast sits on the result, not on the call that reads: the instrumenter skips what is under `as`.
+    const read = Object.fromEntries(
+      Object.keys(OPTION_KEYS).map((key) => [key, readKey(options, key)])
     )
+    const copied = snapshotBlocks(read as BymaxCacheModuleOptions)
     // Without a prototype, so that a key planted on `Object.prototype` is not read as an option the host
     // left out by any step that follows; what the host holds on a class or a prototype was read above.
     const snapshot = Object.assign(Object.create(null) as BymaxCacheModuleOptions, copied, {

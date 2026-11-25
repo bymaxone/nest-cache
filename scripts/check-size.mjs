@@ -63,7 +63,7 @@ const ROOT = pkg.root
 // `mset` runs in and the reporting of its failures) and the refusal of an `eval` with more keys and
 // arguments than a call can carry.
 //
-// The server CJS budget (22 140 B, measured 22 110) gates the `require` build of the server entry, which
+// The server CJS budget (22 174 B, measured 22 144) gates the `require` build of the server entry, which
 // the ESM budget does not measure and which is the larger of the two.
 // The admin budget (5 977 B, measured 5 947) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
@@ -89,7 +89,7 @@ const ROOT = pkg.root
 // main entry imports neither `@bymax-one/nest-core` nor `prom-client`.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 22_005 },
-  { name: 'server CJS (NestJS module)', path: 'dist/server/index.cjs', brotli: 22_140 },
+  { name: 'server CJS (NestJS module)', path: 'dist/server/index.cjs', brotli: 22_174 },
   { name: 'admin (administration surface)', path: 'dist/admin/index.mjs', brotli: 5_977 },
   { name: 'metrics (connection metrics)', path: 'dist/metrics/index.mjs', brotli: 1.5 * 1024 },
   {

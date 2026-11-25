@@ -326,7 +326,7 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       // replace a default with "no bound".
       const supplied = readingOptions(() => copyClusterOptions(cluster.options))
       const nodes = readingOptions(() => cluster.nodes)
-      const driverOptions = {
+      const driverOptions: ClusterOptions = {
         // Fail-fast defaults, as the other modes get: without them a cluster that goes
         // down after boot queues every command for as long as it stays down.
         enableOfflineQueue: false,
@@ -335,16 +335,17 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
           enableOfflineQueue: overrides.enableOfflineQueue
         }),
         redisOptions: withOwnKeys({
-          Connector: GuardedConnector,
+          Connector: GuardedConnector as RedisOptions['Connector'],
           connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
           commandTimeout: DEFAULT_COMMAND_TIMEOUT_MS,
           maxRetriesPerRequest: DEFAULT_MAX_RETRIES_PER_REQUEST,
           disconnectTimeout: DISCONNECT_TIMEOUT_MS,
           ...supplied.redisOptions
         })
-      } as OwnedClusterOptions
+      }
+      // The casts sit on the results, not on the literals: the instrumenter skips what is under `as`.
       return refusingDriverOptions(() =>
-        sealDelayQueue(new Cluster(nodes, withOwnKeys(driverOptions)))
+        sealDelayQueue(new Cluster(nodes, withOwnKeys(driverOptions) as OwnedClusterOptions))
       )
     }
     return new Redis(
@@ -368,14 +369,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     sentinel: NonNullable<ResolvedOptions['sentinel']>,
     overrides?: Partial<RedisOptions>
   ): Redis {
-    return bindSentinelEmitter(
-      new Redis(
-        withOwnKeys({
-          Connector: GuardedSentinelConnector,
-          ...readingOptions(() => this.sentinelOptions(sentinel, overrides))
-        } as OwnedRedisOptions)
-      )
-    )
+    const options: RedisOptions = {
+      Connector: GuardedSentinelConnector as RedisOptions['Connector'],
+      ...readingOptions(() => this.sentinelOptions(sentinel, overrides))
+    }
+    return bindSentinelEmitter(new Redis(withOwnKeys(options) as OwnedRedisOptions))
   }
 
   /**
@@ -389,16 +387,14 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
     sentinel: NonNullable<ResolvedOptions['sentinel']>,
     overrides?: Partial<RedisOptions>
   ): OwnedRedisOptions {
-    return shallowBare({
+    const options: RedisOptions = {
       ...this.#redisOptionsResolved,
       ...overrides,
       sentinels: sentinel.sentinels,
       name: sentinel.name,
-      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(sentinel.sentinelPassword) && {
         sentinelPassword: sentinel.sentinelPassword
       }),
-      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(sentinel.password) && { password: sentinel.password }),
       // Normalize 'replica' → 'slave' — ioredis only accepts 'slave' at the
       // wire level; our public interface accepts 'replica' per Redis 7 naming.
@@ -413,7 +409,9 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
         enableTLSForSentinelMode: true,
         sentinelTLS: this.#redisOptionsResolved.tls
       })
-    } as OwnedRedisOptions)
+    }
+    // The cast sits on the result, not on the literal above: the instrumenter skips what is under `as`.
+    return shallowBare(options) as OwnedRedisOptions
   }
 
   /** Merges connection options with defaults; URL fields take precedence. */
@@ -433,15 +431,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
       keepAlive: c.keepAlive ?? DEFAULT_KEEP_ALIVE_MS,
       noDelay: c.noDelay ?? true,
       family: c.family ?? 4,
-      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.host) && { host: c.host }),
       ...(!isUnset(c.port) && { port: c.port }),
-      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.password) && { password: c.password }),
       ...(!isUnset(c.db) && { db: c.db }),
-      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.username) && { username: c.username }),
-      // Stryker disable next-line ConditionalExpression: the key is own and undefined either way (withOwnKeys), and a null here is refused by validation before this runs
       ...(!isUnset(c.tls) && { tls: c.tls }),
       ...fromUrl,
       // After the URL, which names no timer, so the type says what is true: a number, always.
