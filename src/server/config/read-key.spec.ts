@@ -186,6 +186,28 @@ describe('readHooks', () => {
     expect(Object.getPrototypeOf(hooks)).toBeNull()
   })
 
+  // Scenario: the host passes one hook of each name, as a method of its own object.
+  // Rule: each of the three names is read and bound to the host object, and a call reaches the host's function.
+  it.each(['onEvent', 'onOperation', 'onQueue'] as const)(
+    'keeps the %s hook a function that reaches the host object',
+    (name) => {
+      const calls: unknown[] = []
+      const host = {
+        marker: 'host',
+        [name](this: { marker: string }, value: unknown): void {
+          calls.push([this.marker, value])
+        }
+      }
+      const hooks = readHooks(host) as Record<string, (value: unknown) => void>
+
+      expect(typeof hooks[name]).toBe('function')
+      hooks[name]?.('payload')
+
+      expect(calls).toEqual([['host', 'payload']])
+      expect(Object.keys(hooks)).toEqual([name])
+    }
+  )
+
   it('holds each hook as an ordinary data property', () => {
     const hooks = readHooks({ onEvent: 'text' }) as Record<string, unknown>
 

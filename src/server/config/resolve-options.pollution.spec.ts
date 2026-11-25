@@ -236,6 +236,25 @@ describe('a hook planted on Object.prototype', () => {
     }
   })
 
+  // Scenario: the host's events bag holds the hook. Rule: the resolved options keep it a function, and a call
+  // reaches the host's function.
+  it.each(['onEvent', 'onOperation', 'onQueue'] as const)(
+    'is called when the host put %s in its events',
+    (hook) => {
+      const spy = jest.fn()
+      const resolved = resolveOptions({
+        connection: { host: 'h' },
+        events: { [hook]: spy }
+      } as unknown as BymaxCacheModuleOptions)
+      const kept = Reflect.get(resolved.events as object, hook) as (...args: unknown[]) => void
+
+      expect(typeof kept).toBe('function')
+      kept('first', 'second')
+
+      expect(spy).toHaveBeenCalledWith('first', 'second')
+    }
+  )
+
   it('leaves the bag alone when the host gave none', () => {
     const resolved = resolveOptions({
       connection: { host: 'h' }

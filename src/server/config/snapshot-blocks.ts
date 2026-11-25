@@ -463,7 +463,8 @@ export function snapshotBlocks(options: BymaxCacheModuleOptions): BymaxCacheModu
   const standalone = isObject(connection) ? readSet(connection, STANDALONE_KEYS) : connection
   const sentinelBlock = isObject(sentinel) ? readSet(sentinel, SENTINEL_KEYS) : sentinel
   const clusterBlock = isObject(cluster) ? readSet(cluster, CLUSTER_KEYS) : cluster
-  return {
+  // The cast sits on the result, not on the literal: the instrumenter skips what is under `as`.
+  const snapshot = {
     ...options,
     scripts: copyList(options.scripts, 'scripts', (definition) =>
       readPlain(definition, SCRIPT_KEYS)
@@ -483,5 +484,6 @@ export function snapshotBlocks(options: BymaxCacheModuleOptions): BymaxCacheModu
           options: readClusterOptions(clusterBlock.options)
         }
       : clusterBlock
-  } as BymaxCacheModuleOptions
+  }
+  return snapshot as BymaxCacheModuleOptions
 }
