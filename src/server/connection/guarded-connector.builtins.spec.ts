@@ -17,19 +17,21 @@ import { GuardedConnector, GuardedSentinelConnector } from './guarded-connector'
 import { sealDelayQueue } from './sealed-delay-queue'
 
 const closers: Array<() => void> = []
+/** Kept from before any row replaces it: the helpers below must restore with this, never with the live one. */
+const originalDefineProperty = Object.defineProperty
 
 afterEach(() => {
   for (const close of closers.splice(0)) close()
 })
 
-/** Runs `run` with `owner[name]` replaced by `replacement`, and puts the original back. */
+/** Runs `run` with `owner[name]` replaced by `replacement`, and puts the original back, even when `owner[name]` is `Object.defineProperty`. */
 function replacing<T>(owner: object, name: string, replacement: unknown, run: () => T): T {
   const original = Object.getOwnPropertyDescriptor(owner, name) as PropertyDescriptor
-  Object.defineProperty(owner, name, { ...original, value: replacement })
+  originalDefineProperty(owner, name, { ...original, value: replacement })
   try {
     return run()
   } finally {
-    Object.defineProperty(owner, name, original)
+    originalDefineProperty(owner, name, original)
   }
 }
 
@@ -41,11 +43,11 @@ async function replacingUntilSettled<T>(
   run: () => Promise<T>
 ): Promise<T> {
   const original = Object.getOwnPropertyDescriptor(owner, name) as PropertyDescriptor
-  Object.defineProperty(owner, name, { ...original, value: replacement })
+  originalDefineProperty(owner, name, { ...original, value: replacement })
   try {
     return await run()
   } finally {
-    Object.defineProperty(owner, name, original)
+    originalDefineProperty(owner, name, original)
   }
 }
 
@@ -143,6 +145,8 @@ describe('the probe clients of a sentinel connector, with a built-in replaced af
     )
     probe.on('error', () => undefined)
     closers.push(() => probe.disconnect())
+
+    expect(Object.defineProperty).toBe(originalDefineProperty)
 
     // Every driver name and nothing else: a loop that reads one past the names would define `undefined`.
     expect(Object.hasOwn(probe.options, 'undefined')).toBe(false)
