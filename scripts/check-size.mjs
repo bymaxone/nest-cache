@@ -64,10 +64,7 @@ const ROOT = pkg.root
 // arguments than a call can carry.
 //
 // The server CJS budget (22 174 B, measured 22 144) gates the `require` build of the server entry, which
-// the ESM budget does not measure and which is the larger of the two. It rose from 22 140 B (measured
-// 22 131 on 4e59e3e, +13 B) because the casts moved off logic, so that the mutation run instruments the
-// option copies and the sentinel and cluster driver options (DEC-226): the typed consts and the extra
-// bindings add 19 raw bytes to each server build. The server ESM budget (22 005 B) did not move.
+// the ESM budget does not measure and which is the larger of the two.
 // The admin budget (5 977 B, measured 5 947) is far smaller than the server's because the admin entry does NOT
 // bundle one: `@bymax-one/nest-cache` is external in the admin tsup entry, so the subpath imports
 // the package rather than inlining a second copy of `CacheService` and the DI tokens. That is a
