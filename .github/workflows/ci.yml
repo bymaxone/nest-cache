@@ -29,11 +29,10 @@ jobs:
       unit-command: pnpm test:cov:all
       run-mutation: true
       mutation-source-globs: '^(src/)'
-      # The per-push run is incremental: 21 and 37 minutes on main (runs 45554796267 and
-      # 45380181401), and one run was cancelled at the previous 45-minute ceiling (run
-      # 45295436708). A run that re-tests many files, or whose baseline cache expired, needs more,
-      # so this ceiling leaves twice that room. The job is CANCELLED rather than failed when it
-      # lands, which reads as an infrastructure blip instead of a budget.
+      # The per-push run is incremental, so its length follows how many files changed and whether
+      # the baseline cache is warm: 21 to 37 minutes when measured on main. The ceiling leaves more
+      # than twice the longest of those. A job that reaches it is CANCELLED rather than failed,
+      # which reads as an infrastructure blip instead of a budget.
       mutation-timeout-minutes: 90
 
   # Library-specific verification: type-level API tests, full build, output
