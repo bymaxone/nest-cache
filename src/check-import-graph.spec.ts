@@ -33,6 +33,7 @@ const CLEAN: Record<string, string> = {
   admin:
     "import { CacheService } from '@bymax-one/nest-cache'\nimport { Injectable } from '@nestjs/common'\n",
   shared: 'export const X = 1\n',
+  idempotency: "import { Redis } from 'ioredis'\n",
   metrics:
     "import { Counter } from 'prom-client'\nimport { x } from '@bymax-one/nest-core/metrics'\n",
   observability:
@@ -73,7 +74,7 @@ describe('check-import-graph', () => {
     expect(result.output).toContain('server')
   })
 
-  it.each(['admin', 'shared'])('fails when %s loads prom-client', (entry) => {
+  it.each(['admin', 'shared', 'idempotency'])('fails when %s loads prom-client', (entry) => {
     const result = run(dist({ ...CLEAN, [entry]: `${CLEAN[entry]}import 'prom-client'\n` }))
 
     expect(result.status).toBe(1)
