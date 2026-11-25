@@ -81,7 +81,8 @@ const SPECIES_BASELINE_REASON =
  *   function whose `prototype` is that prototype.
  */
 export const NativePromise: PromiseConstructor = ((): PromiseConstructor => {
-  const prototype = getPrototypeOf((async (): Promise<undefined> => undefined)()) as {
+  const probe = async (): Promise<undefined> => undefined
+  const prototype = getPrototypeOf(probe()) as {
     constructor: unknown
   }
   const candidate = prototype.constructor as PromiseConstructor
