@@ -87,14 +87,14 @@ so you control exact versions and the supply-chain surface stays minimal.
 
 One package, several entry points — import only what your app needs:
 
-| Subpath           | Import                                | Purpose                                                                                                                                             |                                                     Dependencies                                                      |
-| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------: |
-| **Server**        | `@bymax-one/nest-cache`               | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException`                                            |                                        NestJS 11, ioredis 6, reflect-metadata                                         |
-| **Admin**         | `@bymax-one/nest-cache/admin`         | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal                                                |                                        NestJS 11, ioredis 6, the server entry                                         |
-| **Metrics**       | `@bymax-one/nest-cache/metrics`       | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core`                                            |                 NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`                  |
-| **Observability** | `@bymax-one/nest-cache/observability` | Operation, Pub/Sub backlog and drop metrics, a readiness indicator and the library's log events, through `@bymax-one/nest-core` and the Nest logger |                 NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`                  |
-| **Idempotency**   | `@bymax-one/nest-cache/idempotency`   | `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`                      | NestJS 11, ioredis 6, the server entry; the `@bymax-one/nest-core` release that has the idempotency port (types only) |
-| **Shared**        | `@bymax-one/nest-cache/shared`        | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                                                             |                                                         None                                                          |
+| Subpath           | Import                                | Purpose                                                                                                                                             |                                     Dependencies                                      |
+| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :-----------------------------------------------------------------------------------: |
+| **Server**        | `@bymax-one/nest-cache`               | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException`                                            |                        NestJS 11, ioredis 6, reflect-metadata                         |
+| **Admin**         | `@bymax-one/nest-cache/admin`         | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal                                                |                        NestJS 11, ioredis 6, the server entry                         |
+| **Metrics**       | `@bymax-one/nest-cache/metrics`       | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core`                                            | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`  |
+| **Observability** | `@bymax-one/nest-cache/observability` | Operation, Pub/Sub backlog and drop metrics, a readiness indicator and the library's log events, through `@bymax-one/nest-core` and the Nest logger | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`  |
+| **Idempotency**   | `@bymax-one/nest-cache/idempotency`   | `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`                      | NestJS 11, ioredis 6, the server entry; `@bymax-one/nest-core` >= 1.6.24 (types only) |
+| **Shared**        | `@bymax-one/nest-cache/shared`        | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                                                             |                                         None                                          |
 
 ```
 shared (zero deps)
@@ -890,7 +890,7 @@ Every scan-based operation throws `UNSUPPORTED_IN_CLUSTER`, inherited from `Cach
 
 ## 🔁 Idempotency store (`/idempotency`)
 
-`RedisIdempotencyStore` implements `IIdempotencyStore` from `@bymax-one/nest-core`, so an application can keep the claims and answers of HTTP idempotency keys in the Redis it already uses for the cache. The subpath needs the `@bymax-one/nest-core` release that has the idempotency port; it imports that package for types only, so the bundle holds no runtime reference to it. You bind the store to core's token yourself:
+`RedisIdempotencyStore` implements `IIdempotencyStore` from `@bymax-one/nest-core`, so an application can keep the claims and answers of HTTP idempotency keys in the Redis it already uses for the cache. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import, so the bundle holds no runtime reference to it. You bind the store to core's token yourself:
 
 ```ts
 import { BYMAX_IDEMPOTENCY_STORE } from '@bymax-one/nest-core/idempotency'

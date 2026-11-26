@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-cache",
-  "version": "1.2.40",
+  "version": "1.2.41",
   "description": "Typed Redis cache for NestJS based on ioredis 6, with namespace strategy, Pub/Sub and Lua script management.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -162,7 +162,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@bymax-one/nest-core": "1.6.15",
+    "@bymax-one/nest-core": "1.6.24",
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",

@@ -7,11 +7,17 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.41] - 2026-11-26
+
 ### Added
 
-- `@bymax-one/nest-cache/idempotency`: `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`. The subpath imports that package for types only and needs the release that has the idempotency port; bind the class to core's `BYMAX_IDEMPOTENCY_STORE` in your module. `begin`, `complete` and `release` are single-key scripts on the primary; a malformed or truncated stored value rejects with `cache.deserialization_failed`.
+- `@bymax-one/nest-cache/idempotency`: `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import; bind the class to core's `BYMAX_IDEMPOTENCY_STORE` in your module. `begin`, `complete` and `release` are single-key scripts on the primary; a malformed or truncated stored value rejects with `cache.deserialization_failed`.
 
   **Apply to a consumer:** nothing changes for an existing install; the new subpath is opt-in and the other entries are untouched.
+
+### Fixed
+
+- README: under a `commandTimeout`, `pipeline().exec()` resolves with one `[error]` entry per command and no value, so check each entry. The two cases in which a shutdown with Redis down still reports `forced_disconnect` are now listed. The behaviour is unchanged.
 
 ## [1.2.40] - 2026-11-24
 
@@ -1253,7 +1259,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.40...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.41...HEAD
+[1.2.41]: https://github.com/bymaxone/nest-cache/compare/v1.2.40...v1.2.41
 [1.2.40]: https://github.com/bymaxone/nest-cache/compare/v1.2.39...v1.2.40
 [1.2.39]: https://github.com/bymaxone/nest-cache/compare/v1.2.38...v1.2.39
 [1.2.38]: https://github.com/bymaxone/nest-cache/compare/v1.2.37...v1.2.38

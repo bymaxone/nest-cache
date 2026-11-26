@@ -60,18 +60,12 @@ async function codeOf(run: Promise<unknown>): Promise<string> {
   throw new Error('expected a rejection')
 }
 
-describe('RedisIdempotencyStore', () => {
-  // The texts are literals so that a changed name or body is seen here. What each body does runs
-  // only against a real Redis (test/e2e/idempotency.e2e-spec.ts).
-  it('registers its three scripts, each name and body as written', () => {
-    // Arrange / Act
-    const { register } = build()
-
-    // Assert
-    expect(register.mock.calls).toEqual([
-      [
-        'bymax-idempotency-begin',
-        `
+// The texts are literals so that a changed name or body is seen here. What each body does runs
+// only against a real Redis (test/e2e/idempotency.e2e-spec.ts).
+const REGISTERED_SCRIPTS = [
+  [
+    'bymax-idempotency-begin',
+    `
 local kind = redis.call('TYPE', KEYS[1])['ok']
 if kind == 'none' then
   redis.call('HSET', KEYS[1], 's', 'p', 'f', ARGV[1], 't', ARGV[2])
@@ -84,10 +78,10 @@ end
 local f = redis.call('HMGET', KEYS[1], 's', 'f', 't', 'st', 'h', 'b')
 return {'h', redis.call('PTTL', KEYS[1]), f[1] or false, f[2] or false, f[3] or false, f[4] or false, f[5] or false, f[6] or false}
 `
-      ],
-      [
-        'bymax-idempotency-complete',
-        `
+  ],
+  [
+    'bymax-idempotency-complete',
+    `
 local kind = redis.call('TYPE', KEYS[1])['ok']
 if kind == 'none' then return 0 end
 if kind ~= 'hash' then return -1 end
@@ -99,10 +93,10 @@ redis.call('HDEL', KEYS[1], 't')
 redis.call('EXPIRE', KEYS[1], ARGV[4])
 return 1
 `
-      ],
-      [
-        'bymax-idempotency-release',
-        `
+  ],
+  [
+    'bymax-idempotency-release',
+    `
 local kind = redis.call('TYPE', KEYS[1])['ok']
 if kind == 'none' then return 0 end
 if kind ~= 'hash' then return -1 end
@@ -111,8 +105,16 @@ if held[1] ~= 'p' or held[2] ~= ARGV[1] then return 0 end
 redis.call('DEL', KEYS[1])
 return 1
 `
-      ]
-    ])
+  ]
+]
+
+describe('RedisIdempotencyStore', () => {
+  it('registers its three scripts, each name and body as written', () => {
+    // Arrange / Act
+    const { register } = build()
+
+    // Assert
+    expect(register.mock.calls).toEqual(REGISTERED_SCRIPTS)
   })
 
   describe('begin', () => {
