@@ -128,6 +128,17 @@ describe('decodeHeld', () => {
     expect('body' in (absent.response ?? {})).toBe(false)
   })
 
+  it('accepts stored headers of exactly the bound', () => {
+    // Arrange: `{"k":"` and `"}` are eight bytes.
+    const value = 'a'.repeat(MAX_HEADERS_BYTES - 8)
+
+    // Act
+    const record = decodeHeld(completed({ 5: `{"k":"${value}"}` }))
+
+    // Assert
+    expect(record.response?.headers).toEqual({ k: value })
+  })
+
   it('keeps a __proto__ header as an own entry and does not pollute', () => {
     // Arrange / Act
     const record = decodeHeld(completed({ 5: '{"__proto__":"x"}' }))
@@ -155,6 +166,7 @@ describe('decodeHeld', () => {
     ['a status of two digits', completed({ 4: '20' }), 'status_invalid'],
     ['a status of 099', completed({ 4: '099' }), 'status_invalid'],
     ['a status of 600', completed({ 4: '600' }), 'status_invalid'],
+    ['a status of four digits', completed({ 4: '1200' }), 'status_invalid'],
     ['a status with a trailing newline', completed({ 4: '200\n' }), 'status_invalid'],
     ['a completed record without headers', completed({ 5: null }), 'headers_invalid'],
     ['headers that are not JSON', completed({ 5: '{' }), 'headers_invalid'],
@@ -162,6 +174,7 @@ describe('decodeHeld', () => {
     ['headers that are an array', completed({ 5: '[]' }), 'headers_invalid'],
     ['headers that are a string', completed({ 5: '"a"' }), 'headers_invalid'],
     ['a header value that is not text', completed({ 5: '{"a":1}' }), 'headers_invalid'],
+    ['one text and one other header value', completed({ 5: '{"a":"1","b":2}' }), 'headers_invalid'],
     [
       'headers over the bound',
       completed({ 5: `{"k":"${'a'.repeat(MAX_HEADERS_BYTES)}"}` }),

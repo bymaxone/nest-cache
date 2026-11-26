@@ -9,14 +9,7 @@ import { applyDefaults } from '../server/config/default-options'
 import { CACHE_ERROR_CODES } from '../server/errors/cache-error-codes'
 import { CacheException } from '../server/errors/cache.exception'
 import { KeyBuilder } from '../server/utils/key-builder'
-import {
-  BEGIN_LUA,
-  BEGIN_SCRIPT,
-  COMPLETE_LUA,
-  COMPLETE_SCRIPT,
-  RELEASE_LUA,
-  RELEASE_SCRIPT
-} from './idempotency-scripts'
+import { BEGIN_SCRIPT, COMPLETE_SCRIPT, RELEASE_SCRIPT } from './idempotency-scripts'
 import { RedisIdempotencyStore } from './redis-idempotency-store'
 
 import type { ScriptManagerService } from '../server/services/script-manager.service'
@@ -35,6 +28,16 @@ function fakeScripts(...replies: unknown[]): {
     register,
     evaluate
   }
+}
+
+/** The details of the refusal a promise rejects with. */
+async function detailsOf(run: Promise<unknown>): Promise<unknown> {
+  try {
+    await run
+  } catch (error) {
+    return (error as CacheException).details
+  }
+  throw new Error('expected a rejection')
 }
 
 /** A store on the default namespace (`app`). */
@@ -58,15 +61,57 @@ async function codeOf(run: Promise<unknown>): Promise<string> {
 }
 
 describe('RedisIdempotencyStore', () => {
-  it('registers its three scripts under their own names', () => {
+  // The texts are literals so that a changed name or body is seen here. What each body does runs
+  // only against a real Redis (test/e2e/idempotency.e2e-spec.ts).
+  it('registers its three scripts, each name and body as written', () => {
     // Arrange / Act
     const { register } = build()
 
     // Assert
     expect(register.mock.calls).toEqual([
-      [BEGIN_SCRIPT, BEGIN_LUA],
-      [COMPLETE_SCRIPT, COMPLETE_LUA],
-      [RELEASE_SCRIPT, RELEASE_LUA]
+      [
+        'bymax-idempotency-begin',
+        `
+local kind = redis.call('TYPE', KEYS[1])['ok']
+if kind == 'none' then
+  redis.call('HSET', KEYS[1], 's', 'p', 'f', ARGV[1], 't', ARGV[2])
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+  return {'c'}
+end
+if kind ~= 'hash' or redis.call('HLEN', KEYS[1]) > 6 then
+  return {'x'}
+end
+local f = redis.call('HMGET', KEYS[1], 's', 'f', 't', 'st', 'h', 'b')
+return {'h', redis.call('PTTL', KEYS[1]), f[1] or false, f[2] or false, f[3] or false, f[4] or false, f[5] or false, f[6] or false}
+`
+      ],
+      [
+        'bymax-idempotency-complete',
+        `
+local kind = redis.call('TYPE', KEYS[1])['ok']
+if kind == 'none' then return 0 end
+if kind ~= 'hash' then return -1 end
+local held = redis.call('HMGET', KEYS[1], 's', 't')
+if held[1] ~= 'p' or held[2] ~= ARGV[1] then return 0 end
+redis.call('HSET', KEYS[1], 's', 'c', 'st', ARGV[2], 'h', ARGV[3])
+if #ARGV > 4 then redis.call('HSET', KEYS[1], 'b', ARGV[5]) end
+redis.call('HDEL', KEYS[1], 't')
+redis.call('EXPIRE', KEYS[1], ARGV[4])
+return 1
+`
+      ],
+      [
+        'bymax-idempotency-release',
+        `
+local kind = redis.call('TYPE', KEYS[1])['ok']
+if kind == 'none' then return 0 end
+if kind ~= 'hash' then return -1 end
+local held = redis.call('HMGET', KEYS[1], 's', 't')
+if held[1] ~= 'p' or held[2] ~= ARGV[1] then return 0 end
+redis.call('DEL', KEYS[1])
+return 1
+`
+      ]
     ])
   })
 
@@ -169,6 +214,19 @@ describe('RedisIdempotencyStore', () => {
       expect(await codeOf(store.begin('k', 'fp', 0))).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
       expect(await codeOf(store.begin('k', 'fp', 2 ** 31))).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
       expect(evaluate).not.toHaveBeenCalled()
+    })
+
+    it('names the refused option and the reason of a bad reply in the details', async () => {
+      // Arrange
+      const { store } = build(['x'], null)
+
+      // Act / Assert
+      expect(await detailsOf(store.begin('k', 'fp', 0))).toMatchObject({ option: 'leaseSeconds' })
+      expect(
+        await detailsOf(store.complete('k', 't', { status: 200, headers: {} }, 0))
+      ).toMatchObject({ option: 'ttlSeconds' })
+      expect(await detailsOf(store.begin('k', 'fp', 30))).toEqual({ reason: 'not_a_record' })
+      expect(await detailsOf(store.begin('k', 'fp', 30))).toEqual({ reason: 'reply_invalid' })
     })
 
     it('refuses an empty key', async () => {

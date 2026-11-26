@@ -68,7 +68,7 @@ function decodeHeaders(text: Field): StoredResponseHeaders {
   try {
     parsed = JSON.parse(text)
   } catch {
-    throw malformed('headers_invalid')
+    // `parsed` stays undefined, which the shape check below refuses.
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw malformed('headers_invalid')
