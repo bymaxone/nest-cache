@@ -633,7 +633,9 @@ export class ObservabilityModule {}
   emit the same events. Alert on `role="main"`; the subscriber is control-plane traffic whose
   loss costs Pub/Sub delivery, not cache reads.
 - **An `error` carrying a `reason` is not a socket failure.** `forced_disconnect` (a live connection
-  that did not quit at shutdown) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
+  that did not quit at shutdown, which includes a `close()` that runs before the client has seen
+  the server drop and, for `main`, a reconnect handshake still waiting on a server that does not
+  answer) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
   Only an `error` carrying the driver's message does.
 - **Labels come from a closed set.** `role` is `main` or `subscriber`; anything else is recorded as
   `unknown`. No part of an error message is ever a label, since a driver message can carry a host or
@@ -948,7 +950,7 @@ What the library bounds by default, what it leaves to you, and what you see when
 
 **When Redis is down, slow or flapping**
 
-- A command a library service sends that waits longer than `commandTimeout` rejects with `cache.command_timeout` (503) (the raw client from `getClient()` rejects with the driver's own error, but `pipeline().exec()` does not reject: it resolves with one `[error, null]` pair per command, so check each pair; measured in the QA gate of 1.2.25 with a frozen Redis and `commandTimeout: 1000`, `exec()` resolved after 1 002 ms with `Command timed out` in each pair and a raw `get` rejected after 1 001 ms); with the default `enableOfflineQueue: false`, a command issued while the connection is down rejects at once with `cache.connection_lost` (`details.reason: 'offline'`, 503). Both are transient and carry the driver's error on `cause`, never in `details`.
+- A command a library service sends that waits longer than `commandTimeout` rejects with `cache.command_timeout` (503) (the raw client from `getClient()` rejects with the driver's own error, but `pipeline().exec()` does not reject: it resolves with one `[error]` entry per command and no value, so check each entry; measured in the QA gate of 1.2.25 with a frozen Redis and `commandTimeout: 1000`, `exec()` resolved after 1 002 ms with `Command timed out` in each entry and a raw `get` rejected after 1 001 ms); with the default `enableOfflineQueue: false`, a command issued while the connection is down rejects at once with `cache.connection_lost` (`details.reason: 'offline'`, 503). Both are transient and carry the driver's error on `cause`, never in `details`.
 - A client that does not become ready at boot fails the boot with `cache.connection_failed` (503). A stopped Redis refuses the connection and fails it at once (3 ms in the QA gate of 1.2.25). A frozen one fails at whichever comes first of `connectTimeout` and the first handshake command exceeding `commandTimeout`: with the defaults that is `commandTimeout`, about 5 s (measured: 5 005 ms), before `connectTimeout`'s 10 s; with a `connectTimeout` below `commandTimeout` it is `connectTimeout` (measured: 1 504 ms with `connectTimeout: 1500`); a call after that failure rejects with the same code (`details.reason: 'boot_failed'`) and opens no client.
 - A flapping connection reconnects with the capped backoff above. Commands in flight when it drops are the driver's: they reject, or are retried up to `maxRetriesPerRequest` times.
 

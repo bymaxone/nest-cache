@@ -59,16 +59,16 @@ describe('Documented limits E2E (real Redis)', () => {
   }, 120_000)
 
   // Scenario: the server is paused, so a pipeline and a raw command both wait past commandTimeout.
-  // Rule: exec() resolves with one [error, null] pair per command, while the raw command rejects with
+  // Rule: exec() resolves with one [error] entry per command and no value, while the raw command rejects with
   // the driver's own error and a library command with COMMAND_TIMEOUT.
-  it('resolves exec() with an error pair per command when the server stops answering', async () => {
+  it('resolves exec() with an error entry per command when the server stops answering', async () => {
     const id = redis.container.getId()
     execFileSync('docker', ['pause', id])
     try {
       const pairs = await cache.pipeline().set('e2e-limits:p:a', '1').get('e2e-limits:p:a').exec()
       expect(pairs?.map(([error, value]) => [error?.message, value])).toEqual([
-        ['Command timed out', null],
-        ['Command timed out', null]
+        ['Command timed out', undefined],
+        ['Command timed out', undefined]
       ])
 
       const raw: unknown = await cache
