@@ -154,13 +154,14 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
     expect((await store.begin(hashed('k-twice'), FP, 30)).claimed).toBe(false)
   })
 
-  // After the lease ends the claim is gone: complete answers false and writes nothing.
-  it('answers false for complete after the lease expired', async () => {
+  // After the lease ends the claim is gone: complete and release answer false and write nothing.
+  it('answers false for complete and release after the lease expired', async () => {
     const claim = await store.begin(hashed('k-exp'), FP, 1)
     if (!claim.claimed) throw new Error('expected a claim')
     await new Promise((resolve) => setTimeout(resolve, 1_300))
 
     expect(await store.complete(hashed('k-exp'), claim.token, RESPONSE, 60)).toBe(false)
+    expect(await store.release(hashed('k-exp'), claim.token)).toBe(false)
     expect(await raw.exists(redisKey(hashed('k-exp')))).toBe(0)
   })
 
