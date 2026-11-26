@@ -125,7 +125,7 @@
     "prepare": "husky",
     "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:mutants && pnpm check:function-length && pnpm check:admin-readonly && pnpm check:admin-types && pnpm test:cov:all && pnpm build && pnpm check:published",
     "release": "npm publish --provenance --access public",
-    "size": "node scripts/check-dist-fresh.mjs && node scripts/check-size.mjs",
+    "size": "node scripts/check-dist-fresh.mjs --tarball-ok && node scripts/check-size.mjs",
     "test": "jest",
     "test:all": "pnpm test && pnpm test:e2e",
     "test:cov": "jest --coverage",
