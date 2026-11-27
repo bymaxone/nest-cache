@@ -77,13 +77,19 @@ describe('PubSubService subscription retention', () => {
     it('rejects every caller that shared a failing in-flight command', async () => {
       const inFlight = deferred()
       subscriber[command].mockReturnValueOnce(inFlight.promise)
+      // Handled here too: if the command is never sent, rejecting it must fail the assertions below
+      // rather than end the test process as an unhandled rejection.
+      inFlight.promise.catch(() => undefined)
 
       const first = join()
       const second = join()
       inFlight.reject(new Error('LOADING'))
 
-      await expect(first).rejects.toThrow('LOADING')
-      await expect(second).rejects.toThrow('LOADING')
+      // Asserted together, so a first caller that fails differently still leaves the second handled.
+      await Promise.all([
+        expect(first).rejects.toThrow('LOADING'),
+        expect(second).rejects.toThrow('LOADING')
+      ])
       expect(subscriber[command]).toHaveBeenCalledTimes(1)
 
       await expect(join()).resolves.toEqual(expect.any(Function))
