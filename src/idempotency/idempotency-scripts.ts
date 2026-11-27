@@ -9,7 +9,7 @@
  * call, so the `EXPIRE` that follows a write cannot fail.
  *
  * Replies: `begin` answers `{'c'}` (claimed), `{'h', pttl, s, f, t, st, h, b}` (held) or `{'x'}`
- * (a key that is not a hash, or an oversized hash); `complete` and `release` answer `1`
+ * (a key that is not a hash, or a hash with extra fields); `complete` and `release` answer `1`
  * (done), `0` (not the caller's) or `-1` (a key that is not a hash).
  */
 
@@ -30,10 +30,13 @@ if kind == 'none' then
   redis.call('EXPIRE', KEYS[1], ARGV[3])
   return {'c'}
 end
-if kind ~= 'hash' or redis.call('HLEN', KEYS[1]) > 6 then
-  return {'x'}
-end
+if kind ~= 'hash' then return {'x'} end
 local f = redis.call('HMGET', KEYS[1], 's', 'f', 't', 'st', 'h', 'b')
+local known = 0
+for i = 1, 6 do
+  if f[i] then known = known + 1 end
+end
+if redis.call('HLEN', KEYS[1]) ~= known then return {'x'} end
 return {'h', redis.call('PTTL', KEYS[1]), f[1] or false, f[2] or false, f[3] or false, f[4] or false, f[5] or false, f[6] or false}
 `
 

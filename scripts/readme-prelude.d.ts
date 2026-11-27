@@ -44,7 +44,11 @@ declare global {
   const NestFactory: typeof NestFactoryClass
   /** The root module of the application a snippet bootstraps. */
   class AppModule {}
-  function Module(metadata: { imports?: unknown[]; providers?: unknown[] }): ClassDecorator
+  function Module(metadata: {
+    imports?: unknown[]
+    providers?: unknown[]
+    exports?: unknown[]
+  }): ClassDecorator
   function Inject(token: unknown): ParameterDecorator
 
   /** Peer-package names the dependency-injection snippets refer to by prose. */

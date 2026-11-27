@@ -23,6 +23,7 @@ import {
   KeyBuilder,
   ScriptManagerService
 } from '@bymax-one/nest-cache'
+import type { CacheErrorCode } from '@bymax-one/nest-cache'
 
 import {
   BEGIN_LUA,
@@ -36,6 +37,26 @@ import { assertSeconds, decodeHeld, encodeHeaders } from './stored-record'
 
 /** The key prefix every claim is stored under. */
 const PREFIX = 'idem'
+
+/** A Redis error reply opens with its code, in capitals. */
+const REPLY_CODE = /^[A-Z]{2,16}(?= )/
+
+/**
+ * The failure of a script run, with the same code, details and status, and a cause that is a new
+ * error naming only the reply's code.
+ */
+function scrubbed(error: unknown): CacheException {
+  const known = error instanceof CacheException
+  if (known && error.cause === undefined) return error
+  const cause: unknown = known ? error.cause : error
+  const message = cause instanceof Error ? cause.message : ''
+  return new CacheException(
+    known ? (error.code as CacheErrorCode) : CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED,
+    known ? (error.details ?? undefined) : undefined,
+    known ? error.getStatus() : undefined,
+    new Error(REPLY_CODE.exec(message)?.[0] ?? 'driver error')
+  )
+}
 
 /** Refuses a reply that is not the shape a script of this package returns. */
 function unexpected(): CacheException {
@@ -77,11 +98,7 @@ export class RedisIdempotencyStore implements IIdempotencyStore {
   ): Promise<IdempotencyBeginResult> {
     assertSeconds('leaseSeconds', leaseSeconds)
     const token = randomUUID()
-    const reply = await this.scripts.eval(
-      BEGIN_SCRIPT,
-      [this.keys.build(PREFIX, key)],
-      [fingerprint, token, leaseSeconds]
-    )
+    const reply = await this.run(BEGIN_SCRIPT, key, [fingerprint, token, leaseSeconds])
     if (!Array.isArray(reply)) throw unexpected()
     if (reply[0] === 'c') return { claimed: true, token }
     if (reply[0] === 'h') return { claimed: false, record: decodeHeld(reply.slice(1)) }
@@ -103,11 +120,25 @@ export class RedisIdempotencyStore implements IIdempotencyStore {
       ttlSeconds
     ]
     if (response.body !== undefined) args.push(response.body)
-    return settled(await this.scripts.eval(COMPLETE_SCRIPT, [this.keys.build(PREFIX, key)], args))
+    return settled(await this.run(COMPLETE_SCRIPT, key, args))
   }
 
   /** @inheritdoc */
   async release(key: string, token: string): Promise<boolean> {
-    return settled(await this.scripts.eval(RELEASE_SCRIPT, [this.keys.build(PREFIX, key)], [token]))
+    return settled(await this.run(RELEASE_SCRIPT, key, [token]))
+  }
+
+  /** Runs one script on the claim's key; a rejection is scrubbed before it leaves. */
+  private async run(
+    script: string,
+    key: string,
+    args: ReadonlyArray<string | number>
+  ): Promise<unknown> {
+    const keys = [this.keys.build(PREFIX, key)]
+    try {
+      return await this.scripts.eval(script, keys, args)
+    } catch (error) {
+      throw scrubbed(error)
+    }
   }
 }

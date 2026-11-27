@@ -51,3 +51,15 @@ describe('README export coverage', () => {
     expect(missing).toEqual([])
   })
 })
+
+// The interceptor of `@bymax-one/nest-core` resolves the store token in the module that declares the
+// controller, so a module a feature module imports must export it.
+describe('README idempotency wiring', () => {
+  it('exports the store token from the example module', () => {
+    const section = README.slice(README.indexOf('Idempotency store (`/idempotency`)'))
+    const example = /```ts\n([\s\S]*?)```/.exec(section)?.[1] ?? ''
+
+    expect(example).toContain('export class IdempotencyModule {}')
+    expect(example).toContain('exports: [BYMAX_IDEMPOTENCY_STORE]')
+  })
+})

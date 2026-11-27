@@ -246,6 +246,19 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
     )
   })
 
+  // A foreign field is refused however few fields the hash holds, in either state.
+  it.each([
+    ['completed', { s: 'c', f: FP, st: '200', h: '{}', zz: '1' }],
+    ['in progress', { s: 'p', f: FP, t: 'tok', a: '1' }],
+    ['unknown only', { a: '1' }]
+  ])('rejects a %s hash that holds a foreign field', async (name, fields) => {
+    const key = hashed(`k-foreign-${name}`)
+    await raw.hset(redisKey(key), fields)
+    await raw.expire(redisKey(key), 60)
+
+    expect(await codeOf(store.begin(key, FP, 30))).toBe('cache.deserialization_failed')
+  })
+
   // A key of another type, or a hash with extra fields, is never claimed and never replayed.
   it('rejects a key of the wrong type and a hash with extra fields', async () => {
     await raw.set(redisKey(hashed('k-string')), 'x')

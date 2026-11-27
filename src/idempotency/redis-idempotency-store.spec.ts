@@ -5,6 +5,8 @@
  *
  * Layer: idempotency.
  */
+import { inspect } from 'node:util'
+
 import { applyDefaults } from '../server/config/default-options'
 import { CACHE_ERROR_CODES } from '../server/errors/cache-error-codes'
 import { CacheException } from '../server/errors/cache.exception'
@@ -72,10 +74,13 @@ if kind == 'none' then
   redis.call('EXPIRE', KEYS[1], ARGV[3])
   return {'c'}
 end
-if kind ~= 'hash' or redis.call('HLEN', KEYS[1]) > 6 then
-  return {'x'}
-end
+if kind ~= 'hash' then return {'x'} end
 local f = redis.call('HMGET', KEYS[1], 's', 'f', 't', 'st', 'h', 'b')
+local known = 0
+for i = 1, 6 do
+  if f[i] then known = known + 1 end
+end
+if redis.call('HLEN', KEYS[1]) ~= known then return {'x'} end
 return {'h', redis.call('PTTL', KEYS[1]), f[1] or false, f[2] or false, f[3] or false, f[4] or false, f[5] or false, f[6] or false}
 `
   ],
@@ -248,6 +253,81 @@ describe('RedisIdempotencyStore', () => {
 
       // Act / Assert
       await expect(store.begin('k', 'fp', 30)).rejects.toBe(failure)
+    })
+  })
+
+  // Error cause hygiene: the cause of a rejection names the reply's code and nothing else.
+  describe('a failed script run', () => {
+    /** What the driver rejects with, arguments attached. */
+    function replyError(message: string): Error {
+      return Object.assign(new Error(message), {
+        command: {
+          name: 'evalsha',
+          args: ['sha', '1', 'app:idem:k', 'SECRET-TOKEN', 'SECRET-BODY']
+        }
+      })
+    }
+
+    const calls: ReadonlyArray<[string, (store: RedisIdempotencyStore) => Promise<unknown>]> = [
+      ['begin', (store) => store.begin('k', 'fp', 30)],
+      ['complete', (store) => store.complete('k', 'tok', { status: 200, headers: {} }, 60)],
+      ['release', (store) => store.release('k', 'tok')]
+    ]
+
+    it.each(calls)('%s keeps the code and details and reduces the cause', async (_name, call) => {
+      // Arrange
+      const failure = new CacheException(
+        CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED,
+        { name: 'script' },
+        502,
+        replyError("OOM command not allowed when used memory > 'maxmemory'.")
+      )
+      const { store, evaluate } = build()
+      evaluate.mockRejectedValueOnce(failure)
+
+      // Act
+      const thrown = (await call(store).catch((error: unknown) => error)) as CacheException
+
+      // Assert
+      expect(thrown).toBeInstanceOf(CacheException)
+      expect(thrown.code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+      expect(thrown.details).toEqual({ name: 'script' })
+      expect(thrown.getStatus()).toBe(502)
+      expect(thrown.cause).toEqual(new Error('OOM'))
+      expect(inspect(thrown, { depth: 10, showHidden: true })).not.toContain('SECRET')
+    })
+
+    it.each([
+      ['a timeout', new Error('Command timed out')],
+      ['a message that opens with an argument', replyError('SECRET-BODY refused')],
+      ['a value that is not an Error', 'SECRET-BODY']
+    ])('names no part of %s', async (_name, cause) => {
+      // Arrange
+      const { store, evaluate } = build()
+      evaluate.mockRejectedValueOnce(
+        new CacheException(CACHE_ERROR_CODES.CONNECTION_LOST, undefined, undefined, cause)
+      )
+
+      // Act
+      const thrown = (await store.release('k', 'tok').catch((error: unknown) => error)) as Error
+
+      // Assert
+      expect(thrown.cause).toEqual(new Error('driver error'))
+    })
+
+    it('wraps a rejection that is not a CacheException', async () => {
+      // Arrange
+      const { store, evaluate } = build()
+      evaluate.mockRejectedValueOnce(replyError('READONLY You cannot write against a replica.'))
+
+      // Act
+      const thrown = (await store.release('k', 'tok').catch((error: unknown) => error)) as Error
+
+      // Assert
+      expect(thrown).toBeInstanceOf(CacheException)
+      expect((thrown as CacheException).code).toBe(CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED)
+      expect(thrown.cause).toEqual(new Error('READONLY'))
+      expect(inspect(thrown, { depth: 10, showHidden: true })).not.toContain('SECRET')
     })
   })
 

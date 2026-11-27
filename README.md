@@ -900,10 +900,13 @@ import { RedisIdempotencyStore } from '@bymax-one/nest-cache/idempotency'
   providers: [
     RedisIdempotencyStore,
     { provide: BYMAX_IDEMPOTENCY_STORE, useExisting: RedisIdempotencyStore }
-  ]
+  ],
+  exports: [BYMAX_IDEMPOTENCY_STORE]
 })
 export class IdempotencyModule {}
 ```
+
+Import `IdempotencyModule` in the module that declares the `@Idempotent` controllers.
 
 How it stores and answers:
 

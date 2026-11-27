@@ -87,7 +87,7 @@ const ROOT = pkg.root
 // The observability entry (2 400 B, measured 2 373) is the optional subpath that publishes them, and
 // the fan-out of `combineCacheEvents` that raises its first failure to the module; the
 // main entry imports neither `@bymax-one/nest-core` nor `prom-client`.
-// The idempotency entry (1 848 B, measured 1 818) is the three Lua scripts, the stored-record decoder with its
+// The idempotency entry (2 084 B, measured 2 054) is the three Lua scripts, the stored-record decoder with its
 // bounds, and the store class; it imports the server entry by package name, so the main entry carries none of it.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 22_005 },
@@ -102,7 +102,7 @@ const BUDGETS = [
   {
     name: 'idempotency (Redis idempotency store)',
     path: 'dist/idempotency/index.mjs',
-    brotli: 1_848
+    brotli: 2_084
   },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 0.5 * 1024 }
 ]
