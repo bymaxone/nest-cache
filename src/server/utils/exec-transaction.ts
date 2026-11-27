@@ -10,6 +10,7 @@ import type { ChainableCommander } from 'ioredis'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
 import { guardClient, mapCommandFailure } from './guard-client'
+import { redactDriverError } from './redact-driver-error'
 import { assertPromiseIntrinsics, ignoreRejection, pinned } from './settle'
 
 /**
@@ -52,7 +53,7 @@ export async function execTransaction(transaction: ChainableCommander): Promise<
   }
   return replies.map(([error, reply]) => {
     if (error !== null) {
-      throw mapCommandFailure(error)
+      throw mapCommandFailure(redactDriverError(error))
     }
     return reply
   })
