@@ -25,6 +25,7 @@ import {
   objectPrototype,
   speciesSymbol
 } from '../connection/intrinsics'
+import { redactDriverError } from './redact-driver-error'
 
 /** Why the guard refused when the promise machinery of the language was replaced or planted on. */
 export const PROMISE_REASON =
@@ -181,9 +182,13 @@ export function pinned<T>(value: T): T {
  */
 export async function nextStep<T>(iterator: AsyncIterator<T>): Promise<IteratorResult<T>> {
   assertPromiseIntrinsics()
-  const step = await pinned(iterator.next())
-  assertPromiseIntrinsics()
-  return step
+  try {
+    const step = await pinned(iterator.next())
+    assertPromiseIntrinsics()
+    return step
+  } catch (error) {
+    throw redactDriverError(error)
+  }
 }
 
 /** How a settlement ended: the value, the rejection, or the deadline. Never has a prototype. */

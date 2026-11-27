@@ -7,7 +7,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
-## [1.2.41] - 2026-11-27
+## [1.2.42] - 2026-11-27
 
 ### Added
 
@@ -18,6 +18,14 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 ### Fixed
 
 - README: under a `commandTimeout`, `pipeline().exec()` resolves with one `[error]` entry per command and no value, so check each entry. Cases in which a shutdown with Redis down still reports `forced_disconnect` are now listed. The behaviour is unchanged.
+
+## [1.2.41] - 2026-11-27
+
+### Changed
+
+- Error cause hygiene. An error from the Redis driver is now rewritten before it leaves the library: its `command` property is removed, and of a server reply only the reply code is kept, so its message reads `OOM (server error text withheld)` (a reply that does not start with a code word in capitals reads `ERR (server error text withheld)`). This covers what a library service rejects with, the `cause` of a `CacheException`, and the `error` event of `events.onEvent` and `./observability`. The error object and its class are the same. What a command on a raw client from `getClient()` rejects with, the results of `pipeline().exec()` and a `reconnectOnError` of your own receive the driver's error as it is.
+
+  **Apply to a consumer:** code that matched the text of a server error now sees the reply code alone: match on the code (`error.message.startsWith('WRONGTYPE ')`, on `cause` under a `CacheException`). A script that signals an outcome with `redis.error_reply` should return a value instead, or put the outcome in the code word.
 
 ## [1.2.40] - 2026-11-24
 
@@ -1259,7 +1267,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.41...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.42...HEAD
+[1.2.42]: https://github.com/bymaxone/nest-cache/compare/v1.2.41...v1.2.42
 [1.2.41]: https://github.com/bymaxone/nest-cache/compare/v1.2.40...v1.2.41
 [1.2.40]: https://github.com/bymaxone/nest-cache/compare/v1.2.39...v1.2.40
 [1.2.39]: https://github.com/bymaxone/nest-cache/compare/v1.2.38...v1.2.39
