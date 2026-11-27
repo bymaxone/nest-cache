@@ -55,13 +55,14 @@ describe('redactDriverError', () => {
 
   it.each([
     'All sentinels are unreachable. Retrying from scratch after 10ms. Last error: ERR secret',
-    'Too many Cluster redirections. Last error: ReplyError: ERR\nsecret'
-  ])('cuts the repeated error from %j and from its stack', (message) => {
+    'Too many Cluster redirections. Last error: ReplyError: ERR\nsecret',
+    'Command queue state error. Please report it. Last reply: secret'
+  ])('cuts the quoted tail from %j and from its stack', (message) => {
     const error = new Error(message)
 
     redactDriverError(error)
 
-    expect(error.message).toBe(message.slice(0, message.indexOf(' Last error:')))
+    expect(error.message).toBe(message.slice(0, message.indexOf(' Last ')))
     expect(error.stack).toContain(error.message)
     expect(error.stack).not.toContain('secret')
   })

@@ -14,15 +14,15 @@ const REPLY_CODE = /^[A-Z]{2,32}(?!\S)/
 /** What follows the reply code in a rewritten server error. */
 const WITHHELD = '(server error text withheld)'
 
-/** The part of a driver message that repeats another error, which can be a server's reply. */
-const REPEATED_ERROR = / Last error: [\s\S]*/
+/** The part of a driver message that quotes another error or a server's reply. */
+const REPEATED_ERROR = / Last (?:error|reply): [\s\S]*/
 
 /** Reads an own property, so a key planted on `Object.prototype` is never taken for the driver's. */
 function own(target: object, key: string): unknown {
   return Object.hasOwn(target, key) ? Reflect.get(target, key) : undefined
 }
 
-/** The message an error may keep: a reply code for a server error, no repeated error otherwise. */
+/** The message an error may keep: a reply code for a server error, no quoted tail otherwise. */
 function safeMessage(error: Error): string {
   if (error.name !== 'ReplyError') {
     return error.message.replace(REPEATED_ERROR, '')

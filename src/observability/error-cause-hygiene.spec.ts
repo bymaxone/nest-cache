@@ -280,3 +280,23 @@ describe('the driver reads its own errors first', () => {
     expect((failure as Error).message).toBe('READONLY (server error text withheld)')
   })
 })
+
+describe('a reply nothing was waiting for', () => {
+  it('reaches the error event without the reply it quotes', async () => {
+    const payloads: unknown[] = []
+    // One reply for the command, and one more that answers nothing.
+    const doubled: Reply = (command) =>
+      command === 'get' ? `$-1\r\n$${MARKER.length}\r\n${MARKER}\r\n` : '+OK\r\n'
+    const module = await boot(doubled, {
+      onEvent: (event, data) => {
+        if (event === 'error') payloads.push(data)
+      }
+    })
+
+    await module.get(CacheService).get('p', 'id')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(everything(payloads)).toContain('Command queue state error')
+    expect(everything(payloads)).not.toContain(MARKER)
+  })
+})
