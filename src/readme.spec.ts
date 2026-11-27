@@ -63,7 +63,8 @@ const readDefault = (cell: string): unknown => {
 
 describe('README option-defaults table', () => {
   const rows = tableRowsAfter('## ⚙️ Configuration')
-  const resolved: Record<string, unknown> = { ...applyDefaults({}) }
+  // Resolved inside each test: a throw while jest collects the suite would hide every test in it.
+  const resolved = (): Record<string, unknown> => ({ ...applyDefaults({}) })
   const topLevel = rows.filter(([option]) => !(option ?? '').includes('.'))
 
   /*
@@ -78,11 +79,12 @@ describe('README option-defaults table', () => {
         (option ?? '').replace(/`/g, ''),
         readDefault(fallback ?? '')
       ])
+    const defaults = resolved()
 
     expect(documented.length).toBeGreaterThan(0)
     for (const [option, fallback] of documented) {
-      if (fallback !== undefined) expect(Object.keys(resolved)).toContain(option)
-      expect({ [String(option)]: resolved[String(option)] }).toEqual({ [String(option)]: fallback })
+      if (fallback !== undefined) expect(Object.keys(defaults)).toContain(option)
+      expect({ [String(option)]: defaults[String(option)] }).toEqual({ [String(option)]: fallback })
     }
   })
 
@@ -95,7 +97,7 @@ describe('README option-defaults table', () => {
     const row = topLevel.find(([option]) => option === '`serializer`')
 
     expect(row?.[2]).toBe('`JsonSerializer`')
-    expect(resolved['serializer']).toBeUndefined()
+    expect(resolved()['serializer']).toBeUndefined()
   })
 
   /*
@@ -147,11 +149,11 @@ describe('README error-code table', () => {
 
 describe('README admin options table', () => {
   const rows = tableRowsAfter('### Options')
-  const resolved: Record<string, unknown> = {
+  const resolved = (): Record<string, unknown> => ({
     ...resolveAdminOptions({
       scopes: [{ id: 'a', label: 'A', pattern: 'a:*', isReadable: true, origin: 'x' }]
     })
-  }
+  })
 
   /*
    * Arrange: the `/admin` Options table.
@@ -164,12 +166,14 @@ describe('README admin options table', () => {
       fallback === '—' ? undefined : readDefault(fallback ?? '')
     ])
 
-    expect(documented.map(([option]) => option).sort()).toEqual(Object.keys(resolved).sort())
+    const defaults = resolved()
+
+    expect(documented.map(([option]) => option).sort()).toEqual(Object.keys(defaults).sort())
     for (const [option, fallback] of documented) {
       if (option === 'scopes') {
         expect(fallback).toBeUndefined()
       } else {
-        expect({ [String(option)]: resolved[String(option)] }).toEqual({
+        expect({ [String(option)]: defaults[String(option)] }).toEqual({
           [String(option)]: fallback
         })
       }
