@@ -42,8 +42,8 @@ const PREFIX = 'idem'
 const REPLY_CODE = /^[A-Z]{2,16}(?= )/
 
 /**
- * The failure of a script run, with the same code, details and status, and a cause that is a new
- * error naming only the reply's code.
+ * The failure of a script run, with its code, details and status. A cause, if any, becomes a new
+ * error with the reply's code or `driver error`.
  */
 function scrubbed(error: unknown): CacheException {
   const known = error instanceof CacheException
