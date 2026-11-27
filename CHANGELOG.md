@@ -11,13 +11,13 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Added
 
-- `@bymax-one/nest-cache/idempotency`: `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import; bind the class to core's `BYMAX_IDEMPOTENCY_STORE` in your module. `begin`, `complete` and `release` are single-key scripts on the primary; a malformed or truncated stored value rejects with `cache.deserialization_failed`.
+- `@bymax-one/nest-cache/idempotency`: `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import; bind the class to core's `BYMAX_IDEMPOTENCY_STORE` in your module. `begin`, `complete` and `release` are single-key scripts on the primary; `begin` rejects a stored value it cannot read as a record with `cache.deserialization_failed`.
 
-  **Apply to a consumer:** nothing changes for an existing install; the new subpath is opt-in and the other entries are untouched.
+  **Apply to a consumer:** nothing changes for an existing install; the new subpath is opt-in.
 
 ### Fixed
 
-- README: under a `commandTimeout`, `pipeline().exec()` resolves with one `[error]` entry per command and no value, so check each entry. The two cases in which a shutdown with Redis down still reports `forced_disconnect` are now listed. The behaviour is unchanged.
+- README: under a `commandTimeout`, `pipeline().exec()` resolves with one `[error]` entry per command and no value, so check each entry. Cases in which a shutdown with Redis down still reports `forced_disconnect` are now listed. The behaviour is unchanged.
 
 ## [1.2.40] - 2026-11-24
 

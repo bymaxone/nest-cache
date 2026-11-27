@@ -1,7 +1,7 @@
 /**
  * Encoding and validation of what the idempotency store keeps under a key. A value read back is
- * checked field by field and never trusted: anything that is not exactly a record this package
- * wrote is refused as `DESERIALIZATION_FAILED`, with a fixed reason and never a part of the value.
+ * checked field by field and never trusted: one that does not decode as a record is refused as
+ * `DESERIALIZATION_FAILED`, with a fixed reason and never a part of the value.
  */
 import type {
   IdempotencyRecord,
