@@ -35,6 +35,7 @@ import type { ICacheEvents } from '../interfaces/cache-events.interface'
 import { fireEvent } from '../utils/call-hook'
 import { closeClient } from '../utils/close-client'
 import { parseRedisUrl } from '../utils/parse-redis-url'
+import { redactDriverError } from '../utils/redact-driver-error'
 import { releaseClient } from '../utils/release-client'
 import { assertPromiseIntrinsics, IntrinsicPromise, ignoreRejection, pinned } from '../utils/settle'
 import { copyClusterOptions } from './copy-cluster-options'
@@ -452,7 +453,11 @@ export class ConnectionManager implements OnModuleInit, OnApplicationShutdown {
   private registerListeners(client: AnyRedis, role: ClientRole): void {
     client.on('connect', () => this.emit('connect', { role }))
     client.on('ready', () => this.emit('ready', { role }))
-    client.on('error', (err: Error) => this.emit('error', { role, error: err.message, err }))
+    // Registered before every other listener, so no hook, logger or `cause` sees the arguments.
+    client.on('error', (err: Error) => {
+      redactDriverError(err)
+      this.emit('error', { role, error: err.message, err })
+    })
     client.on('close', () => this.emit('close', { role }))
     client.on('reconnecting', (delay: number) => this.emit('reconnecting', { role, delay }))
     client.on('end', () => this.emit('end', { role }))

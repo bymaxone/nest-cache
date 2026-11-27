@@ -12,6 +12,7 @@
 import { assertDriverUnshadowed } from '../connection/driver-option-names'
 import { CACHE_ERROR_CODES } from '../errors/cache-error-codes'
 import { CacheException } from '../errors/cache.exception'
+import { redactDriverError } from './redact-driver-error'
 import {
   assertPromiseIntrinsics,
   ignoreRejection,
@@ -62,7 +63,7 @@ async function mapRejection(result: Promise<unknown>): Promise<unknown> {
     assertPromiseIntrinsics()
     return reply
   } catch (error) {
-    throw mapCommandFailure(error)
+    throw mapCommandFailure(redactDriverError(error))
   }
 }
 
