@@ -56,17 +56,22 @@ class ProfileService {
 // not, so the metadata the compiler would emit is declared here.
 Reflect.defineMetadata('design:paramtypes', [CacheService], ProfileService)
 
-// README Scenario 1 — Standalone, unchanged apart from the `providers` this test needs.
-@Module({
-  imports: [
-    BymaxCacheModule.forRoot({
-      connection: { url: 'redis://localhost:6379' },
-      namespace: 'app'
-    })
-  ],
-  providers: [ProfileRepository, ProfileService]
-})
-class AppModule {}
+// README Scenario 1 — Standalone, unchanged apart from the `providers` this test needs. It is built
+// inside the test: `forRoot` runs the library, and a throw while jest collects the suite would hide
+// the test.
+const scenarioOneModule = () => {
+  @Module({
+    imports: [
+      BymaxCacheModule.forRoot({
+        connection: { url: 'redis://localhost:6379' },
+        namespace: 'app'
+      })
+    ],
+    providers: [ProfileRepository, ProfileService]
+  })
+  class AppModule {}
+  return AppModule
+}
 
 describe('README Quick Start', () => {
   /*
@@ -78,7 +83,7 @@ describe('README Quick Start', () => {
    * `app:user-profile:<userId>` with a 3600-second TTL; the second is served from the cache.
    */
   it('caches a profile under app:user-profile:<userId> with a 3600-second TTL', async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    const moduleRef = await Test.createTestingModule({ imports: [scenarioOneModule()] }).compile()
     await moduleRef.init()
     const cache = moduleRef.get(CacheService)
     const repository = moduleRef.get(ProfileRepository)
