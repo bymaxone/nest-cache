@@ -11,9 +11,9 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Changed
 
-- Error cause hygiene. An error from the Redis driver is now rewritten before it leaves the library: its `command` property is removed, and of a server reply only the reply code is kept, so its message reads `OOM (server error text withheld)` (a reply whose first word is not all capitals reads `ERR (server error text withheld)`). This covers what a library service rejects with, the `cause` of a `CacheException`, and the `error` event of `events.onEvent` and `./observability`. The error object and its class are the same. A raw client from `getClient()`, the results of `pipeline().exec()` and a `reconnectOnError` of your own still receive the driver's error as it is.
+- Error cause hygiene. An error from the Redis driver is now rewritten before it leaves the library: its `command` property is removed, and of a server reply only the reply code is kept, so its message reads `OOM (server error text withheld)` (a reply that does not start with a code word in capitals reads `ERR (server error text withheld)`). This covers what a library service rejects with, the `cause` of a `CacheException`, and the `error` event of `events.onEvent` and `./observability`. The error object and its class are the same. What a command on a raw client from `getClient()` rejects with, the results of `pipeline().exec()` and a `reconnectOnError` of your own receive the driver's error as it is.
 
-  **Apply to a consumer:** code that matched the text of a server error, or read `error.command`, now sees the reply code alone: match on the code (`error.message.startsWith('WRONGTYPE ')`). A script that signals an outcome with `redis.error_reply` should return a value instead, or put the outcome in the code word.
+  **Apply to a consumer:** code that matched the text of a server error now sees the reply code alone: match on the code (`error.message.startsWith('WRONGTYPE ')`, on `cause` under a `CacheException`). A script that signals an outcome with `redis.error_reply` should return a value instead, or put the outcome in the code word.
 
 ## [1.2.40] - 2026-11-24
 
