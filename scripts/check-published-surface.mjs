@@ -368,8 +368,8 @@ async function checkLinks() {
       // npmjs.com serves 403 to any datacenter IP, browser User-Agent included,
       // so asking it whether a package page exists measures Cloudflare rather
       // than the package. The registry is the authoritative source for the same
-      // question and answers honestly — this redirects the check, it does not
-      // suppress it: a package that truly does not exist still fails here.
+      // question and answers honestly. The check is redirected, not dropped; a
+      // 404 from the registry is only a note, expected until the first publish.
       const probe = url.replace(
         /^https:\/\/www\.npmjs\.com\/package\/(.+)$/,
         (_, name) => `https://registry.npmjs.org/${encodeURIComponent(name)}`
