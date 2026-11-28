@@ -70,8 +70,7 @@ const config: Config = {
   // can't track (verified via --detectOpenHandles); force a clean exit.
   forceExit: true,
   clearMocks: true,
-  restoreMocks: true,
-  passWithNoTests: process.env['CI'] !== 'true'
+  restoreMocks: true
 }
 
 export default config

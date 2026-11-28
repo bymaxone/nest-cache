@@ -45,9 +45,7 @@ const config: Config = {
   },
   coverageReporters: ['text', 'lcov', 'clover'],
   clearMocks: true,
-  restoreMocks: true,
-  // Only skip "no tests" error in local dev — CI must always have tests
-  passWithNoTests: process.env['CI'] !== 'true'
+  restoreMocks: true
 }
 
 export default config

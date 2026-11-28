@@ -21,7 +21,6 @@
     "resolveJsonModule": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "skipLibCheck": true,
     "paths": {
       "@bymax-one/nest-cache": ["./src/server/index.ts"],
       "@bymax-one/nest-cache/shared": ["./src/shared/index.ts"],
