@@ -81,6 +81,11 @@ function settled(reply: unknown): boolean {
   throw unexpected()
 }
 
+/**
+ * The `IIdempotencyStore` of `@bymax-one/nest-core` on this package's Redis connection. It takes
+ * `ScriptManagerService` and `KeyBuilder` from `BymaxCacheModule` and registers its three scripts
+ * when constructed. The host binds it to `BYMAX_IDEMPOTENCY_STORE`.
+ */
 @Injectable()
 export class RedisIdempotencyStore implements IIdempotencyStore {
   /**

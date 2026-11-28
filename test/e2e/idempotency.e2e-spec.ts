@@ -76,11 +76,14 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
     await redis?.container.stop()
   })
 
-  // A first begin claims with a lease; the hash carries the lease as a TTL and no token leaks.
+  // A first begin claims with a lease: the token it returns is the one the hash holds, and the
+  // hash has the lease as its TTL.
   it('claims a free key with a lease and returns a token', async () => {
     const result = await store.begin(hashed('k-claim'), FP, 30)
+    if (!result.claimed) throw new Error('expected a claim')
 
-    expect(result.claimed).toBe(true)
+    expect(result.token).toMatch(/^[0-9a-f-]{36}$/)
+    expect(await raw.hget(redisKey(hashed('k-claim')), 't')).toBe(result.token)
     const ttl = await raw.ttl(redisKey(hashed('k-claim')))
     expect(ttl).toBeGreaterThan(0)
     expect(ttl).toBeLessThanOrEqual(30)
@@ -127,10 +130,11 @@ describe('RedisIdempotencyStore E2E (real Redis)', () => {
   // A token that is not the holder's changes nothing and answers false.
   it('refuses complete and release with a token that does not hold the claim', async () => {
     await store.begin(hashed('k-wrong'), FP, 30)
+    const before = await raw.hgetall(redisKey(hashed('k-wrong')))
 
     expect(await store.complete(hashed('k-wrong'), 'not-the-token', RESPONSE, 60)).toBe(false)
     expect(await store.release(hashed('k-wrong'), 'not-the-token')).toBe(false)
-    expect((await store.begin(hashed('k-wrong'), FP, 30)).claimed).toBe(false)
+    expect(await raw.hgetall(redisKey(hashed('k-wrong')))).toEqual(before)
   })
 
   // release frees an in-progress claim so the next begin claims anew.
@@ -389,9 +393,9 @@ describe('RedisIdempotencyStore E2E (Redis Cluster)', () => {
 
     expect((await store.begin(hashed('c-1'), FP, 30)).claimed).toBe(false)
     expect(await store.complete(hashed('c-1'), claim.token, RESPONSE, 60)).toBe(true)
-    expect(await store.begin(hashed('c-1'), FP, 30)).toMatchObject({
+    expect(await store.begin(hashed('c-1'), FP, 30)).toEqual({
       claimed: false,
-      record: { state: 'completed' }
+      record: { state: 'completed', fingerprint: FP, response: RESPONSE }
     })
   })
 })
