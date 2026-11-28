@@ -67,7 +67,15 @@ key or a value). These cases stay outside that check, and each is a known limit:
 
 - A command already in flight: a key planted after the command was sent and before its reply
   arrives is read by ioredis's reply handler, which the library cannot check from. Freeze
-  `Object.prototype` early to close it.
+  `Object.prototype` before the library is imported to close it: import a module that runs the
+  freeze ahead of the library, or use `node --import`. A freeze that runs after the import is
+  read as a change to the standard keys, and the cache then refuses with `cache.invalid_options`.
+- The later pages of `cache.scan` and `flushNamespace`: ioredis's scan stream sends the `SCAN`
+  commands itself, so a key planted during an iteration does not stop them. `flushNamespace` is
+  refused at its next `UNLINK`, and is not refused if no later page holds a key. `cache.scan` is
+  not refused. In both, a planted key that the driver reads while it handles a reply (one named
+  `scan`, for example) ends the process, as for a command in flight. None of this covers a key
+  named `then`, which the library counts as a replaced Promise built-in.
 - A pipeline or transaction opened before the plant and executed after it: `exec()` runs the
   queued commands without a library frame, so the plant ends the process with an uncaught
   exception, as it does for a command in flight. `getClient()` returns the raw client, which

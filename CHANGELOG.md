@@ -7,6 +7,21 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ## [Unreleased]
 
+## [1.2.43] - 2026-11-28
+
+Documentation only. No `dist/` file changes.
+
+### Fixed
+
+- The README states what the idempotency store puts on `cause`: a new `Error` whose message is the reply code alone or `driver error`, where the rest of the library keeps the driver's error with the message `OOM (server error text withheld)`.
+
+### Known limits
+
+- The later pages of `cache.scan` and `flushNamespace` are sent by ioredis's scan stream with no `Object.prototype` check. `cache.scan` is not refused under a key planted during the iteration; `flushNamespace` is refused only at its next `UNLINK`. A key named `then` is not covered by this: the library counts it as a replaced Promise built-in.
+- Freezing `Object.prototype`, which earlier notes advise, closes the in-flight case only when the freeze runs before the library is imported. A later freeze makes the cache refuse with `cache.invalid_options`.
+
+**Apply to a consumer:** on an error from `RedisIdempotencyStore`, compare `error.cause?.message` with the code (`=== 'OOM'`). The `startsWith('X ')` form given under 1.2.41 does not match there.
+
 ## [1.2.42] - 2026-11-27
 
 ### Added
@@ -1267,7 +1282,8 @@ type or export moved.
 - Published with npm OIDC provenance — no long-lived tokens
 - Zero direct runtime dependencies (`dependencies: {}`) — `ioredis` and NestJS via peer deps
 
-[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.42...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-cache/compare/v1.2.43...HEAD
+[1.2.43]: https://github.com/bymaxone/nest-cache/compare/v1.2.42...v1.2.43
 [1.2.42]: https://github.com/bymaxone/nest-cache/compare/v1.2.41...v1.2.42
 [1.2.41]: https://github.com/bymaxone/nest-cache/compare/v1.2.40...v1.2.41
 [1.2.40]: https://github.com/bymaxone/nest-cache/compare/v1.2.39...v1.2.40
