@@ -2,6 +2,8 @@
  * End-to-end tests for `RedisIdempotencyStore` against a REAL Redis (Testcontainers), plus one
  * Redis Cluster row.
  *
+ * Layer: idempotency, the store against the server it runs its scripts on.
+ *
  * The Lua scripts, the TTL bounds, the compare-and-set on the token and the refusal of a stored
  * value this package did not write are only meaningful on a real server: `ioredis-mock` does not
  * run the scripts. Raw seeding goes through a second plain ioredis client so each row can plant
