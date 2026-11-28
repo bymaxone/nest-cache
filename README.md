@@ -890,7 +890,7 @@ Every scan-based operation throws `UNSUPPORTED_IN_CLUSTER`, inherited from `Cach
 
 ## 🔁 Idempotency store (`/idempotency`)
 
-`RedisIdempotencyStore` implements `IIdempotencyStore` from `@bymax-one/nest-core`, so an application can keep the claims and answers of HTTP idempotency keys in the Redis it already uses for the cache. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import, so the bundle holds no runtime reference to it. You bind the store to core's token yourself:
+`RedisIdempotencyStore` implements `IIdempotencyStore` from `@bymax-one/nest-core`, so an application can keep the claims and answers of HTTP idempotency keys in the Redis it already uses for the cache. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import, so the bundle holds no runtime reference to it. The package manager does not enforce that floor: the optional peer range stays `^1.1.0`, which `./metrics` and `./observability` ask for, so check the installed version of `@bymax-one/nest-core` yourself. You bind the store to core's token yourself:
 
 ```ts
 import { BYMAX_IDEMPOTENCY_STORE } from '@bymax-one/nest-core/idempotency'
@@ -914,6 +914,7 @@ How it stores and answers:
 - `complete` and `release` act only on an in-progress claim held by the token; they answer `false` after expiry, after a takeover and after a completion. The token never leaves the store in a record.
 - The stored body is opaque text, stored as UTF-8; an empty body and an absent body stay different. The size bounds belong to `@bymax-one/nest-core`; this store does not bound the body.
 - `leaseSeconds` and `ttlSeconds` must be integers from 1 to 2,147,483,647; anything else is refused with `cache.invalid_options` before a command is sent.
+- Nothing that `begin` could not read back is written: `begin` refuses a fingerprint that is not a non-empty string, and `complete` refuses a status that is not an integer from 100 to 599 and headers that are not an object of strings, each with `cache.invalid_options` before a command is sent.
 - Every failure rejects, so a caller that fails closed never replays a doubtful answer: an outage and a timeout reject with the connection and script errors the rest of the library uses. A stored value that `begin` cannot read as a record rejects with `cache.deserialization_failed`, never as a claim and never as a replay. Nothing from the key, the token or the body appears in an error, a log or a metric label.
 - As its own guard, `complete` also refuses a serialised header map over 65,536 bytes, with `cache.invalid_options`. That refusal happens before any write, so the claim stays `in_progress` until its lease ends and a retry in that window is told the request is in progress. A rejected `complete` is never released by this store. A connection error is different: it can arrive after the write (a lost reply), so a retry may find the completed record and replay it, or find the claim still `in_progress`.
 - A key that `begin` refuses as unreadable stays blocked until an operator deletes it or it expires.

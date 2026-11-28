@@ -33,7 +33,13 @@ import {
   RELEASE_LUA,
   RELEASE_SCRIPT
 } from './idempotency-scripts'
-import { assertSeconds, decodeHeld, encodeHeaders } from './stored-record'
+import {
+  assertFingerprint,
+  assertSeconds,
+  assertStatus,
+  decodeHeld,
+  encodeHeaders
+} from './stored-record'
 
 /** The key prefix every claim is stored under. */
 const PREFIX = 'idem'
@@ -96,6 +102,7 @@ export class RedisIdempotencyStore implements IIdempotencyStore {
     fingerprint: string,
     leaseSeconds: number
   ): Promise<IdempotencyBeginResult> {
+    assertFingerprint(fingerprint)
     assertSeconds('leaseSeconds', leaseSeconds)
     const token = randomUUID()
     const reply = await this.run(BEGIN_SCRIPT, key, [fingerprint, token, leaseSeconds])
@@ -113,6 +120,7 @@ export class RedisIdempotencyStore implements IIdempotencyStore {
     ttlSeconds: number
   ): Promise<boolean> {
     assertSeconds('ttlSeconds', ttlSeconds)
+    assertStatus(response.status)
     const args: Array<string | number> = [
       token,
       response.status,

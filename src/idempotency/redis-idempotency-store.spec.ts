@@ -223,6 +223,15 @@ describe('RedisIdempotencyStore', () => {
       expect(evaluate).not.toHaveBeenCalled()
     })
 
+    it('refuses an empty fingerprint before anything is sent', async () => {
+      // Arrange
+      const { store, evaluate } = build(['c'])
+
+      // Act / Assert
+      expect(await codeOf(store.begin('k', '', 30))).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
+      expect(evaluate).not.toHaveBeenCalled()
+    })
+
     it('names the refused option and the reason of a bad reply in the details', async () => {
       // Arrange
       const { store } = build(['x'], null)
@@ -396,6 +405,22 @@ describe('RedisIdempotencyStore', () => {
       expect(await codeOf(store.complete('k', 't', { status: 200, headers: big }, 60))).toBe(
         CACHE_ERROR_CODES.INVALID_OPTIONS
       )
+      expect(evaluate).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['a status over 599', { status: 600, headers: {} }],
+      ['a fractional status', { status: 200.5, headers: {} }],
+      ['no headers', { status: 200 }]
+    ])('refuses %s before anything is sent', async (_name, response) => {
+      // Arrange
+      const { store, evaluate } = build(1)
+
+      // Act
+      const run = store.complete('k', 't', response as { status: number; headers: {} }, 60)
+
+      // Assert
+      expect(await codeOf(run)).toBe(CACHE_ERROR_CODES.INVALID_OPTIONS)
       expect(evaluate).not.toHaveBeenCalled()
     })
   })

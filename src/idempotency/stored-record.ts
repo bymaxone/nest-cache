@@ -25,6 +25,11 @@ function malformed(reason: string): CacheException {
   return new CacheException(CACHE_ERROR_CODES.DESERIALIZATION_FAILED, { reason })
 }
 
+/** Refuses an argument of the caller, naming it and never its value. */
+function refused(option: string, reason: string): CacheException {
+  return new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, { option, reason })
+}
+
 /**
  * Checks a lease or ttl before anything is sent.
  *
@@ -34,10 +39,29 @@ function malformed(reason: string): CacheException {
  */
 export function assertSeconds(option: string, seconds: number): void {
   if (!Number.isSafeInteger(seconds) || seconds < 1 || seconds > MAX_SECONDS) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      option,
-      reason: 'must be an integer from 1 to 2147483647'
-    })
+    throw refused(option, 'must be an integer from 1 to 2147483647')
+  }
+}
+
+/**
+ * Checks a fingerprint before it is stored: a record without one cannot be read back.
+ *
+ * @throws {CacheException} `INVALID_OPTIONS` unless it is a non-empty string.
+ */
+export function assertFingerprint(fingerprint: unknown): void {
+  if (typeof fingerprint !== 'string' || fingerprint === '') {
+    throw refused('fingerprint', 'must be a non-empty string')
+  }
+}
+
+/**
+ * Checks a status before it is stored: a record with another one cannot be read back.
+ *
+ * @throws {CacheException} `INVALID_OPTIONS` unless it is an integer from 100 to 599.
+ */
+export function assertStatus(status: unknown): void {
+  if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 599) {
+    throw refused('response.status', 'must be an integer from 100 to 599')
   }
 }
 
@@ -46,15 +70,22 @@ export function assertSeconds(option: string, seconds: number): void {
  *
  * @param headers - The allow-listed headers.
  * @returns The JSON text.
- * @throws {CacheException} `INVALID_OPTIONS` when it would take more than {@link MAX_HEADERS_BYTES}.
+ * @throws {CacheException} `INVALID_OPTIONS` unless it is an object of strings, or when it would
+ *   take more than {@link MAX_HEADERS_BYTES}.
  */
 export function encodeHeaders(headers: StoredResponseHeaders): string {
+  const given: unknown = headers
+  if (
+    typeof given !== 'object' ||
+    given === null ||
+    Array.isArray(given) ||
+    !Object.values(given).every((value) => value === undefined || typeof value === 'string')
+  ) {
+    throw refused('response.headers', 'must be an object of strings')
+  }
   const text = JSON.stringify(headers)
   if (Buffer.byteLength(text, 'utf8') > MAX_HEADERS_BYTES) {
-    throw new CacheException(CACHE_ERROR_CODES.INVALID_OPTIONS, {
-      option: 'response.headers',
-      reason: 'serialised headers exceed 65536 bytes'
-    })
+    throw refused('response.headers', 'serialised headers exceed 65536 bytes')
   }
   return text
 }

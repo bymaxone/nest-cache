@@ -11,7 +11,7 @@ Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while
 
 ### Added
 
-- `@bymax-one/nest-cache/idempotency`: `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import; bind the class to core's `BYMAX_IDEMPOTENCY_STORE` in your module. `begin`, `complete` and `release` are single-key scripts on the primary; `begin` rejects a stored value it cannot read as a record with `cache.deserialization_failed`.
+- `@bymax-one/nest-cache/idempotency`: `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import; bind the class to core's `BYMAX_IDEMPOTENCY_STORE` in your module. `begin`, `complete` and `release` are single-key scripts on the primary; `begin` rejects a stored value it cannot read as a record with `cache.deserialization_failed`. A fingerprint that is not a non-empty string, a status outside the integers 100 to 599 and headers that are not an object of strings are refused with `cache.invalid_options` before a command is sent. The package manager does not enforce the `>= 1.6.24` floor: the optional peer range stays `^1.1.0`.
 
   **Apply to a consumer:** nothing changes for an existing install; the new subpath is opt-in.
 

@@ -8,7 +8,9 @@
 import { CACHE_ERROR_CODES } from '../server/errors/cache-error-codes'
 import { CacheException } from '../server/errors/cache.exception'
 import {
+  assertFingerprint,
   assertSeconds,
+  assertStatus,
   decodeHeld,
   encodeHeaders,
   MAX_HEADERS_BYTES,
@@ -63,7 +65,74 @@ describe('assertSeconds', () => {
   )
 })
 
+// What the read refuses must not be written: the key would stay blocked until its ttl ends.
+describe('assertFingerprint', () => {
+  it('accepts a non-empty string', () => {
+    // Arrange / Act / Assert
+    expect(() => assertFingerprint('f')).not.toThrow()
+  })
+
+  it.each(['', undefined, null, 7])('refuses %p as INVALID_OPTIONS', (value) => {
+    // Arrange / Act
+    const got = refusal(() => assertFingerprint(value))
+
+    // Assert
+    expect(got).toEqual({
+      code: CACHE_ERROR_CODES.INVALID_OPTIONS,
+      details: { option: 'fingerprint', reason: 'must be a non-empty string' }
+    })
+  })
+})
+
+describe('assertStatus', () => {
+  it.each([100, 204, 599])('accepts %p', (value) => {
+    // Arrange / Act / Assert
+    expect(() => assertStatus(value)).not.toThrow()
+  })
+
+  it.each([99, 600, 200.5, NaN, Infinity, '200', undefined])(
+    'refuses %p as INVALID_OPTIONS',
+    (value) => {
+      // Arrange / Act
+      const got = refusal(() => assertStatus(value))
+
+      // Assert
+      expect(got).toEqual({
+        code: CACHE_ERROR_CODES.INVALID_OPTIONS,
+        details: { option: 'response.status', reason: 'must be an integer from 100 to 599' }
+      })
+    }
+  )
+})
+
 describe('encodeHeaders', () => {
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['a string', 'x-a'],
+    ['a number', 5],
+    ['an array of strings', ['a']],
+    ['a value that is not a string', { 'x-a': 1 }],
+    ['a list as a value', { 'set-cookie': ['a', 'b'] }]
+  ])('refuses %s as INVALID_OPTIONS', (_name, headers) => {
+    // Arrange / Act
+    const got = refusal(() => encodeHeaders(headers as unknown as Record<string, string>))
+
+    // Assert
+    expect(got).toEqual({
+      code: CACHE_ERROR_CODES.INVALID_OPTIONS,
+      details: { option: 'response.headers', reason: 'must be an object of strings' }
+    })
+  })
+
+  it('leaves out a header whose value is undefined, as JSON does', () => {
+    // Arrange
+    const headers = { 'x-a': '1', 'x-b': undefined } as unknown as Record<string, string>
+
+    // Act / Assert
+    expect(encodeHeaders(headers)).toBe('{"x-a":"1"}')
+  })
+
   it('serialises the map as JSON', () => {
     // Arrange / Act / Assert
     expect(encodeHeaders({ 'content-type': 'application/json' })).toBe(
