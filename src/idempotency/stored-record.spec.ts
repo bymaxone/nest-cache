@@ -113,7 +113,10 @@ describe('encodeHeaders', () => {
     ['a number', 5],
     ['an array of strings', ['a']],
     ['a value that is not a string', { 'x-a': 1 }],
-    ['a list as a value', { 'set-cookie': ['a', 'b'] }]
+    ['a list as a value', { 'set-cookie': ['a', 'b'] }],
+    ['a Date', new Date(0)],
+    ['a map that serialises to another shape', { toJSON: () => ({ 'x-a': 1 }) }],
+    ['a map that cannot be serialised', { 'x-a': 1n }]
   ])('refuses %s as INVALID_OPTIONS', (_name, headers) => {
     // Arrange / Act
     const got = refusal(() => encodeHeaders(headers as unknown as Record<string, string>))

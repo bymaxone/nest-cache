@@ -65,25 +65,39 @@ export function assertStatus(status: unknown): void {
   }
 }
 
+/** The map a JSON text holds, or `undefined` unless it is an object of strings. */
+function headerMap(text: string): StoredResponseHeaders | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    // `parsed` stays undefined, which the shape check below refuses.
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
+  const entries = Object.entries(parsed)
+  if (!entries.every(([, value]) => typeof value === 'string')) return undefined
+  return Object.fromEntries(entries) as StoredResponseHeaders
+}
+
 /**
- * Serialises the headers of a response for storage.
+ * Serialises the headers of a response for storage. The text is checked with the rule the read
+ * applies, so what is stored can be read back.
  *
  * @param headers - The allow-listed headers.
  * @returns The JSON text.
- * @throws {CacheException} `INVALID_OPTIONS` unless it is an object of strings, or when it would
- *   take more than {@link MAX_HEADERS_BYTES}.
+ * @throws {CacheException} `INVALID_OPTIONS` unless it serialises to an object of strings, or when
+ *   it would take more than {@link MAX_HEADERS_BYTES}.
  */
 export function encodeHeaders(headers: StoredResponseHeaders): string {
-  const given: unknown = headers
-  if (
-    typeof given !== 'object' ||
-    given === null ||
-    Array.isArray(given) ||
-    !Object.values(given).every((value) => value === undefined || typeof value === 'string')
-  ) {
+  let text: string | undefined
+  try {
+    text = JSON.stringify(headers)
+  } catch {
+    // `text` stays undefined, which is refused below.
+  }
+  if (text === undefined || headerMap(text) === undefined) {
     throw refused('response.headers', 'must be an object of strings')
   }
-  const text = JSON.stringify(headers)
   if (Buffer.byteLength(text, 'utf8') > MAX_HEADERS_BYTES) {
     throw refused('response.headers', 'serialised headers exceed 65536 bytes')
   }
@@ -95,20 +109,9 @@ function decodeHeaders(text: Field): StoredResponseHeaders {
   if (text === null || Buffer.byteLength(text, 'utf8') > MAX_HEADERS_BYTES) {
     throw malformed('headers_invalid')
   }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    // `parsed` stays undefined, which the shape check below refuses.
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw malformed('headers_invalid')
-  }
-  const entries = Object.entries(parsed)
-  if (!entries.every(([, value]) => typeof value === 'string')) {
-    throw malformed('headers_invalid')
-  }
-  return Object.fromEntries(entries) as StoredResponseHeaders
+  const headers = headerMap(text)
+  if (headers === undefined) throw malformed('headers_invalid')
+  return headers
 }
 
 /** Parses a stored status: three digits, 100 to 599. */
