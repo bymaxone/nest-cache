@@ -34,8 +34,7 @@ const TSCONFIG = JSON.stringify({
     module: 'ESNext',
     moduleResolution: 'Bundler',
     strict: true,
-    noEmit: true,
-    skipLibCheck: true
+    noEmit: true
   },
   include: ['src/**/*']
 })
