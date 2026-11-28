@@ -49,12 +49,12 @@ function scrubbed(error: unknown): CacheException {
   const known = error instanceof CacheException
   if (known && error.cause === undefined) return error
   const cause: unknown = known ? error.cause : error
-  const message = cause instanceof Error ? cause.message : ''
+  const code = cause instanceof Error ? REPLY_CODE.exec(cause.message)?.[0] : undefined
   return new CacheException(
     known ? (error.code as CacheErrorCode) : CACHE_ERROR_CODES.SCRIPT_EXECUTION_FAILED,
     known ? (error.details ?? undefined) : undefined,
     known ? error.getStatus() : undefined,
-    new Error(REPLY_CODE.exec(message)?.[0] ?? 'driver error')
+    new Error(code ?? 'driver error')
   )
 }
 
