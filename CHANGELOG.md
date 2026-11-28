@@ -17,7 +17,7 @@ Documentation only. No `dist/` file changes.
 
 ### Known limits
 
-- The later pages of `cache.scan` and `flushNamespace` are sent by ioredis's scan stream with no `Object.prototype` check. `cache.scan` is not refused under a key planted during the iteration; `flushNamespace` is refused only at its next `UNLINK`.
+- The later pages of `cache.scan` and `flushNamespace` are sent by ioredis's scan stream with no `Object.prototype` check. `cache.scan` is not refused under a key planted during the iteration; `flushNamespace` is refused only at its next `UNLINK`. A key named `then` is not covered by this: the library counts it as a replaced Promise built-in.
 - Freezing `Object.prototype`, which earlier notes advise, closes the in-flight case only when the freeze runs before the library is imported. A later freeze makes the cache refuse with `cache.invalid_options`.
 
 **Apply to a consumer:** on an error from `RedisIdempotencyStore`, compare `error.cause?.message` with the code (`=== 'OOM'`). The `startsWith('X ')` form given under 1.2.41 does not match there.

@@ -74,7 +74,8 @@ key or a value). These cases stay outside that check, and each is a known limit:
   commands itself, so a key planted during an iteration does not stop them. `flushNamespace` is
   refused at its next `UNLINK`, and is not refused if no later page holds a key. `cache.scan` is
   not refused. In both, a planted key that the driver reads while it handles a reply (one named
-  `scan`, for example) ends the process, as for a command in flight.
+  `scan`, for example) ends the process, as for a command in flight. None of this covers a key
+  named `then`, which the library counts as a replaced Promise built-in.
 - A pipeline or transaction opened before the plant and executed after it: `exec()` runs the
   queued commands without a library frame, so the plant ends the process with an uncaught
   exception, as it does for a command in flight. `getClient()` returns the raw client, which
