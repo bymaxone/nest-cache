@@ -11,6 +11,8 @@
  * Replies: `begin` answers `{'c'}` (claimed), `{'h', pttl, s, f, t, st, h, b}` (held) or `{'x'}`
  * (a key that is not a hash, or a hash with extra fields); `complete` and `release` answer `1`
  * (done), `0` (not the caller's) or `-1` (a key that is not a hash).
+ *
+ * Layer: idempotency, the Lua the store runs on the server.
  */
 
 /** Registered name of the claim-or-report script. */

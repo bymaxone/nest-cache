@@ -2,6 +2,8 @@
  * Encoding and validation of what the idempotency store keeps under a key. A value read back is
  * checked field by field and never trusted: one that does not decode as a record is refused as
  * `DESERIALIZATION_FAILED`, with a fixed reason and never a part of the value.
+ *
+ * Layer: idempotency, the codec and argument checks of the stored record.
  */
 import type {
   IdempotencyRecord,

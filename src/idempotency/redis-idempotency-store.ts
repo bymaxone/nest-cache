@@ -7,6 +7,8 @@
  * A resent `begin` (a reply lost to a reconnect) finds the key held and answers `claimed: false`
  * with the in-progress record, so it never takes a second claim; the first claim stays orphaned
  * until its lease ends.
+ *
+ * Layer: idempotency, the adapter that implements core's store port.
  */
 import { randomUUID } from 'node:crypto'
 
