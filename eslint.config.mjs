@@ -224,7 +224,8 @@ export default [
   },
 
   // Test files and the fixtures under `__tests__` (excluded from coverage, mutation and the build)
-  // — Jest + Node globals. The typing and console rules apply here as they do in source.
+  // — Jest + Node globals. `no-explicit-any`, `explicit-module-boundary-types` and `no-console`
+  // are enforced here too; this block's `no-console` allows no method.
   {
     files: ['**/*.spec.ts', '**/*.test.ts', '**/__tests__/**/*.ts'],
     languageOptions: {
