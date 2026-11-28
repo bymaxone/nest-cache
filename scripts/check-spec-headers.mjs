@@ -25,6 +25,7 @@ export const LAYERS = [
   'admin',
   'metrics',
   'observability',
+  'idempotency',
   'shared',
   'test',
   'tests',

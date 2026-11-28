@@ -16,7 +16,8 @@ const config: Config = {
     '^@bymax-one/nest-cache/shared$': '<rootDir>/shared/index.ts',
     '^@bymax-one/nest-cache/admin$': '<rootDir>/admin/index.ts',
     '^@bymax-one/nest-cache/metrics$': '<rootDir>/metrics/index.ts',
-    '^@bymax-one/nest-cache/observability$': '<rootDir>/observability/index.ts'
+    '^@bymax-one/nest-cache/observability$': '<rootDir>/observability/index.ts',
+    '^@bymax-one/nest-cache/idempotency$': '<rootDir>/idempotency/index.ts'
   },
   transform: {
     '^.+\\.ts$': [

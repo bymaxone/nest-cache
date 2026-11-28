@@ -27,7 +27,8 @@
       "@bymax-one/nest-cache/shared": ["./src/shared/index.ts"],
       "@bymax-one/nest-cache/admin": ["./src/admin/index.ts"],
       "@bymax-one/nest-cache/metrics": ["./src/metrics/index.ts"],
-      "@bymax-one/nest-cache/observability": ["./src/observability/index.ts"]
+      "@bymax-one/nest-cache/observability": ["./src/observability/index.ts"],
+      "@bymax-one/nest-cache/idempotency": ["./src/idempotency/index.ts"]
     }
   },
   "include": ["src/**/*"],

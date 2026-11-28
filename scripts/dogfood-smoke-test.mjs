@@ -56,7 +56,11 @@ const EXPECTED_DIST_FILES = [
   'dist/observability/index.mjs',
   'dist/observability/index.cjs',
   'dist/observability/index.d.ts',
-  'dist/observability/index.d.cts'
+  'dist/observability/index.d.cts',
+  'dist/idempotency/index.mjs',
+  'dist/idempotency/index.cjs',
+  'dist/idempotency/index.d.ts',
+  'dist/idempotency/index.d.cts'
 ]
 
 const EXPECTED_SERVER_EXPORTS = [
@@ -168,7 +172,7 @@ const [mode, file] = process.argv.slice(1)
 if (mode === 'esm') await import(file); else (await import('node:module')).createRequire(import.meta.url)(file)
 process.stdout.write(JSON.stringify([...seen]))
 `
-for (const entry of ['server', 'admin', 'shared', 'metrics', 'observability']) {
+for (const entry of ['server', 'admin', 'shared', 'metrics', 'observability', 'idempotency']) {
   for (const [mode, ext] of [
     ['esm', 'mjs'],
     ['cjs', 'cjs']

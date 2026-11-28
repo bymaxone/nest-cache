@@ -87,13 +87,14 @@ so you control exact versions and the supply-chain surface stays minimal.
 
 One package, several entry points — import only what your app needs:
 
-| Subpath           | Import                                | Purpose                                                                                                                                             |                                     Dependencies                                     |
-| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------: |
-| **Server**        | `@bymax-one/nest-cache`               | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException`                                            |                        NestJS 11, ioredis 6, reflect-metadata                        |
-| **Admin**         | `@bymax-one/nest-cache/admin`         | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal                                                |                        NestJS 11, ioredis 6, the server entry                        |
-| **Metrics**       | `@bymax-one/nest-cache/metrics`       | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core`                                            | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
-| **Observability** | `@bymax-one/nest-cache/observability` | Operation, Pub/Sub backlog and drop metrics, a readiness indicator and the library's log events, through `@bymax-one/nest-core` and the Nest logger | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client` |
-| **Shared**        | `@bymax-one/nest-cache/shared`        | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                                                             |                                         None                                         |
+| Subpath           | Import                                | Purpose                                                                                                                                             |                                     Dependencies                                      |
+| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | :-----------------------------------------------------------------------------------: |
+| **Server**        | `@bymax-one/nest-cache`               | `BymaxCacheModule`, `CacheService`, `PubSubService`, `ScriptManagerService`, DI tokens, `CacheException`                                            |                        NestJS 11, ioredis 6, reflect-metadata                         |
+| **Admin**         | `@bymax-one/nest-cache/admin`         | Read-only administration — health, `INFO` statistics, keyspace listing, key inspection, value reveal                                                |                        NestJS 11, ioredis 6, the server entry                         |
+| **Metrics**       | `@bymax-one/nest-cache/metrics`       | Connection-lifecycle metrics on the application's `prom-client` registry, through `@bymax-one/nest-core`                                            | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`  |
+| **Observability** | `@bymax-one/nest-cache/observability` | Operation, Pub/Sub backlog and drop metrics, a readiness indicator and the library's log events, through `@bymax-one/nest-core` and the Nest logger | NestJS 11, the server entry, optional peers `@bymax-one/nest-core` and `prom-client`  |
+| **Idempotency**   | `@bymax-one/nest-cache/idempotency`   | `RedisIdempotencyStore`, a Redis store for HTTP idempotency keys that implements `IIdempotencyStore` of `@bymax-one/nest-core`                      | NestJS 11, ioredis 6, the server entry; `@bymax-one/nest-core` >= 1.6.24 (types only) |
+| **Shared**        | `@bymax-one/nest-cache/shared`        | Types + constants — `CACHE_ERROR_CODES`, `CacheEventName`, config types                                                                             |                                         None                                          |
 
 ```
 shared (zero deps)
@@ -632,7 +633,9 @@ export class ObservabilityModule {}
   emit the same events. Alert on `role="main"`; the subscriber is control-plane traffic whose
   loss costs Pub/Sub delivery, not cache reads.
 - **An `error` carrying a `reason` is not a socket failure.** `forced_disconnect` (a live connection
-  that did not quit at shutdown) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
+  that did not quit at shutdown, which includes a `close()` that runs before the client has seen
+  the server drop and, for `main`, a reconnect handshake still waiting on a server that does not
+  answer) and `handler_error` (a subscriber handler threw) are counted but never move readiness.
   Only an `error` carrying the driver's message does.
 - **Labels come from a closed set.** `role` is `main` or `subscriber`; anything else is recorded as
   `unknown`. No part of an error message is ever a label, since a driver message can carry a host or
@@ -885,6 +888,48 @@ Every scan-based operation throws `UNSUPPORTED_IN_CLUSTER`, inherited from `Cach
 
 ---
 
+## 🔁 Idempotency store (`/idempotency`)
+
+`RedisIdempotencyStore` implements `IIdempotencyStore` from `@bymax-one/nest-core`, so an application can keep the claims and answers of HTTP idempotency keys in the Redis it already uses for the cache. The subpath needs `@bymax-one/nest-core` >= 1.6.24 for the types; the runtime needs no core import, so the bundle holds no runtime reference to it. The package manager does not enforce that floor: the optional peer range stays `^1.1.0`, which `./metrics` and `./observability` ask for, so check the installed version of `@bymax-one/nest-core` yourself. You bind the store to core's token yourself:
+
+```ts
+import { BYMAX_IDEMPOTENCY_STORE } from '@bymax-one/nest-core/idempotency'
+import { RedisIdempotencyStore } from '@bymax-one/nest-cache/idempotency'
+
+@Module({
+  providers: [
+    RedisIdempotencyStore,
+    { provide: BYMAX_IDEMPOTENCY_STORE, useExisting: RedisIdempotencyStore }
+  ],
+  exports: [BYMAX_IDEMPOTENCY_STORE]
+})
+export class IdempotencyModule {}
+```
+
+Import `IdempotencyModule` in the module that declares the `@Idempotent` controllers.
+
+How it stores and answers:
+
+- A claim is one hash under `<namespace>:idem:<key>`. The key arrives already hashed (64 lower-case hexadecimal characters, a SHA-256, per the port) and is not hashed again. `begin` is one atomic script (claim with a lease, or return the held record); `complete` and `release` are one compare-and-set script each on the token `begin` returned. All three touch a single key and run on the primary.
+- `complete` and `release` act only on an in-progress claim held by the token; they answer `false` after expiry, after a takeover and after a completion. The token never leaves the store in a record.
+- The stored body is opaque text, stored as UTF-8; an empty body and an absent body stay different. The size bounds belong to `@bymax-one/nest-core`; this store does not bound the body.
+- `leaseSeconds` and `ttlSeconds` must be integers from 1 to 2,147,483,647; anything else is refused with `cache.invalid_options` before a command is sent.
+- `begin` refuses a fingerprint that is not a non-empty string, and `complete` refuses a status that is not an integer from 100 to 599 and headers that do not serialise to a JSON object of strings, each with `cache.invalid_options` before a command is sent.
+- Every failure rejects, so a caller that fails closed never replays a doubtful answer: an outage and a timeout reject with the connection and script errors the rest of the library uses. A stored value that `begin` cannot read as a record rejects with `cache.deserialization_failed`, never as a claim and never as a replay. Nothing from the key, the token or the body appears in an error, a log or a metric label.
+- As its own guard, `complete` also refuses a serialised header map over 65,536 bytes, with `cache.invalid_options`. That refusal happens before any write, so the claim stays `in_progress` until its lease ends and a retry in that window is told the request is in progress. A rejected `complete` is never released by this store. A connection error is different: it can arrive after the write (a lost reply), so a retry may find the completed record and replay it, or find the claim still `in_progress`.
+- A key that `begin` refuses as unreadable stays blocked until an operator deletes it or it expires.
+- If a client resends `begin` after a lost reply, the second call finds the key held and answers `claimed: false` with the in-progress record: it never gets a second claim, and the first claim stays orphaned until its lease ends.
+
+Durability limits, the same as for any Redis-backed lock:
+
+- An eviction policy other than `noeviction` can drop a claim under memory pressure.
+- `FLUSHDB`, `FLUSHALL` and `CacheService.flushNamespace()` remove claims, because they live in the namespace.
+- A failover with asynchronous replication can lose a claim the old primary acknowledged.
+- The lease must outlive the longest handler, downstream timeouts included. A shorter lease lets the claim expire while the work runs, so the key can be claimed again and run in parallel.
+- A claim orphaned by a resend lasts until its lease ends.
+
+---
+
 ## 🏭 Running in production
 
 What the library bounds by default, what it leaves to you, and what you see when Redis misbehaves.
@@ -903,14 +948,14 @@ What the library bounds by default, what it leaves to you, and what you see when
 
 **Not bounded by the library, so bound it yourself**
 
-- The size of a value you `set`, a key or id you build, the number of entries in one `pipeline`, and the size of a Pub/Sub message. An array passed to `mget`, `mset` or `delMany` may be of any length: it goes to Redis in parts of at most 10 000 arguments, because a call that spreads more than about 125 000 arguments overflows the call stack (a threshold measured when the chunking was added in 1.2.27; no spec pins it). `mget` and `delMany` send the parts one after the other, `delMany` adding up what each removed; `mset` sends them inside one `MULTI`/`EXEC`, so a write of more than 5 000 entries is applied all at once, as a shorter one is, and in Cluster mode its keys must share one slot, as for any multi-key command. If the server refuses one of the queued parts (an out-of-memory refusal, say), `mset` rejects with the driver's own error, with no library code and no `cause`; a timeout or an offline connection is the usual `cache.command_timeout` or `cache.connection_lost`. For a value the only limit is Redis's own (512 MB). For a Pub/Sub message the limit that bites first is the subscriber's `client-output-buffer-limit pubsub` (32 MB hard by default): a 64 MB message published with the defaults was not delivered to its subscriber (measured end to end in the QA gate of 1.2.25). A caller that accepts these from untrusted input validates them first.
+- The size of a value you `set`, a key or id you build, the number of entries in one `pipeline`, and the size of a Pub/Sub message. An array passed to `mget`, `mset` or `delMany` may be of any length: it goes to Redis in parts of at most 10 000 arguments, because a call that spreads more than about 125 000 arguments overflows the call stack (measured in Node). `mget` and `delMany` send the parts one after the other, `delMany` adding up what each removed; `mset` sends them inside one `MULTI`/`EXEC`, so a write of more than 5 000 entries is applied all at once, as a shorter one is, and in Cluster mode its keys must share one slot, as for any multi-key command. If the server refuses one of the queued parts (an out-of-memory refusal, say), `mset` rejects with the driver's own error, with no library code and no `cause`; a timeout or an offline connection is the usual `cache.command_timeout` or `cache.connection_lost`. For a value the only limit is Redis's own (512 MB). For a Pub/Sub message the limit that bites first is the subscriber's `client-output-buffer-limit pubsub` (32 MB hard by default): a 64 MB message published with the defaults was not delivered to its subscriber (measured end to end in the QA gate of 1.2.25). A caller that accepts these from untrusted input validates them first.
 - Pub/Sub handler concurrency and the number of messages waiting for a slot. Without `pubsubMaxConcurrentHandlers` and `pubsubMaxQueuedMessages`, a handler slower than the publish rate lets the work in flight grow without limit, and with it memory. A starting point, chosen by judgement and not by measurement, is `pubsubMaxConcurrentHandlers: 256` and `pubsubMaxQueuedMessages: 10000`. Memory held is about the executions in flight times the size of one decoded message and of what the handler keeps for it, plus the messages waiting times the size of one raw payload (a message is decoded only when it gets a slot); size both numbers from your own message size and your memory budget. A message that finds no room is dropped and reported through `events.onEvent`: the first drop is reported at once, and the drops that follow are summed into one event per 10 seconds, with a `dropped` count (measured by hand in the QA gate of 1.2.25, not pinned by a spec, with the pair above and a burst of 12 000 messages: 10 256 ran, 2 events were reported, the first at once and one about 10 s later with `dropped: 1743`, 1 744 drops in all; see Pub/Sub).
 - A handler that never settles keeps its slot for good: there is no per-handler timeout.
 
 **When Redis is down, slow or flapping**
 
-- A command a library service sends that waits longer than `commandTimeout` rejects with `cache.command_timeout` (503) (the raw client from `getClient()` rejects with the driver's own error, but `pipeline().exec()` does not reject: it resolves with one `[error, null]` pair per command, so check each pair; measured by hand in the QA gate of 1.2.25, not pinned by a spec, with a frozen Redis and `commandTimeout: 1000`, `exec()` resolved after 1 002 ms with `Command timed out` in each pair and a raw `get` rejected after 1 001 ms); with the default `enableOfflineQueue: false`, a command issued while the connection is down rejects at once with `cache.connection_lost` (`details.reason: 'offline'`, 503). Both are transient and carry the driver's error on `cause`, never in `details`.
-- A client that does not become ready at boot fails the boot with `cache.connection_failed` (503). A stopped Redis refuses the connection and fails it at once (measured by hand in the QA gate of 1.2.25, not pinned by a spec: 3 ms). A frozen one fails at whichever comes first of `connectTimeout` and the first handshake command exceeding `commandTimeout`: with the defaults that is `commandTimeout`, about 5 s (measured: 5 005 ms), before `connectTimeout`'s 10 s; with a `connectTimeout` below `commandTimeout` it is `connectTimeout` (measured: 1 504 ms with `connectTimeout: 1500`); a call after that failure rejects with the same code (`details.reason: 'boot_failed'`) and opens no client.
+- A command a library service sends that waits longer than `commandTimeout` rejects with `cache.command_timeout` (503) (the raw client from `getClient()` rejects with the driver's own error, but `pipeline().exec()` does not reject: it resolves with one `[error]` entry per command and no value, so check each entry; measured in the QA gate of 1.2.25 with a frozen Redis and `commandTimeout: 1000`, `exec()` resolved after 1 002 ms with `Command timed out` in each entry and a raw `get` rejected after 1 001 ms); with the default `enableOfflineQueue: false`, a command issued while the connection is down rejects at once with `cache.connection_lost` (`details.reason: 'offline'`, 503). Both are transient and carry the driver's error on `cause`, never in `details`.
+- A client that does not become ready at boot fails the boot with `cache.connection_failed` (503). A stopped Redis refuses the connection and fails it at once (3 ms in the QA gate of 1.2.25). A frozen one fails at whichever comes first of `connectTimeout` and the first handshake command exceeding `commandTimeout`: with the defaults that is `commandTimeout`, about 5 s (measured: 5 005 ms), before `connectTimeout`'s 10 s; with a `connectTimeout` below `commandTimeout` it is `connectTimeout` (measured: 1 504 ms with `connectTimeout: 1500`); a call after that failure rejects with the same code (`details.reason: 'boot_failed'`) and opens no client.
 - A flapping connection reconnects with the capped backoff above. Commands in flight when it drops are the driver's: they reject, or are retried up to `maxRetriesPerRequest` times.
 
 **Shutdown**
