@@ -39,7 +39,11 @@
  *           environment variable MUTATED_FILE holds the same path.
  *
  * Example: node scripts/mutate-const-tables.mjs --only default-ttls -- pnpm exec jest \
- *   --config jest.mutants.config.ts --findRelatedTests {file} --coverage=false --silent
+ *   --config jest.mutants.config.ts --findRelatedTests {file} --coverage=false --silent \
+ *   --passWithNoTests
+ *
+ * The Jest example needs `--passWithNoTests`: the baseline replaces `{file}` with nothing, and a
+ * table with no related test must pass, so that its mutants are reported as survivors.
  *
  * Exit codes: 0 every mutant was killed (or there is no table), 1 at least one survived, 2 usage
  * error or a failing baseline.

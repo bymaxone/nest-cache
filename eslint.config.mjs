@@ -224,7 +224,8 @@ export default [
   },
 
   // Test files and the fixtures under `__tests__` (excluded from coverage, mutation and the build)
-  // — Jest + Node globals, relaxed rules.
+  // — Jest + Node globals. `no-explicit-any`, `explicit-module-boundary-types` and `no-console`
+  // are enforced here too; this block's `no-console` allows no method.
   {
     files: ['**/*.spec.ts', '**/*.test.ts', '**/__tests__/**/*.ts'],
     languageOptions: {
@@ -238,14 +239,16 @@ export default [
         ...globals.node
       }
     },
+    plugins: {
+      '@typescript-eslint': tsPlugin
+    },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
       '@typescript-eslint/no-unused-vars': 'off',
       'no-unused-vars': 'off',
       'no-undef': 'off',
-      'no-console': 'off'
+      'no-console': 'error'
     }
   },
 

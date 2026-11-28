@@ -40,8 +40,7 @@ const config: Config = {
   // `--detectOpenHandles` reports none, and every other suite exits cleanly. Force
   // exit so the integration run doesn't print a worker warning in CI. Scoped to
   // E2E only: the unit suite (`jest.config.ts`) carries no `forceExit`.
-  forceExit: true,
-  passWithNoTests: process.env['CI'] !== 'true'
+  forceExit: true
 }
 
 export default config

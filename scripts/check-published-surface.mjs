@@ -62,7 +62,7 @@ const ts = createRequire(join(ROOT, 'package.json'))('typescript')
  * exports, read from the built declaration file so it cannot drift from `dist/`. */
 function publicImport(entry, specifier) {
   const file = join(ROOT, 'dist', entry, 'index.d.ts')
-  const program = ts.createProgram({ rootNames: [file], options: { skipLibCheck: true } })
+  const program = ts.createProgram({ rootNames: [file], options: {} })
   const checker = program.getTypeChecker()
   const source = program.getSourceFile(file)
   const moduleSymbol = source && checker.getSymbolAtLocation(source)
@@ -599,9 +599,8 @@ function scaffoldConsumer() {
   )
   // The names a snippet uses without introducing them, typed for real so a call
   // made through one is checked instead of silently resolving to `any`. Copied with a
-  // `.ts` extension: the repository tsconfig sets `skipLibCheck`, a declaration file is
-  // never diagnosed, and a prelude type that stopped resolving would turn into `any`
-  // without a word.
+  // `.ts` extension, so it is diagnosed whatever `skipLibCheck` says: a prelude type that
+  // stopped resolving would otherwise turn into `any` without a word.
   copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.ts'))
 }
 

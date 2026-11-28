@@ -78,10 +78,10 @@ updates:
       prefix: ci
       include: scope
     groups:
-      # A Bymax reusable called at `@v1` stays on that moving tag, which Dependabot leaves alone. If
-      # `agents-sync.yml`, the one that is handed the sync App's private key, is ever pinned to a
-      # commit, this group moves that pin in a pull request of its own, to the newest release of the
-      # same major.
+      # `agents-sync.yml` is the one Bymax reusable pinned to a commit: it is handed the sync App's
+      # private key. This group moves that pin in a pull request of its own. The other Bymax
+      # reusables are referenced by their major alias, and a new major arrives as a pull request to
+      # review.
       bymax-agents-sync:
         patterns:
           - 'bymaxone/.github/.github/workflows/agents-sync.yml'
@@ -105,7 +105,3 @@ updates:
           - major
           - minor
           - patch
-    ignore:
-      # A new major of a Bymax reusable is a deliberate migration, never an automatic bump.
-      - dependency-name: 'bymaxone/.github*'
-        update-types: ['version-update:semver-major']
