@@ -51,11 +51,9 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: ioredis
         update-types: [version-update:semver-major]
-      # TypeScript 6 and ESLint 10 are known to break the lint/typecheck gate and
-      # are intentionally held back until revisited.
+      # TypeScript majors are held until one is verified against the lint and
+      # typecheck gate.
       - dependency-name: typescript
-        update-types: [version-update:semver-major]
-      - dependency-name: eslint
         update-types: [version-update:semver-major]
       # `@types/node` majors track the Node release line. `engines` declares
       # `>=24`, so typechecking against a newer major would let code compile

@@ -99,7 +99,7 @@ supported: upgrade to the latest minor.
   decode is reported by a fixed text and its length, never by any part of its content.
 - CodeQL, OpenSSF Scorecard and OSV-Scanner on the full lockfile run on `main` and on a
   weekly schedule. Pull requests are also checked by CodeQL, OSV-Scanner and a
-  dependency-review job that fails on high severity. A weekly job audits the declared
+  dependency-review job that fails on low severity or higher. A weekly job audits the declared
   peer ranges against published advisories.
 - Dependency advisories: a vulnerable transitive development dependency is fixed by a
   version floor in the `overrides` of `pnpm-workspace.yaml`. An advisory with no patched

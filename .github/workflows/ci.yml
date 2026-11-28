@@ -160,7 +160,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
     uses: bymaxone/.github/.github/workflows/security.yml@v1
     with:
-      fail-on-severity: high
+      fail-on-severity: low
 
   # Single check the org ruleset can require, in every repo, under one name.
   #
