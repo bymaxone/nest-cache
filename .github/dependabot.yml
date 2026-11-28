@@ -51,9 +51,11 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: ioredis
         update-types: [version-update:semver-major]
-      # TypeScript majors are held until one is verified against the lint and
-      # typecheck gate.
+      # Held for the whole 1.x line: a major here is a dependency migration, and
+      # those are taken in 2.0.
       - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint
         update-types: [version-update:semver-major]
       # `@types/node` majors track the Node release line. `engines` declares
       # `>=24`, so typechecking against a newer major would let code compile
